@@ -2,24 +2,9 @@
 
 #### 介绍
 
-Capsule是完全由openEuler社区控制的新型hypervisor项目。类似KVM，Capsule充分使能不同CPU体系的硬件辅助虚拟化能力。不同的是，Capsule采用Rust语言编写以带来更大的安全性。另外，Capsule重塑了hypervisor架构，使它既可以支持普通虚拟机（满足多种多样的企业应用），也可以支持安全容器（满足容器化负载应用），同时还可以支持逻辑分区（满足实时场景需求）。
+Capsule是完全由openEuler社区控制的面向智能体运行时的基础设施项目。Capsule构建统一的智能体运行时底座，对记忆、模型与工具相关的关键环节进行抽象和约束，使相关能力能够在受控的沙箱环境中以一致的方式被接入、组合与扩展。在此基础上，Capsule既可以承载面向不同场景构建的智能体应用，也可以支持Agent Skills的安全执行，并为后续的多智能体任务编排、安全策略控制与多端交互提供清晰的演进路径。
 
-#### 软件架构
-
-软件关键设计思路参考： [设计文档](/docs/design.md)。
-
-
-#### 安装教程
-
-1.  xxxx
-2.  xxxx
-3.  xxxx
-
-#### 使用说明
-
-1.  xxxx
-2.  xxxx
-3.  xxxx
+当前仓库提供了 [application/slidea](/application/slidea) 作为基于 Capsule 理念打造的示例智能体应用，相关 Skills 可在 [application/slidea/skills](/application/slidea/skills) 中查看。
 
 #### 参与贡献
 
@@ -28,12 +13,6 @@ Capsule是完全由openEuler社区控制的新型hypervisor项目。类似KVM，
 3.  提交代码
 4.  新建 Pull Request
 
+#### 许可协议
 
-#### 特性
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+Capsule is licensed under the Mulan PSL v2.
