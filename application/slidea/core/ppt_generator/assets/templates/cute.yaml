@@ -1,0 +1,228 @@
+description: |-
+    适用于可爱风格的PPT
+html: |-
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="utf-8"/>
+        <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+        <title>可爱风格PPT - 元气满满的一天</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap"
+              rel="stylesheet"/>
+        <script defer src="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
+        <style>
+            body, html {
+                font-family: 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+                margin: 0;
+                padding: 0;
+                background-color: #ffffff;
+            }
+    
+            #ppt-container {
+                width: 1280px;
+                height: 720px;
+                display: flex;
+                flex-direction: column;
+                /* 背景渐变 */
+                background-image: linear-gradient(to bottom right, #fbcfe8, #e9d5ff, #bfdbfe);
+                position: relative;
+                overflow: hidden;
+            }
+    
+            .section-container {
+                min-height: 0;
+                min-width: 0;
+                padding: 0 45px;
+                display: flex;
+                flex-direction: column;
+                flex-grow: 1;
+                z-index: 10; /* Ensure content is above background decorations */
+            }
+    
+            .scalable-content {
+                width: 100%;
+                height: 100%; 
+                flex-grow: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                transform-origin: top left;
+            }
+    
+            /* 装饰元素样式 */
+            .deco-cloud {
+                position: absolute;
+                top: 4rem;
+                right: 5rem;
+                font-size: 8rem;
+                color: rgba(255, 255, 255, 0.6);
+                transform: rotate(-12deg);
+                z-index: 0;
+            }
+    
+            .deco-heart {
+                position: absolute;
+                bottom: 3rem;
+                left: 4rem;
+                font-size: 5rem;
+                color: rgba(249, 168, 212, 0.8); /* pink-300 */
+                transform: rotate(12deg);
+                z-index: 0;
+            }
+    
+            /* 卡片样式 */
+            .glass-card {
+                background-color: rgba(255, 255, 255, 0.7);
+                backdrop-filter: blur(8px);
+                border-radius: 1.5rem; /* rounded-2xl */
+                padding: 2rem;
+                text-align: center;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                /* 移除固定高度，依靠内容或父容器分配 */
+                width: 280px;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                transition: transform 0.3s ease;
+            }
+        </style>
+    </head>
+    <body>
+    <div id="ppt-container">
+        <!-- 装饰性元素 -->
+        <i class="fa-solid fa-cloud deco-cloud"></i>
+        <i class="fa-solid fa-heart deco-heart"></i>
+    
+        <!-- 头部区域 (Header) -->
+        <!-- 由于没有特定高度限制，这里给一点 padding 让它自然撑开，或者作为 flex item -->
+        <div class="h-32 flex flex-col justify-center items-center z-10 shrink-0">
+            <h1 class="text-5xl font-black text-slate-700 tracking-wider">
+                <i class="fa-solid fa-wand-magic-sparkles text-yellow-400 mr-4"></i>
+                开启元气满满一天的小秘诀
+            </h1>
+            <p class="text-2xl text-slate-500 mt-2 font-medium">A little guide to a happy day!</p>
+        </div>
+    
+        <div class="section-container">
+            <div class="scalable-content">
+                <!-- 核心布局容器：标题+内容 模式 -->
+                <!-- 这里因为标题已经在外部（Header），我们主要处理内容区的分布 -->
+                <!-- 为了符合"Title and Content together"的规则，如果视为一个整体Section，结构如下： -->
+    
+                <div class="w-full h-full flex flex-col">
+                    <!-- 内容区域：必须用 justify-around 包裹 -->
+                    <!-- 方向为横向 (flex-row) 以排列三个卡片 -->
+                    <div class="flex-1 flex flex-row justify-around items-center">
+    
+                        <!-- 卡片 1: 清晨 -->
+                        <div class="glass-card">
+                            <div class="flex-1 flex flex-col justify-center items-center py-4">
+                                <i class="fa-solid fa-sun text-7xl text-orange-400 mb-4"></i>
+                                <h2 class="text-3xl font-bold text-slate-700 mb-2">清晨阳光</h2>
+                                <p class="text-slate-500 text-lg leading-relaxed">
+                                    用微笑迎接第一缕阳光<br>做点简单的伸展运动
+                                </p>
+                            </div>
+                        </div>
+    
+                        <!-- 卡片 2: 午后 -->
+                        <div class="glass-card">
+                            <div class="flex-1 flex flex-col justify-center items-center py-4">
+                                <i class="fa-solid fa-mug-hot text-7xl text-rose-400 mb-4"></i>
+                                <h2 class="text-3xl font-bold text-slate-700 mb-2">午后小憩</h2>
+                                <p class="text-slate-500 text-lg leading-relaxed">
+                                    一杯热茶或咖啡<br>搭配一本好书放松心情
+                                </p>
+                            </div>
+                        </div>
+    
+                        <!-- 卡片 3: 夜晚 -->
+                        <div class="glass-card">
+                            <div class="flex-1 flex flex-col justify-center items-center py-4">
+                                <i class="fa-solid fa-star text-7xl text-indigo-400 mb-4"></i>
+                                <h2 class="text-3xl font-bold text-slate-700 mb-2">静谧夜晚</h2>
+                                <p class="text-slate-500 text-lg leading-relaxed">
+                                    写下今天的美好瞬间<br>带着感恩的心进入梦乡
+                                </p>
+                            </div>
+                        </div>
+    
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <!-- 底部 -->
+        <footer class="h-12 flex justify-center items-center z-10 text-slate-600 font-medium">
+            <p>Have a wonderful day! ✨</p>
+        </footer>
+    </div>
+    
+    <script>
+        function scaleContentToFit() {
+            const sections = document.querySelectorAll('.section-container');
+            sections.forEach(section => {
+                const contentWrapper = section.querySelector('.scalable-content');
+                const content = contentWrapper ? contentWrapper.firstElementChild : null;
+                if (!contentWrapper || !content) return;
+    
+                contentWrapper.style.transform = 'scale(1)';
+                contentWrapper.style.zoom = 1;
+    
+                const styles = window.getComputedStyle(section);
+    
+                const paddingTop = parseFloat(styles.paddingTop);
+                const paddingBottom = parseFloat(styles.paddingBottom);
+                const paddingLeft = parseFloat(styles.paddingLeft);
+                const paddingRight = parseFloat(styles.paddingRight);
+    
+                const ORIGINAL_HEIGHT = section.clientHeight - paddingTop - paddingBottom;
+                const ORIGINAL_WIDTH = section.clientWidth - paddingLeft - paddingRight;
+                if (Math.abs(contentWrapper.scrollWidth - ORIGINAL_WIDTH) < 1 && Math.abs(contentWrapper.scrollHeight - ORIGINAL_HEIGHT) < 1) {
+                    window.final_ration = 1;
+                    return;
+                }
+    
+                const TARGET_ASPECT_RATIO = ORIGINAL_HEIGHT / ORIGINAL_WIDTH;
+    
+                let testWidth = ORIGINAL_WIDTH;
+    
+                let bestWidth = ORIGINAL_WIDTH;
+                let minDifference = Infinity;
+    
+                for (let i = 0; i < 300; i++) {
+                    testWidth = testWidth + 5;
+                    content.style.width = `${testWidth}px`;
+    
+                    const actualHeight = content.scrollHeight;
+                    const targetHeight = testWidth * TARGET_ASPECT_RATIO;
+    
+                    const currentDifference = Math.abs(actualHeight - targetHeight);
+    
+                    if (currentDifference < minDifference) {
+                        minDifference = currentDifference;
+                        bestWidth = testWidth;
+                    }
+                }
+    
+                content.style.width = `${bestWidth}px`;
+    
+                const finalWidth = content.scrollWidth;
+                const finalHeight = content.scrollHeight;
+    
+                const scaleX = ORIGINAL_WIDTH / finalWidth;
+                const scaleY = ORIGINAL_HEIGHT / finalHeight;
+    
+                const scaleRatio = Math.min(scaleX, scaleY);
+                window.final_ration = scaleRatio;
+                contentWrapper.style.transform = 'none';
+                contentWrapper.style.zoom = scaleRatio;
+            });
+        }
+    
+        window.addEventListener('load', scaleContentToFit);
+        window.addEventListener('resize', scaleContentToFit);
+    </script>
+    </body>
+    </html>

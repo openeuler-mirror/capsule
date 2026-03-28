@@ -1,0 +1,227 @@
+
+严格遵守以下要求:
+1. 文字内容不要过多，尽量精简！
+2. 合理控制内容量以避免垂直溢出，确保内容在1280px × 720px的尺寸内合理展示。
+3. 使用一致的样式和色彩方案，与下方已有页面保持一致！
+4. 非必要尽量不要使用卡片样式,除非内容很适合使用卡片进行展示!非必要尽量不要使用卡片样式,除非内容很适合使用卡片进行展示!
+5. 任何地方都不要使用absolute布局!
+6. 使用margin-bottom而不是margin-top。
+7. 不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！
+8. 生成PPT需要与已有PPT的header，footer风格样式保持完全一致。header，footer不要设置background-color！header，footer的css需要和模板中的css保持完全一致！
+9. 合适的内容需要使用chart.js生成图表进行表示（如折线图、柱状图、饼图等），但是不要使用动画效果。只有在素材中有准确数据的情况下才使用chart.js绘制图表，不要自己杜撰数据！！！图表 Canvas 必须包裹在具有 flex-shrink-0 的容器内，严禁由父级布局自动撑开 Canvas 高度，以防止垂直溢出！！！
+10. 图片应使用 max-w-full 和具体的 max-h-[x] 来限制大小，保持 w-auto h-auto 以确保真实占位，并配合父级的 Flex 居中属性。！！！例如：<img src="images/c627d5816a391c42ff05085ee0d4e571.jpg" alt="戈壁科研" class="max-w-full max-h-48 w-auto h-auto">。不要使用参考资料中没有的图片！不要使用参考资料中没有的图片！不要使用参考资料中没有的图片！
+11. 图片记得要水平居中、垂直居中显示！！！
+12. 禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！应采用多列或网格化布局，利用横向空间以避免垂直高度过大导致缩放失效。
+
+重要事项!!!:
+创建的PPT需要使用以下示例中完全一致的缩放机制,即:
+1. 一定要有
+#ppt-container
+
+.section-container
+
+.scalable-content
+这三个css.
+2. 必须严格遵守以下 Flexbox 布局规范，以配合自动缩放脚本实现完美垂直分布：
+#### 1. 顶级容器架构 (Parent Container)
+每一个独立的板块（Section）必须遵循“标题+内容”的结构，并使用以下包裹层：
+*   **类名要求**：`<div class="flex-1 flex flex-col">`
+*   **禁止事项**：**绝对禁止**在该层级使用 `justify-center`、`justify-between` 或 `justify-around`。该层级仅用于自然堆叠标题和内容区。
+#### 2. 内容区布局 (Content Body)
+标题下方的“内容部分”是布局的核心，**必须**包裹在以下容器中以实现自动分布：
+*   **类名要求**：`<div class="flex-1 flex flex-col justify-around">`
+*   **针对多行布局的补充**：当内容区包含多行卡片或多个主要块时，该容器应作为“垂直分配器”。
+    *   *注：如果是横向排列，请将 `flex-col` 改为 `flex-row`，但 `flex-1` 和 `justify-around` 是必须保留的核心属性。*
+*   **作用机制**：利用 `flex-1` 占据所有剩余空间，利用 `justify-around` 自动计算并分配子元素之间的空隙。
+#### 3. 间距控制原则 (Spacing Strategy)
+*   **允许使用最小保护间距**：在存在多行内容（如第一排和第二排卡片）时，**允许且建议**在内容区容器（即带有 `justify-around` 的那一层）使用 `space-y-*`（建议 `space-y-6` 或 `space-y-8`）。
+    *   *原理：* `space-y` 提供了一个**保底的最小间距**。当页面空间充裕时，`justify-around` 会在此基础上继续拉开距离；当页面空间紧张时，`space-y` 确保两行不会紧贴。
+*   **禁用外边距**：**严禁**给主要子元素（卡片本身）添加 `mb-*` 或 `mt-*`。
+*   **正确做法**：
+    1.  使用父容器的 `justify-around` 处理大块之间的动态拉伸。
+    2.  使用父容器的 `space-y-*` 处理多行之间的物理隔离保底。
+    3.  卡片内部的微小组件（图标与文字之间）可自由使用 `space-x-*` 或 `gap-*`。
+
+在 Flex 纵向布局中使用justify-around时，必须确保容器显式设置高度（如 h-full、h-[50%]等）以占据剩余空间，避免高度坍塌导致对齐失效！！！
+
+#### ✅ 代码范例对比
+**❌ 错误示范 (使用 space-y 或 margin 控制间距)：**
+```html
+<!-- 错误：使用了 space-y-6 来强行推开间距 -->
+<div class="space-y-6">
+    <div class="flex items-start">
+        <div class="circle-number">1</div>
+        <div>...内容...</div>
+    </div>
+    <div class="flex items-start">
+        <div class="circle-number">2</div>
+        <div>...内容...</div>
+    </div>
+</div>
+```
+**✅ 正确示范 (使用 flex-1 和 justify-around 自动分布)：**
+```html
+<!-- 正确：父容器撑满剩余空间，子元素自动均匀分布 -->
+<div class="flex-1 flex flex-col justify-around">
+    <div class="flex items-start">
+        <div class="circle-number">1</div>
+        <div>...内容...</div>
+    </div>
+    <div class="flex items-start">
+        <div class="circle-number">2</div>
+        <div>...内容...</div>
+    </div>
+</div>
+```
+3. 一定要有
+<script>
+    function scaleContentToFit() {
+        const sections = document.querySelectorAll('.section-container');
+        sections.forEach(section => {
+            const contentWrapper = section.querySelector('.scalable-content');
+            const content = contentWrapper ? contentWrapper.firstElementChild : null;
+            if (!contentWrapper || !content) return;
+
+            contentWrapper.style.transform = 'scale(1)';
+            contentWrapper.style.zoom = 1;
+
+            const styles = window.getComputedStyle(section);
+
+            const paddingTop = parseFloat(styles.paddingTop);
+            const paddingBottom = parseFloat(styles.paddingBottom);
+            const paddingLeft = parseFloat(styles.paddingLeft);
+            const paddingRight = parseFloat(styles.paddingRight);
+
+            const ORIGINAL_HEIGHT = section.clientHeight - paddingTop - paddingBottom;
+            const ORIGINAL_WIDTH = section.clientWidth - paddingLeft - paddingRight;
+            if (Math.abs(contentWrapper.scrollWidth - ORIGINAL_WIDTH) < 1 && Math.abs(contentWrapper.scrollHeight - ORIGINAL_HEIGHT) < 1) {
+                window.final_ration = 1;
+                return;
+            }
+
+            const TARGET_ASPECT_RATIO = ORIGINAL_HEIGHT / ORIGINAL_WIDTH;
+
+            let testWidth = ORIGINAL_WIDTH;
+
+            let bestWidth = ORIGINAL_WIDTH;
+            let minDifference = Infinity;
+
+            for (let i = 0; i < 300; i++) {
+                testWidth = testWidth + 5;
+                content.style.width = `${testWidth}px`;
+
+                const actualHeight = content.scrollHeight;
+                const targetHeight = testWidth * TARGET_ASPECT_RATIO;
+
+                const currentDifference = Math.abs(actualHeight - targetHeight);
+
+                if (currentDifference < minDifference) {
+                    minDifference = currentDifference;
+                    bestWidth = testWidth;
+                }
+            }
+
+            content.style.width = `${bestWidth}px`;
+
+            const finalWidth = content.scrollWidth;
+            const finalHeight = content.scrollHeight;
+
+            const scaleX = ORIGINAL_WIDTH / finalWidth;
+            const scaleY = ORIGINAL_HEIGHT / finalHeight;
+
+            const scaleRatio = Math.min(scaleX, scaleY);
+            window.final_ration = scaleRatio;
+            contentWrapper.style.transform = 'none';
+            contentWrapper.style.zoom = scaleRatio;
+        });
+    }
+
+    window.addEventListener('load', scaleContentToFit);
+    window.addEventListener('resize', scaleContentToFit);
+</script>
+这个缩放脚本。并且不要做任何修改！不要做任何修改！不要做任何修改！
+只有通过这样一步步的缩放，才能找到最小的最合适的"自然缩放比例"。
+不是简单地想把内容塞进容器，而是希望通过微调内容的原始（未缩放时）尺寸，找到一个“最佳渲染点”，使得内容在换行、布局上达到一个最理想的状态。
+脚本的介绍如下：
+**目标：** 为了确保您生成的HTML/CSS布局能够与项目中使用的特殊缩放脚本 完美兼容，请仔细阅读并遵守以下指南。
+
+#### **1. 脚本简介：它是一个“试探性”布局修正脚本**
+
+这个脚本的核心功能不是简单的等比缩放。它的工作方式更像一个“智能整理师”：
+
+*   **第一步：探索性放大 (Exploratory Expansion)**
+    它会通过一个循环，逐渐增加内容区域的总宽度。在每一步放大中，它会实时测量内容的总高度。
+
+*   **第二步：寻找最佳平衡点 (Finding the Optimal Balance)**
+    它的目标是找到一个宽度和高度的“理想”组合，使得内容能够最舒展、最自然地排布。它认为，当内容的测量高度与基于宽高比计算出的理论高度非常接近时，就找到了这个平衡点。
+
+*   **第三步：精确缩放至容器 (Precise Scaling)**
+    一旦找到这个“理想尺寸”，它就会计算出一个精确的缩放比例（`zoom`），将这个已经“整理好”的内容完美地缩放到父容器中。
+
+#### **2. 关键协作原则：保持高度的“可预测性”**
+
+这个脚本成功的关键，在于它能够**预测**增加宽度后，高度会如何变化。如果内容的CSS导致高度以一种**不可预测**或**非线性**的方式变化，脚本的计算就会失败。
+
+因此，您在生成HTML和CSS时，必须遵循以下核心规则：
+
+**【规则1：绝对禁止使用“宽高比锁定”的CSS技巧】**
+
+**严禁**在任何元素上使用 `padding-top` 或 `padding-bottom` 的百分比值来维持宽高比。
+
+*   **错误示例 (会导致脚本崩溃):**
+    ```css
+    .image-container {
+        /* 这个技巧会让高度随宽度变化，脚本无法处理 */
+        padding-top: 56.25%; /* 16:9 ratio */
+        height: 0;
+        position: relative;
+    }
+    ```
+
+*   **为什么会冲突?**
+    这个技巧会创建一个“宽度->高度”的直接依赖关系。当脚本增加宽度时，您设置的 `padding-top` 会导致元素高度也随之增加。这形成了一个脚本无法解决的循环依赖，导致最终计算出错误的、极小的缩放比例。
+
+*   **正确替代方案:**
+    请使用 `flexbox` 或 `grid` 布局来管理尺寸。对于图片，可以直接设置其 `width: 100%` 和 `height: 100%`，或者让其在flex容器中自适应。
+
+**【规则2：优先使用Flexbox进行空间分配】**
+
+请大量使用 `display: flex` 和 `flex: 1` 属性来让元素自动填充可用空间。
+
+*   **推荐示例 (与脚本完美兼容):**
+    ```css
+    .container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    .card {
+        flex: 1; /* 自动均分父容器的高度 */
+        min-height: 0; /* 防止内容溢出 */
+    }
+    ```
+*   **为什么这样好?**
+    Flexbox布局的高度分配是稳定且可预测的。当脚本改变总宽度时，flex项的高度分配逻辑保持不变，不会产生意外的高度增长。这为脚本的计算提供了稳定的环境。
+
+**【规则3：避免使用固定的`height`值（除非必要）】**
+
+尽量避免给主内容区的模块设置固定的像素高度（如 `height: 300px`）。让它们的高度由Flexbox或其内部内容自然决定。这给了脚本在“试探”过程中更大的灵活性。
+
+#### **3. 总结**
+
+该脚本是一个强大的布局优化工具，但它依赖于一个**稳定**且**可预测**的CSS环境。您的任务是提供这样的环境。
+
+**请记住，您的首要任务是：确保任何元素的尺寸变化（尤其是高度）不会与脚本的宽度试探过程产生意外的耦合。**
+
+遵守这些指南，您生成的代码将能充分利用这个脚本的优势，创造出既美观又健壮的布局。
+4. 一定要在主要内容外使用
+<div class="section-container">
+<div class="scalable-content">
+</div>
+</div>
+包裹住主要内容!
+5. 字体必须使用font-family: 'Microsoft YaHei', sans-serif;
+6. 不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！
+需要严格遵守以上要求!
+需要严格遵守以上要求!
+需要严格遵守以上要求!
