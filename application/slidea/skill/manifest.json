@@ -1,0 +1,18 @@
+{
+  "include": [
+    { "from": "core", "to": "core" },
+    { "from": "docs", "to": "docs" },
+    { "from": "requirements.txt", "to": "requirements.txt" },
+    { "from": ".env.example", "to": ".env.example" },
+    { "from": "skill/SKILL.md", "to": "SKILL.md" },
+    { "from": "skill/INSTALL.md", "to": "INSTALL.md" },
+    { "from": "scripts", "to": "scripts" }
+  ],
+  "exclude": [
+    "scripts/export_skill.py",
+    "__pycache__",
+    ".DS_Store",
+    "*.pyc",
+    "*.pyo"
+  ]
+}
