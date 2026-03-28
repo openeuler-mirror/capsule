@@ -2,23 +2,9 @@
 
 #### Description
 
-Capsule is a new hypervisor fully controlled by the openEuler community. Like  KVM hypervisor, the Capsule hypervisor empowers the virtualization extensions in different CPU implementations. Rust programming language is chosen to re-invent the hypervisor for security. Moreover, Capsule can support common virtual machines (for diverse business applications), micro-VMs (for container workloads), and logical partitions (for realtime applications) at the same time. 
+Capsule is an infrastructure project for agent runtimes fully governed by the openEuler community. Capsule builds a unified runtime foundation for agents and abstracts and constrains key capabilities related to memory, models, and tools, enabling them to be integrated, composed, and extended consistently within a controlled sandbox environment. On top of that, Capsule can host agent applications for different scenarios, support the secure execution of Agent Skills, and provide a clear evolution path for future multi-agent task orchestration, security policy control, and multi-end interaction.
 
-#### Software Architecture
-
-The design keys can be referenced [here](/docs/design.md).
-
-#### Installation
-
-1.  xxxx
-2.  xxxx
-3.  xxxx
-
-#### Instructions
-
-1.  xxxx
-2.  xxxx
-3.  xxxx
+This repository provides [application/slidea](/application/slidea) as a sample agent application built around Capsule's design principles. Related Skills can be found in [application/slidea/skills](/application/slidea/skills).
 
 #### Contribution
 
@@ -27,12 +13,6 @@ The design keys can be referenced [here](/docs/design.md).
 3.  Commit your code
 4.  Create Pull Request
 
+#### Licensing
 
-#### Gitee Feature
-
-1.  You can use Readme\_XXX.md to support different languages, such as Readme\_en.md, Readme\_zh.md
-2.  Gitee blog [blog.gitee.com](https://blog.gitee.com)
-3.  Explore open source project [https://gitee.com/explore](https://gitee.com/explore)
-4.  The most valuable open source project [GVP](https://gitee.com/gvp)
-5.  The manual of Gitee [https://gitee.com/help](https://gitee.com/help)
-6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+Capsule is licensed under the Mulan PSL v2.
