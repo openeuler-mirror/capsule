@@ -171,6 +171,17 @@ Resume values are interpreted tolerantly. Upstream callers may resume with `payl
 
 Always inspect the top-level `stage` field first before deciding whether to continue, retry, or stop for user input.
 
+## Update
+
+When the skill code or dependencies change, follow the update process in `UPDATE.md`:
+
+1. Clone the latest code to a temporary directory
+2. Export the updated skill package using `export_skill.py --update`
+3. Delete the temporary directory
+4. Switch to the skill directory and run `python scripts/install/update.py`
+
+The update script only reinstalls dependencies if `requirements.txt` has changed.
+
 ## Notes
 - Keep all paths relative to the working directory unless the user explicitly asks for something else.
 - Once bootstrap is complete, all runtime commands must go through the Python interpreter inside `.venv`.

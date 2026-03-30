@@ -62,7 +62,7 @@ def _copy_entry(source: Path, destination: Path, exclude_patterns: list[str]) ->
     shutil.copy2(source, destination)
 
 
-def export_skill(target_dir: Path, *, force: bool = False) -> Path:
+def export_skill(target_dir: Path, *, force: bool = False, update: bool = False) -> Path:
     manifest = _load_manifest()
     exclude_patterns = manifest.get("exclude", [])
     include_entries = manifest.get("include", [])
@@ -70,10 +70,10 @@ def export_skill(target_dir: Path, *, force: bool = False) -> Path:
     if not include_entries:
         raise ValueError(f"skill manifest has no include entries: {MANIFEST_PATH}")
 
-    if target_dir.exists():
+    if target_dir.exists() and not update:
         if not force:
             raise FileExistsError(
-                f"target directory already exists: {target_dir}. Pass --force to replace it."
+                f"target directory already exists: {target_dir}. Pass --force to replace it or --update to overwrite."
             )
         shutil.rmtree(target_dir)
 
@@ -104,6 +104,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target", required=True, help="Final output directory for the exported skill package.")
     parser.add_argument("--force", action="store_true", help="Replace the target directory if it already exists.")
     parser.add_argument(
+        "--update",
+        action="store_true",
+        help="Overwrite files in the target directory without deleting it. Preserves .env, .venv, .install_state.json.",
+    )
+    parser.add_argument(
         "--bootstrap",
         action="store_true",
         help="After export, run the exported scripts/install/install.py inside the target directory.",
@@ -116,7 +121,7 @@ def main() -> int:
     args = parser.parse_args()
 
     target_dir = Path(args.target).expanduser().resolve()
-    exported_dir = export_skill(target_dir, force=args.force)
+    exported_dir = export_skill(target_dir, force=args.force, update=args.update)
     print(f"Exported skill package to: {exported_dir}")
     if args.bootstrap:
         print(f"Bootstrapping exported skill package in: {exported_dir}")
