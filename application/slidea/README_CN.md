@@ -32,7 +32,7 @@ Slidea 的主要定位是安装到 agent 环境中的 skill，而不是一个需
 
 安装 Slidea skill，可将以下指令发送给你的 Agent：
 ```text
-请直接获取并遵循这里的说明安装 slidea skill：https://gitcode.com/openeuler/capsule/tree/master/application/slidea/skill/INSTALL.md
+请直接获取并遵循这里的说明安装 slidea skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/INSTALL.md
 ```
 
 安装完成后，重启 agent，使其重新加载已安装的 skill。随后通过你的 agent 环境支持的 skill 调用方式来触发 Slidea。

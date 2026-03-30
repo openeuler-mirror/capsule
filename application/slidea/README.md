@@ -33,7 +33,7 @@ The Slidea skill is currently adapted for ARM openEuler, Apple Silicon macOS, Wi
 To install the Slidea skill, you can send the following instruction to your agent:
 
 ```text
-Please fetch and follow the installation instructions for the Slidea skill here: https://gitcode.com/openeuler/capsule/tree/master/application/slidea/skill/INSTALL.md
+Please fetch and follow the installation instructions for the Slidea skill here: https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/INSTALL.md
 ```
 
 After installation, restart the agent so it can reload the installed skill. Then invoke Slidea using the skill entry style supported by your agent environment. 
