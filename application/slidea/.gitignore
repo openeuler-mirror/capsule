@@ -8,6 +8,7 @@ logs/
 libreoffice/
 .venv/
 *.sqlite*
+.install_state.json
 
 # local research workspace
 research_workspace/
