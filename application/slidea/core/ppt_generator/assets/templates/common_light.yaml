@@ -7,11 +7,11 @@ html: |-
         <meta charset="utf-8"/>
         <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
         <title>总结与展望</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap"
+        <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
+        <link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap"
               rel="stylesheet"/>
-        <script defer src="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script defer src="https://cdn.jsdelivr.net.cn/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
+        <script src="https://cdn.jsdelivr.net.cn/npm/chart.js"></script>
         <style>
             body, html {
                 font-family: 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
@@ -292,7 +292,7 @@ html: |-
                 const ORIGINAL_HEIGHT = section.clientHeight - paddingTop - paddingBottom;
                 const ORIGINAL_WIDTH = section.clientWidth - paddingLeft - paddingRight;
                 if (Math.abs(contentWrapper.scrollWidth - ORIGINAL_WIDTH) < 1 && Math.abs(contentWrapper.scrollHeight - ORIGINAL_HEIGHT) < 1) {
-                    window.final_ration = 1;
+                    window.final_ratio = 1;
                     return;
                 }
     
@@ -327,7 +327,7 @@ html: |-
                 const scaleY = ORIGINAL_HEIGHT / finalHeight;
     
                 const scaleRatio = Math.min(scaleX, scaleY);
-                window.final_ration = scaleRatio;
+                window.final_ratio = scaleRatio;
                 contentWrapper.style.transform = 'none';
                 contentWrapper.style.zoom = scaleRatio;
             });
