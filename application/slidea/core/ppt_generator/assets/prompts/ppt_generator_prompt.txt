@@ -14,7 +14,6 @@
 12. 禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！应采用多列或网格化布局，利用横向空间以避免垂直高度过大导致缩放失效。
 13. 严禁使用任何 emoji 字符作为图标、标签前缀或装饰元素（例如 📚、📅、✍️、🚀 等），因为导出链路中 emoji 容易丢失或显示为方框。需要图标时，必须使用 FontAwesome，不要使用 emoji 代替。
 14. `<head>`中的外部资源引用必须严格使用模板里已经给定的固定地址，逐字复制，不允许自行改写、替换、补全、猜测域名，也不允许输出看起来相似但错误的地址。
-15. 禁止使用 `backdrop-filter`、`-webkit-backdrop-filter`、`filter: blur(...)` 等毛玻璃/模糊滤镜效果。PDF 导出对这类效果兼容性很差，容易导致卡片或文字整块丢失。若需要柔和卡片效果，请改用浅色半透明背景、细边框和纯色阴影之外的普通视觉手段。
 必须使用且只能使用以下地址：
 ```html
 <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
@@ -24,6 +23,8 @@
 ```
 严禁输出 `https://fonts.googleapis.com/...`、`https://fonts.googleapis.com.cn/...`、`https://cdn.tailwindcss.com`、`https://cdn.jsdelivr.net/...` 等其他变体。
 如果不确定，请直接复用模板中的 `<head>` 资源区，不要自行改写。
+15. 禁止使用任何半透明效果、模糊滤镜与渐变，包括但不限于 `rgba(...)`、`hsla(...)`、`transparent`、`opacity-*`、`opacity:`、`backdrop-filter`、`-webkit-backdrop-filter`、`filter: blur(...)`。PDF 导出对透明度和模糊的兼容性很差，容易导致偏色、发粉、卡片或文字整块丢失。若需要柔和层次，请只使用纯色背景、纯色边框。
+
 
 重要事项!!!:
 创建的PPT需要使用以下示例中完全一致的缩放机制,即:

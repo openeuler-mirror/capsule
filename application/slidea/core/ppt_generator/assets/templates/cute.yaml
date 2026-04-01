@@ -24,8 +24,7 @@ html: |-
                 height: 720px;
                 display: flex;
                 flex-direction: column;
-                /* 背景渐变 */
-                background-image: linear-gradient(to bottom right, #fbcfe8, #e9d5ff, #bfdbfe);
+                background-color: #f4e4f4;
                 position: relative;
                 overflow: hidden;
             }
@@ -50,31 +49,10 @@ html: |-
                 transform-origin: top left;
             }
     
-            /* 装饰元素样式 */
-            .deco-cloud {
-                position: absolute;
-                top: 4rem;
-                right: 5rem;
-                font-size: 8rem;
-                color: rgba(255, 255, 255, 0.6);
-                transform: rotate(-12deg);
-                z-index: 0;
-            }
-    
-            .deco-heart {
-                position: absolute;
-                bottom: 3rem;
-                left: 4rem;
-                font-size: 5rem;
-                color: rgba(249, 168, 212, 0.8); /* pink-300 */
-                transform: rotate(12deg);
-                z-index: 0;
-            }
-    
             /* 卡片样式 */
             .glass-card {
-                background-color: rgba(255, 255, 255, 0.88);
-                border: 1px solid rgba(255, 255, 255, 0.75);
+                background-color: #ffffff;
+                border: 1px solid #e5e7eb;
                 border-radius: 1.5rem; /* rounded-2xl */
                 padding: 2rem;
                 text-align: center;
@@ -83,25 +61,20 @@ html: |-
                 align-items: center;
                 /* 移除固定高度，依靠内容或父容器分配 */
                 width: 280px;
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
                 transition: transform 0.3s ease;
             }
         </style>
     </head>
     <body>
     <div id="ppt-container">
-        <!-- 装饰性元素 -->
-        <i class="fa-solid fa-cloud deco-cloud"></i>
-        <i class="fa-solid fa-heart deco-heart"></i>
-    
         <!-- 头部区域 (Header) -->
         <!-- 由于没有特定高度限制，这里给一点 padding 让它自然撑开，或者作为 flex item -->
         <div class="h-32 flex flex-col justify-center items-center z-10 shrink-0">
-            <h1 class="text-5xl font-black text-slate-700 tracking-wider">
+            <h1 class="text-5xl font-black text-slate-700 tracking-wider mb-2">
                 <i class="fa-solid fa-wand-magic-sparkles text-yellow-400 mr-4"></i>
                 开启元气满满一天的小秘诀
             </h1>
-            <p class="text-2xl text-slate-500 mt-2 font-medium">A little guide to a happy day!</p>
+            <p class="text-2xl text-slate-500 font-medium">A little guide to a happy day!</p>
         </div>
     
         <div class="section-container">

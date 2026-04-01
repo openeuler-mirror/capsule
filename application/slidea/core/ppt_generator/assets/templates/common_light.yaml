@@ -23,11 +23,23 @@ html: |-
             #ppt-container {
                 width: 1280px;
                 height: 720px;
-                display: flex;
-                flex-direction: column;
-                background-color: #ffffff;
+                display: grid;
+                grid-template-rows: 100px 1fr 50px;
+                background-color: #f8fafc;
+                border-left: 8px solid #3b82f6;
                 position: relative;
                 overflow: hidden;
+            }
+
+            .bg-split-accent {
+                grid-row: 1 / 4;
+                grid-column: 1;
+                justify-self: end;
+                width: 42%;
+                height: 100%;
+                background-color: #e8eef6;
+                clip-path: polygon(18% 0, 100% 0, 100% 100%, 0 100%);
+                z-index: 0;
             }
     
             .section-container {
@@ -37,6 +49,8 @@ html: |-
                 display: flex;
                 flex-direction: column;
                 flex-grow: 1;
+                grid-row: 2;
+                grid-column: 1;
                 position: relative;
                 z-index: 10;
             }
@@ -57,6 +71,8 @@ html: |-
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
+                grid-row: 1;
+                grid-column: 1;
                 position: relative;
                 z-index: 10;
             }
@@ -67,6 +83,8 @@ html: |-
                 display: flex;
                 justify-content: flex-end;
                 align-items: center;
+                grid-row: 3;
+                grid-column: 1;
                 position: relative;
                 z-index: 10;
             }
@@ -75,19 +93,10 @@ html: |-
                 font-size: 2.2rem;
                 font-weight: 800;
                 color: #1e293b;
-                position: relative;
                 display: inline-block;
                 margin: 0;
-            }
-    
-            .main-title:after {
-                content: "";
-                position: absolute;
-                width: 60px;
-                height: 4px;
-                background-color: #2563eb;
-                bottom: -8px;
-                left: 0;
+                padding-bottom: 0.5rem;
+                border-bottom: 4px solid #2563eb;
             }
     
             .highlight {
@@ -155,12 +164,7 @@ html: |-
     </head>
     <body>
     <div id="ppt-container">
-    
-        <div class="absolute inset-0 z-0">
-            <div class="absolute top-0 right-0 w-2/5 h-full"
-                 style="background-color: rgba(241, 245, 249, 0.8); clip-path: polygon(15% 0, 100% 0%, 100% 100%, 0% 100%);"></div>
-        </div>
-        <div class="absolute left-0 top-0 h-full w-2 bg-blue-500 z-10"></div>
+        <div class="bg-split-accent"></div>
     
         <header class="header">
             <h1 class="main-title">总结与展望</h1>
@@ -185,18 +189,18 @@ html: |-
                                 <div class="flex justify-between space-x-4">
                                     <div class="flex-1 card-amber p-4 rounded text-center">
                                         <i class="fas fa-shield-alt text-3xl mb-2"></i>
-                                        <div class="font-bold">系统权限</div>
-                                        <div class="text-xs opacity-80 mt-1">System Permissions</div>
+                                        <div class="font-bold mb-1">系统权限</div>
+                                        <div class="text-xs text-gray-500">System Permissions</div>
                                     </div>
                                     <div class="flex-1 card-emerald p-4 rounded text-center">
                                         <i class="fas fa-clone text-3xl mb-2"></i>
-                                        <div class="font-bold">Multi-Resume</div>
-                                        <div class="text-xs opacity-80 mt-1">多屏保活机制</div>
+                                        <div class="font-bold mb-1">Multi-Resume</div>
+                                        <div class="text-xs text-gray-500">多屏保活机制</div>
                                     </div>
                                     <div class="flex-1 card-violet p-4 rounded text-center">
                                         <i class="fas fa-hand-pointer text-3xl mb-2"></i>
-                                        <div class="font-bold">输入注入</div>
-                                        <div class="text-xs opacity-80 mt-1">Input Injection</div>
+                                        <div class="font-bold mb-1">输入注入</div>
+                                        <div class="text-xs text-gray-500">Input Injection</div>
                                     </div>
                                 </div>
                             </div>
@@ -231,8 +235,8 @@ html: |-
                                         <i class="fas fa-laptop-code"></i>
                                     </div>
                                     <div>
-                                        <h4 class="text-lg font-bold text-gray-700">系统 API 演进 (Android 14+)</h4>
-                                        <p class="text-gray-500 mt-1 text-m">系统可能进一步开放虚拟屏与多窗口管理
+                                        <h4 class="text-lg font-bold text-gray-700 mb-1">系统 API 演进 (Android 14+)</h4>
+                                        <p class="text-gray-500 text-m">系统可能进一步开放虚拟屏与多窗口管理
                                             API，降低非系统级应用的实现门槛。</p>
                                     </div>
                                 </div>
@@ -242,8 +246,8 @@ html: |-
                                         <i class="fas fa-sliders-h"></i>
                                     </div>
                                     <div>
-                                        <h4 class="text-lg font-bold text-gray-700">厂商定制化支持</h4>
-                                        <p class="text-gray-500 mt-1 text-m">各厂商 ROM
+                                        <h4 class="text-lg font-bold text-gray-700 mb-1">厂商定制化支持</h4>
+                                        <p class="text-gray-500 text-m">各厂商 ROM
                                             可能针对“后台自动化”场景推出特定的特权模式或管控接口。</p>
                                     </div>
                                 </div>
@@ -253,8 +257,8 @@ html: |-
                                         <i class="fas fa-brain"></i>
                                     </div>
                                     <div>
-                                        <h4 class="text-lg font-bold text-gray-700">AI Agent 深度融合</h4>
-                                        <p class="text-gray-500 mt-1 text-m">
+                                        <h4 class="text-lg font-bold text-gray-700 mb-1">AI Agent 深度融合</h4>
+                                        <p class="text-gray-500 text-m">
                                             结合端侧大模型，从传统的“脚本指令”向“智能感知-决策-执行”的自主控制体系演进。</p>
                                     </div>
                                 </div>
