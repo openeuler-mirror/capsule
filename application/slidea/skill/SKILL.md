@@ -1,6 +1,6 @@
 ---
 name: slidea
-description: "Flexible PPT generation via LangGraph with caching, staged execution, and patch rendering by run_id. Use for PPT creation where an agent needs full-run or stage-by-stage control over parse/research/outline/render flows, plus cached reuse and selective re-rendering."
+description: "Flexible AI-Powered PPT generation with caching, staged execution, and patch rendering by run_id. Use for PPT creation where an agent needs full-run or stage-by-stage control over parse/research/outline/render flows, plus cached reuse and selective re-rendering."
 ---
 
 # Slidea
