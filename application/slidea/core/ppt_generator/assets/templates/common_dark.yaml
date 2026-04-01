@@ -8,16 +8,21 @@ html: |-
         <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
         <title>总结与展望</title>
         <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
-        <link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap"
+        <link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;700&amp;display=swap"
               rel="stylesheet"/>
         <script defer src="https://cdn.jsdelivr.net.cn/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
         <script src="https://cdn.jsdelivr.net.cn/npm/chart.js"></script>
         <style>
             body, html {
-                font-family: 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+                font-family: 'Noto Sans SC', sans-serif;
                 margin: 0;
                 padding: 0;
                 background-color: #f8f9fa;
+            }
+
+            html:lang(zh-CN),
+            html:lang(zh-Hans) {
+                font-family: 'Noto Sans SC', sans-serif;
             }
     
             #ppt-container {

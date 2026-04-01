@@ -17,7 +17,7 @@
 必须使用且只能使用以下地址：
 ```html
 <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
-<link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet"/>
 <script defer src="https://cdn.jsdelivr.net.cn/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
 <script src="https://cdn.jsdelivr.net.cn/npm/chart.js"></script>
 ```
@@ -234,7 +234,7 @@
 </div>
 包裹住主要内容!
 5. 字体必须与模板保持完全一致，优先直接复用模板中的字体声明。默认使用：
-font-family: 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+font-family: 'Noto Sans SC', sans-serif;
 6. 不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！
 需要严格遵守以上要求!
 需要严格遵守以上要求!

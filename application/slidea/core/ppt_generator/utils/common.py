@@ -232,7 +232,7 @@ async def wait_for_page_assets_ready(page, html_file_path: str):
     except Exception as error:
         logger.warning(f"FontAwesome render wait skipped for {html_file_path}: {error}")
 
-    await page.wait_for_timeout(500)
+    await page.wait_for_timeout(1000)
 
 
 async def _convert_single_html_to_pdf(browser, html_file_path: str, save_dir: str) -> str | None:
@@ -400,7 +400,6 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
             logger.error("Local LibreOffice conversion finished but no PPTX output was generated.")
             return ""
 
-        _force_font(pptx_path)
         _remove_bottom_layers(pptx_path)
 
         logger.info(f"Client: Successfully converted and saved to '{pptx_path}'")
@@ -409,24 +408,6 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
     except Exception as e:
         logger.info(f"An error occurred while converting PDF to PPTX: {str(e)}")
         return ""
-
-
-def _force_font(pptx_path, font_name="Microsoft YaHei"):
-    """force all fonts in ppt transfer into Microsoft YaHei"""
-    logger.info(f"Client: Forcing all fonts in {pptx_path} to {font_name}")
-    prs = Presentation(pptx_path)
-
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            if not shape.has_text_frame:
-                continue
-            for paragraph in shape.text_frame.paragraphs:
-                for run in paragraph.runs:
-                    run.font.name = font_name
-                    run.font.name_far_east = font_name
-
-    prs.save(pptx_path)
-    logger.info(f"Client: Successfully updated font in '{pptx_path}'")
 
 
 def _remove_bottom_layers(pptx_path):
