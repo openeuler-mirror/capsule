@@ -181,6 +181,7 @@ async def gather_content_router_node(state: ThoughtState):
 {format_outputs}
 """
 
+    # mode为deep和simple时，都让模型返回queries列表，后续如果用户选择并不洞察，可以在simple模式下直接使用，减少模型调用
     result = await llm_invoke(llm, [HumanMessage(content=prompt)], pydantic_schema=ResearchMode)
     logger.info(f"research mode: {result}")
     if not result:
