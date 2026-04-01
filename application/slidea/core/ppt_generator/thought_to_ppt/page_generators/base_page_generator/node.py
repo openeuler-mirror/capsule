@@ -8,7 +8,7 @@ from langchain.messages import HumanMessage
 from core.utils.logger import logger
 from core.utils.config import settings
 from core.utils.llm import default_vlm, default_llm, llm_invoke
-from core.ppt_generator.utils.common import get_scale_step_value, build_image_url
+from core.ppt_generator.utils.common import get_scale_step_value, build_image_url, wait_for_page_assets_ready
 from core.ppt_generator.utils.browser import BrowserManager
 from core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.state import PPTWorkerState
 
@@ -41,8 +41,9 @@ async def modify_ppt_page_node(state: PPTWorkerState):
         page = await context.new_page()
 
         try:
-            await page.goto(f'file://{html_path}', wait_until='networkidle', timeout=60000)
-            await page.wait_for_timeout(5000)
+            absolute_html_path = os.path.abspath(html_path)
+            await page.goto(f'file://{absolute_html_path}', wait_until='domcontentloaded', timeout=60000)
+            await wait_for_page_assets_ready(page, absolute_html_path)
             img_base_name = f"{os.path.basename(html_path).split('.')[0]}_screenshot_{iteration}.png"
             img_path = os.path.join(os.path.dirname(html_path), img_base_name)
             await page.screenshot(path=img_path)
@@ -116,7 +117,7 @@ async def ratio_evaluator_node(state: PPTWorkerState):
         ratio = await get_scale_step_value(file_path_str)
     except Exception as e:
         logger.warning(f"get_scale_step_value failed {e}")
-        ratio = 1.0
+        ratio = 0.1
 
     if ratio is None:
         logger.warning(f"page {index} ratio is None.")
@@ -152,7 +153,7 @@ def ppt_submitter_node(state: PPTWorkerState):
 def route_page(state: PPTWorkerState):
     """route page"""
     if state["iteration"] > 2:
-        logger.info(f'generate page {state["index"]} successful!')
+        logger.info(f'page {state["index"]} reached max retries, accepting current result.')
         return "FINISH"
 
     if state["action"] == "finish":

@@ -7,14 +7,13 @@ html: |-
         <meta charset="utf-8"/>
         <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
         <title>总结与展望</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap"
-              rel="stylesheet"/>
-        <script defer src="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
+        <link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;700&amp;display=swap" rel="stylesheet"/>
+        <script defer src="https://cdn.jsdelivr.net.cn/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
+        <script src="https://cdn.jsdelivr.net.cn/npm/chart.js"></script>
         <style>
             body, html {
-                font-family: 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+                font-family: 'Noto Sans SC', sans-serif;
                 margin: 0;
                 padding: 0;
                 background-color: #f8fafc;
@@ -75,19 +74,10 @@ html: |-
                 font-size: 2.2rem;
                 font-weight: 800;
                 color: #1a56db;
-                position: relative;
                 display: inline-block;
                 margin: 0;
-            }
-    
-            .main-title:after {
-                content: "";
-                position: absolute;
-                width: 60px;
-                height: 4px;
-                background-color: #1a56db;
-                bottom: -8px;
-                left: 0;
+                padding-bottom: 0.5rem;
+                border-bottom: 4px solid #1a56db;
             }
     
             .highlight {
@@ -99,7 +89,6 @@ html: |-
                 background-color: #ffffff;
                 border: 1px solid #e2e8f0;
                 border-top: 4px solid #1a56db;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
                 transition: all 0.2s ease;
             }
     
@@ -169,18 +158,18 @@ html: |-
                                 <div class="flex justify-between space-x-4">
                                     <div class="flex-1 card-academic p-4 rounded-b text-center">
                                         <i class="fas fa-shield-alt text-3xl text-academic-primary mb-2"></i>
-                                        <div class="font-bold text-gray-800">系统权限</div>
-                                        <div class="text-xs text-gray-500 mt-1">System Permissions</div>
+                                        <div class="font-bold text-gray-800 mb-1">系统权限</div>
+                                        <div class="text-xs text-gray-500">System Permissions</div>
                                     </div>
                                     <div class="flex-1 card-academic p-4 rounded-b text-center">
                                         <i class="fas fa-clone text-3xl text-academic-primary mb-2"></i>
-                                        <div class="font-bold text-gray-800">Multi-Resume</div>
-                                        <div class="text-xs text-gray-500 mt-1">多屏保活机制</div>
+                                        <div class="font-bold text-gray-800 mb-1">Multi-Resume</div>
+                                        <div class="text-xs text-gray-500">多屏保活机制</div>
                                     </div>
                                     <div class="flex-1 card-academic p-4 rounded-b text-center">
                                         <i class="fas fa-hand-pointer text-3xl text-academic-primary mb-2"></i>
-                                        <div class="font-bold text-gray-800">输入注入</div>
-                                        <div class="text-xs text-gray-500 mt-1">Input Injection</div>
+                                        <div class="font-bold text-gray-800 mb-1">输入注入</div>
+                                        <div class="text-xs text-gray-500">Input Injection</div>
                                     </div>
                                 </div>
                             </div>
@@ -215,8 +204,8 @@ html: |-
                                         <i class="fas fa-laptop-code"></i>
                                     </div>
                                     <div>
-                                        <h4 class="text-lg font-bold text-academic-dark">系统 API 演进 (Android 14+)</h4>
-                                        <p class="text-academic-secondary mt-1 text-m">系统可能进一步开放虚拟屏与多窗口管理
+                                        <h4 class="text-lg font-bold text-academic-dark mb-1">系统 API 演进 (Android 14+)</h4>
+                                        <p class="text-academic-secondary text-m">系统可能进一步开放虚拟屏与多窗口管理
                                             API，降低非系统级应用的实现门槛。</p>
                                     </div>
                                 </div>
@@ -226,8 +215,8 @@ html: |-
                                         <i class="fas fa-sliders-h"></i>
                                     </div>
                                     <div>
-                                        <h4 class="text-lg font-bold text-academic-dark">厂商定制化支持</h4>
-                                        <p class="text-academic-secondary mt-1 text-m">各厂商 ROM
+                                        <h4 class="text-lg font-bold text-academic-dark mb-1">厂商定制化支持</h4>
+                                        <p class="text-academic-secondary text-m">各厂商 ROM
                                             可能针对“后台自动化”场景推出特定的特权模式或管控接口。</p>
                                     </div>
                                 </div>
@@ -237,8 +226,8 @@ html: |-
                                         <i class="fas fa-brain"></i>
                                     </div>
                                     <div>
-                                        <h4 class="text-lg font-bold text-academic-dark">AI Agent 深度融合</h4>
-                                        <p class="text-academic-secondary mt-1 text-m">
+                                        <h4 class="text-lg font-bold text-academic-dark mb-1">AI Agent 深度融合</h4>
+                                        <p class="text-academic-secondary text-m">
                                             结合端侧大模型，从传统的“脚本指令”向“智能感知-决策-执行”的自主控制体系演进。</p>
                                     </div>
                                 </div>
@@ -276,7 +265,7 @@ html: |-
                 const ORIGINAL_HEIGHT = section.clientHeight - paddingTop - paddingBottom;
                 const ORIGINAL_WIDTH = section.clientWidth - paddingLeft - paddingRight;
                 if (Math.abs(contentWrapper.scrollWidth - ORIGINAL_WIDTH) < 1 && Math.abs(contentWrapper.scrollHeight - ORIGINAL_HEIGHT) < 1) {
-                    window.final_ration = 1;
+                    window.final_ratio = 1;
                     return;
                 }
     
@@ -311,7 +300,7 @@ html: |-
                 const scaleY = ORIGINAL_HEIGHT / finalHeight;
     
                 const scaleRatio = Math.min(scaleX, scaleY);
-                window.final_ration = scaleRatio;
+                window.final_ratio = scaleRatio;
                 contentWrapper.style.transform = 'none';
                 contentWrapper.style.zoom = scaleRatio;
             });

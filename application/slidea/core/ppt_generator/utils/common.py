@@ -40,14 +40,20 @@ async def get_scale_step_value(html_path):
     """
     使用 Playwright 获取在浏览器环境中 JS 循环的最终scale step值。
     """
+    absolute_html_path = os.path.abspath(html_path)
     async with BrowserManager.get_browser_context() as browser:
         context = await browser.new_context(viewport={'width': 1280, 'height': 720}, ignore_https_errors=True)
         page = await context.new_page()
 
         try:
-            await page.goto(f'file://{html_path}', wait_until='networkidle', timeout=60000)
-            scale_ratio = await page.evaluate("() => window.final_ration")
-            logger.info(f"html {os.path.basename(html_path)} ratio: {scale_ratio}")
+            await page.goto(f'file://{absolute_html_path}', wait_until='domcontentloaded', timeout=60000)
+            await wait_for_page_assets_ready(page, absolute_html_path)
+            await page.wait_for_function(
+                "() => window.final_ratio !== undefined && window.final_ratio !== null",
+                timeout=_get_render_ready_timeout_ms(),
+            )
+            scale_ratio = await page.evaluate("() => window.final_ratio")
+            logger.info(f"html {os.path.basename(absolute_html_path)} ratio: {scale_ratio}")
             return scale_ratio
         finally:
             await page.close()
@@ -151,7 +157,7 @@ async def _convert_single_html_to_pdf_with_semaphore(
         return await _convert_single_html_to_pdf(browser, html_file_path, save_dir)
 
 
-async def _wait_for_page_assets_ready(page, html_file_path: str):
+async def wait_for_page_assets_ready(page, html_file_path: str):
     """
     显式等待字体、样式表和 Tailwind 运行时产物。
     """
@@ -185,7 +191,7 @@ async def _wait_for_page_assets_ready(page, html_file_path: str):
                 return false;
             }
 
-            const tailwindScript = document.querySelector('script[src*="cdn.tailwindcss.com"]');
+            const tailwindScript = document.querySelector('script[src*="tailwindcss"]');
             if (!tailwindScript) {
                 return true;
             }
@@ -226,7 +232,7 @@ async def _wait_for_page_assets_ready(page, html_file_path: str):
     except Exception as error:
         logger.warning(f"FontAwesome render wait skipped for {html_file_path}: {error}")
 
-    await page.wait_for_timeout(500)
+    await page.wait_for_timeout(1000)
 
 
 async def _convert_single_html_to_pdf(browser, html_file_path: str, save_dir: str) -> str | None:
@@ -244,7 +250,7 @@ async def _convert_single_html_to_pdf(browser, html_file_path: str, save_dir: st
         for attempt in range(1, max_attempts + 1):
             try:
                 await page.goto(f'file://{absolute_html_path}', wait_until='domcontentloaded', timeout=30000)
-                await _wait_for_page_assets_ready(page, absolute_html_path)
+                await wait_for_page_assets_ready(page, absolute_html_path)
 
                 # 打印 PDF
                 await page.pdf(
@@ -394,7 +400,6 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
             logger.error("Local LibreOffice conversion finished but no PPTX output was generated.")
             return ""
 
-        _force_font(pptx_path)
         _remove_bottom_layers(pptx_path)
 
         logger.info(f"Client: Successfully converted and saved to '{pptx_path}'")
@@ -403,24 +408,6 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
     except Exception as e:
         logger.info(f"An error occurred while converting PDF to PPTX: {str(e)}")
         return ""
-
-
-def _force_font(pptx_path, font_name="Microsoft YaHei"):
-    """force all fonts in ppt transfer into Microsoft YaHei"""
-    logger.info(f"Client: Forcing all fonts in {pptx_path} to {font_name}")
-    prs = Presentation(pptx_path)
-
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            if not shape.has_text_frame:
-                continue
-            for paragraph in shape.text_frame.paragraphs:
-                for run in paragraph.runs:
-                    run.font.name = font_name
-                    run.font.name_far_east = font_name
-
-    prs.save(pptx_path)
-    logger.info(f"Client: Successfully updated font in '{pptx_path}'")
 
 
 def _remove_bottom_layers(pptx_path):

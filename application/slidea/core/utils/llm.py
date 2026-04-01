@@ -13,6 +13,23 @@ except ImportError:  # pragma: no cover - exercised in minimal runtime environme
 from core.utils.config import settings
 
 
+class LLMInvokeError(RuntimeError):
+    """Raised when an LLM call exhausts retries."""
+
+
+def _infer_llm_error_hint(error: Exception) -> str:
+    message = str(error).lower()
+    if any(token in message for token in ["insufficient_quota", "quota", "billing", "余额", "欠费", "payment", "402"]):
+        return "Possible quota or billing issue."
+    if any(token in message for token in ["401", "unauthorized", "invalid api key", "authentication"]):
+        return "Possible API key or authentication issue."
+    if any(token in message for token in ["429", "rate limit", "too many requests"]):
+        return "Possible rate-limit issue."
+    if any(token in message for token in ["timeout", "timed out"]):
+        return "Possible upstream timeout."
+    return ""
+
+
 class MissingDependencyClient:
     def __init__(self, dependency_name: str):
         self.dependency_name = dependency_name
@@ -60,13 +77,20 @@ async def llm_invoke(llm, args, config=None, pydantic_schema=None, json_schema=N
     """统一的LLM调用接口"""
 
     raw_llm = llm
+    schema_name = ""
     if pydantic_schema:
         json_schema = pydantic_schema.model_json_schema()
+        schema_name = getattr(pydantic_schema, "__name__", str(pydantic_schema))
         llm = llm.with_structured_output(
             pydantic_schema, include_raw=True, method="json_schema"
         )
+    elif json_schema:
+        schema_name = "json_schema"
 
-    for _ in range(5):
+    llm_model = getattr(raw_llm, "model_name", None) or getattr(raw_llm, "model", "") or settings.DEFAULT_LLM_MODEL or "unknown"
+    last_error: Exception | None = None
+
+    for attempt in range(1, 6):
         try:
             response = await llm.ainvoke(args, config=config)
             if pydantic_schema:
@@ -96,6 +120,7 @@ async def llm_invoke(llm, args, config=None, pydantic_schema=None, json_schema=N
 
             return response.content
         except Exception as e:
+            last_error = e
             # fallback: providers that don't support response_format
             if pydantic_schema:
                 err_text = str(e).lower()
@@ -112,8 +137,21 @@ async def llm_invoke(llm, args, config=None, pydantic_schema=None, json_schema=N
                         pass
 
             import traceback
-            logger.debug(f"llm invoke failed: {e}")
+            logger.warning(
+                f"LLM invoke attempt {attempt}/5 failed for model={llm_model}, schema={schema_name or 'plain_text'}: {e}"
+            )
             logger.debug(traceback.format_exc())
         await asyncio.sleep(10)
 
-    return None
+    if last_error is None:
+        raise LLMInvokeError(f"LLM invoke failed for model={llm_model} with unknown error")
+
+    hint = _infer_llm_error_hint(last_error)
+    detail = f" {hint}" if hint else ""
+    logger.error(
+        f"LLM invoke exhausted retries for model={llm_model}, schema={schema_name or 'plain_text'}: {last_error}.{detail}"
+    )
+    raise LLMInvokeError(
+        f"LLM invoke failed after 5 attempts for model={llm_model}, schema={schema_name or 'plain_text'}: "
+        f"{last_error}. {hint}".strip()
+    ) from last_error
