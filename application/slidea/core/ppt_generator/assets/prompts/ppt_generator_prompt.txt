@@ -13,16 +13,43 @@
 11. 图片记得要水平居中、垂直居中显示！！！
 12. 禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！应采用多列或网格化布局，利用横向空间以避免垂直高度过大导致缩放失效。
 13. 严禁使用任何 emoji 字符作为图标、标签前缀或装饰元素（例如 📚、📅、✍️、🚀 等），因为导出链路中 emoji 容易丢失或显示为方框。需要图标时，必须使用 FontAwesome，不要使用 emoji 代替。
-14. `<head>`中的外部资源引用必须严格使用模板里已经给定的固定地址，逐字复制，不允许自行改写、替换、补全、猜测域名，也不允许输出看起来相似但错误的地址。
-必须使用且只能使用以下地址：
+14. `<head>`中的外部资源引用必须严格遵守以下规则，不允许自行改写域名，不允许输出看起来相似但错误的地址。
+脚本资源必须使用且只能使用以下固定地址：
 ```html
 <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
-<link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet"/>
 <script defer src="https://cdn.jsdelivr.net.cn/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
 <script src="https://cdn.jsdelivr.net.cn/npm/chart.js"></script>
 ```
+字体 `<link>` 必须从 `https://fonts.googleapis.cn/css2?...` 获取，并且只选择当前页面主语言实际需要的 Google 字体，不要使用 `fonts.googleapis.com`、`fonts.googleapis.com.cn` 或其他域名变体。
+模板中的默认字体链接是中文 `Noto Sans SC` 基线；如果页面主语言不是中文，请保持脚本资源地址不变，只替换字体 `<link>` 和 `body, html` 中的 `font-family`，并参考下面的日文、韩文示例。
 严禁输出 `https://fonts.googleapis.com/...`、`https://fonts.googleapis.com.cn/...`、`https://cdn.tailwindcss.com`、`https://cdn.jsdelivr.net/...` 等其他变体。
-如果不确定，请直接复用模板中的 `<head>` 资源区，不要自行改写。
+字体必须与模板保持完全一致，优先直接复用模板中的字体声明。不要输出复杂的 `html:lang(...)` 字体切换规则，而是直接在 `body, html` 中按页面主语言写死字体。该规则应通用于任意语言；下面只给出中日韩三个示例：
+简体中文页面示例：
+<link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;700&amp;display=swap" rel="stylesheet"/>
+body, html {
+    font-family: 'Noto Sans SC', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #ffffff;
+}
+日文页面示例：
+<link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+JP:wght@400;700&amp;display=swap" rel="stylesheet"/>
+body, html {
+    font-family: 'Noto Sans JP', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #ffffff;
+}
+韩文页面示例：
+<link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+KR:wght@400;700&amp;display=swap" rel="stylesheet"/>
+body, html {
+    font-family: 'Noto Sans KR', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #ffffff;
+}
+其他语言页面也遵循同样模式：在 `body, html` 中直接写当前页面主语言对应的字体族，并确保该字体通过 `https://fonts.googleapis.cn/css2?...` 正确引入。
+
 15. 禁止使用任何半透明效果、模糊滤镜与渐变，包括但不限于 `rgba(...)`、`hsla(...)`、`transparent`、`opacity-*`、`opacity:`、`backdrop-filter`、`-webkit-backdrop-filter`、`filter: blur(...)`。PDF 导出对透明度和模糊的兼容性很差，容易导致偏色、发粉、卡片或文字整块丢失。若需要柔和层次，请只使用纯色背景、纯色边框。
 
 
@@ -233,9 +260,4 @@
 </div>
 </div>
 包裹住主要内容!
-5. 字体必须与模板保持完全一致，优先直接复用模板中的字体声明。默认使用：
-font-family: 'Noto Sans SC', sans-serif;
-6. 不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！
-需要严格遵守以上要求!
-需要严格遵守以上要求!
-需要严格遵守以上要求!
+
