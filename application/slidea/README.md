@@ -10,7 +10,19 @@
 
 </div>
 
-Slidea is an AI-driven PPT generation skill that turns a high-level presentation request into structured research material, writing direction, a slide outline, and finally a presentation-ready PPT deck.
+***Slidea*** is an **AI-driven PPT generation skill** that turns a high-level presentation request into structured research material, writing direction, a slide outline, and finally a presentation-ready PPT deck.
+
+---
+
+| Example 1 (English) | Example 2 (English) |
+|---------------------|---------------------|
+| <b>SIGOPS Workshop (Kimi-k2.5)</b><br><a href="./docs/example/sigops.pptx"><img src="./docs/example/assets/sigops.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>Please make me an opening slides for the SIGOPS strategic workshop (https://ipads.se.sjtu.edu.cn/sigops-strategic/), emphasizing the long history of SIGOPS and the community and this is the 60th anniversary of SIGOPS (https://www.sigops.org/about/history/), review the 2015 SOSP History Day (https://sigops.org/s/conferences/sosp/2015/history/), the high-quality of the program, the two great keynote speeches, and the program for visionary talks, as well as the two great panels and workshop Session schedule. Please make around 8-10 slides.</details> | <b>Wuthering Heights Introduction (Kimi-k2.5)</b><br><a href="./docs/example/book.pptx"><img src="./docs/example/assets/book.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>Help me create an English PowerPoint presentation to introduce the book Wuthering Heights</details> |
+
+| Example 3 (Chinese) | Example 4 (Chinese) |
+|---------------------|---------------------|
+| <b>AI Agent Overview (Gemini-3-pro)</b><br><a href="./docs/example/agent.pptx"><img src="./docs/example/assets/agent.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>帮我生成一个30页左右的PPT，内容是关于AI Agent，包括AI Agent基本原理，主要框架、面临的挑战、学术界进展，以及未来的机会点。</details> | <b>Kindergarten Stand-up Show (DeepSeek-V3.2)</b><br><a href="./docs/example/child.pptx"><img src="./docs/example/assets/child.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>请帮我生成一份5岁小朋友脱口秀的ppt，演讲题目是“假如我会魔法”</details> |
+
+---
 
 ## What Slidea Can Do
 
@@ -27,13 +39,6 @@ The system is designed for agent-driven usage. It supports staged execution, res
 - generation quality is more stable when research, planning, outlining, and rendering are separated;
 - intermediate outputs can be cached, inspected, edited, resumed, or reused.
 
-| Example 1 (English) | Example 2 (English) |
-|---------------------|---------------------|
-| <b>SIGOPS Workshop (Kimi-k2.5)</b><br><a href="./docs/example/sigops.pptx"><img src="./docs/example/assets/sigops.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>Please make me an opening slides for the SIGOPS strategic workshop (https://ipads.se.sjtu.edu.cn/sigops-strategic/), emphasizing the long history of SIGOPS and the community and this is the 60th anniversary of SIGOPS (https://www.sigops.org/about/history/), review the 2015 SOSP History Day (https://sigops.org/s/conferences/sosp/2015/history/), the high-quality of the program, the two great keynote speeches, and the program for visionary talks, as well as the two great panels and workshop Session schedule. Please make around 8-10 slides.</details> | <b>Wuthering Heights Introduction (Kimi-k2.5)</b><br><a href="./docs/example/book.pptx"><img src="./docs/example/assets/book.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>Help me create an English PowerPoint presentation to introduce the book Wuthering Heights</details> |
-
-| Example 3 (Chinese) | Example 4 (Chinese) |
-|---------------------|---------------------|
-| <b>AI Agent Overview (Gemini-3-pro)</b><br><a href="./docs/example/agent.pptx"><img src="./docs/example/assets/agent.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>帮我生成一个30页左右的PPT，内容是关于AI Agent，包括AI Agent基本原理，主要框架、面临的挑战、学术界进展，以及未来的机会点。</details> | <b>Kindergarten Stand-up Show (DeepSeek-V3.2)</b><br><a href="./docs/example/child.pptx"><img src="./docs/example/assets/child.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>请帮我生成一份5岁小朋友脱口秀的ppt，演讲题目是“假如我会魔法”</details> |
 
 ## Quick Start
 
@@ -146,7 +151,9 @@ It turns source material into:
 
 This subsystem is split out to separate "how to think about the deck" from "how to render the deck".
 
-During PPT rendering, Slidea uses a few-shot approach to keep generated layouts visually consistent. At the moment, Slidea includes five built-in templates: general light, general dark, red political, academic report, and kids science. By default, Slidea automatically selects the most suitable template based on the user's topic, but users can also explicitly request a specific template style in the PPT generation prompt.
+During PPT rendering, Slidea uses a few-shot approach to keep generated layouts visually consistent. 
+
+At the moment, Slidea includes five built-in templates: general light, general dark, red political, academic report, and kids science. By default, Slidea automatically selects the most suitable template based on the user's topic, but users can also explicitly request a specific template style in the PPT generation prompt.
 
 ### Deep Research
 
