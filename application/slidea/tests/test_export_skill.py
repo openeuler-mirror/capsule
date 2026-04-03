@@ -23,7 +23,7 @@ class ExportSkillTests(unittest.TestCase):
             self.assertTrue((target_dir / "scripts" / "utils").exists())
             self.assertTrue((target_dir / "scripts" / "install" / "install.py").exists())
             self.assertTrue(
-                (target_dir / "scripts" / "install" / "extra_install_linux_rhel_family_aarch64.sh").exists()
+                (target_dir / "scripts" / "install" / "extra_install_linux_rhel.sh").exists()
             )
             self.assertFalse((target_dir / "scripts" / "export_skill.py").exists())
 

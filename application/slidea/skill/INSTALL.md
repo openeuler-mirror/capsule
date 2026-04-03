@@ -23,7 +23,7 @@ Examples:
 - If you are Codex: `~/.codex/skills/slidea`
 - If you are Claude Code: `~/.claude/skills/slidea`
 - If you are OpenCode: `~/.config/opencode/skills/slidea`
-- You may also discover the local skills directory from environment variables exposed by the current agent/runtime.
+- You may also discover the local skills directory from shell startup files such as `~/.bashrc`, `~/.zshrc`, `~/.bash_profile`, or `~/.profile`.
 
 In the commands below, replace `<SKILLS_DIR>` with that directory path.
 
@@ -91,8 +91,9 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    - Installs Playwright Chromium
    - Detects whether a usable LibreOffice installation is already available
    - If LibreOffice is missing, installs a local copy on supported platforms, or prints manual installation guidance
+   - On RHEL-family Linux x86_64 and arm64, follow the final `install.py` log output and explicitly tell the user to run `extra_install_linux_rhel.sh` manually when the installer asks for it
    - Creates `.env` from `.env.example` when needed
-   - Writes `SETUP_COMPLETED=true`
+   - Writes `SETUP_COMPLETED=true` after the base Python/bootstrap dependencies are installed
 
 8. **Try to populate the default LLM settings and Tavily search keys in `.env`.**
 
@@ -138,7 +139,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    - `~/.config/opencode/opencode.json`
    - `~/.openclaw/openclaw.json`
    - `~/.codex/config.toml`
-   - environment variables already exported in the current shell/session
+   - shell startup files such as `~/.bashrc`, `~/.zshrc`, `~/.bash_profile`, or `~/.profile`
 
    When you find Tavily credentials, write them into `<SKILLS_DIR>/slidea/.env` by strictly following the comments immediately above `TAVILY_API_KEYS`.
 
@@ -162,5 +163,41 @@ Check `<SKILLS_DIR>/slidea/.env`.
 
 - If `.env` does not exist, installation is not complete.
 - If `SETUP_COMPLETED` is not `true`, installation is not complete.
-- If `SETUP_COMPLETED=true`, treat the Python/bootstrap dependencies as complete.
+- If `SETUP_COMPLETED=true`, treat the base Python/bootstrap dependencies as complete.
 - `SETUP_COMPLETED=true` does not guarantee PPTX export on every platform. PPTX export still requires a usable LibreOffice installation for the PDF-to-PPTX conversion step.
+
+## Report Result
+
+After installation work is finished, explicitly report the result to the user in summary block.
+Summary block must reply in the same language the user is currently using。
+Inside that final summary block, keep the wording concise and easy to scan. Cover these points:
+
+1. **Installation result**
+   - Clearly say whether the base installation completed successfully.
+   - If there are remaining manual steps, say that the skill is not fully ready yet.
+
+2. **Extra settings already applied**
+   - If you helped the user auto-find and write the default LLM settings, say so briefly.
+   - If you helped the user auto-find and write `TAVILY_API_KEYS`, say so briefly.
+   - If you did not actually help configure one of these items, do not mention it as completed.
+
+3. **Optional settings the user may still configure**
+   - Mention only the items that are still relevant after the work you completed.
+   - Optional items:
+     - `TAVILY_API_KEYS`: recommended for web and image search; leaving it empty may cause content hallucinations and may result in a PPT without images
+     - `DEFAULT_VLM_MODEL` / `DEFAULT_VLM_API_KEY` / `DEFAULT_VLM_API_BASE_URL`: optional, used to check layout after generation
+     - `IMG_GEN_MODEL` / `IMG_GEN_API_KEY` / `IMG_GEN_API_BASE_URL`: optional, used to generate illustrations for the PPT
+   - If you already configured Tavily for the user, do not repeat `TAVILY_API_KEYS` in this optional list.
+
+4. **Required reminders**
+   - If you did not help auto-configure the default LLM settings, explicitly tell the user that they still need to fill in the three `DEFAULT_LLM_*` values.
+   - Even if the default LLM settings were already configured, still explicitly remind the user that the recommended model families are **Gemini 3.1 Pro / DeepSeek V3 / Kimi K2.5**.
+   - If the platform is RHEL-family Linux, you must explicitly show the full command the user needs to run next. The command must be complete and directly copyable.
+
+5. **What the user should do next**
+   - Ask the user to send their LLM API key / base URL / model information if they want help filling the remaining `.env` settings.
+   - Offer to help them finish any remaining optional configuration.
+
+When the platform is RHEL-family Linux, the final summary block should include the exact command from the installer result, not an abbreviated filename-only reference.
+
+During the whole installation flow, including progress updates, warnings, final result summaries, and follow-up questions, always reply in the same language the user is currently using.

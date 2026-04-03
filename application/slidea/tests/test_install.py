@@ -91,7 +91,7 @@ class EnsureDependenciesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
             script_dir = root_dir / "scripts" / "install"
-            script_path = script_dir / install.RHEL_FAMILY_ARM64_LIBREOFFICE_SCRIPT_NAME
+            script_path = script_dir / install.RHEL_FAMILY_LINUX_HELPER_SCRIPT_NAME
             script_dir.mkdir(parents=True, exist_ok=True)
             script_path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
 
@@ -105,7 +105,7 @@ class EnsureDependenciesTests(unittest.TestCase):
                 patch.object(install, "ROOT_DIR", root_dir):
                 distro_name, command = install.get_linux_libreoffice_install_command()
 
-            self.assertEqual(distro_name, install.LINUX_ARM64_RHEL_FAMILY_DISTRO_LABEL)
+            self.assertEqual(distro_name, install.LINUX_RHEL_FAMILY_DISTRO_LABEL)
             self.assertEqual(command, f'bash "{script_path}"')
             self.assertTrue(script_path.exists())
             script_content = script_path.read_text(encoding="utf-8")
@@ -116,7 +116,7 @@ class EnsureDependenciesTests(unittest.TestCase):
             Path(__file__).resolve().parents[1]
             / "scripts"
             / "install"
-            / install.RHEL_FAMILY_ARM64_LIBREOFFICE_SCRIPT_NAME
+            / install.RHEL_FAMILY_LINUX_HELPER_SCRIPT_NAME
         )
         script_content = script_path.read_text(encoding="utf-8")
 
@@ -192,19 +192,19 @@ class EnsureDependenciesTests(unittest.TestCase):
                 install,
                 "get_linux_libreoffice_install_command",
                 return_value=(
-                    install.LINUX_ARM64_RHEL_FAMILY_DISTRO_LABEL,
-                    'bash "/tmp/scripts/install/extra_install_linux_rhel_family_aarch64.sh"',
+                    install.LINUX_RHEL_FAMILY_DISTRO_LABEL,
+                    'bash "/tmp/scripts/install/extra_install_linux_rhel.sh"',
                 ),
             ):
             guidance = install.get_linux_arm64_post_install_guidance()
 
         self.assertIn(
             "Additional note for Linux "
-            f"({install.LINUX_ARM64_RHEL_FAMILY_DISTRO_LABEL}) ARM64 users:",
+            f"({install.LINUX_RHEL_FAMILY_DISTRO_LABEL}) ARM64 users:",
             guidance,
         )
         self.assertIn(
-            'Run this command manually: `bash "/tmp/scripts/install/extra_install_linux_rhel_family_aarch64.sh"`',
+            'Run this command manually: `bash "/tmp/scripts/install/extra_install_linux_rhel.sh"`',
             guidance,
         )
         self.assertNotIn("```sh", guidance)
@@ -695,6 +695,58 @@ class EnsureDependenciesTests(unittest.TestCase):
             mock_run_command.assert_called_once_with(
                 [str(venv_python), "-m", "playwright", "install", "chromium"]
             )
+
+    def test_main_rhel_x86_64_requires_manual_helper_before_completion(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            env_file = root_dir / ".env"
+            env_example = root_dir / ".env.example"
+            requirements = root_dir / "requirements.txt"
+            venv_dir = root_dir / ".venv"
+            venv_python = venv_dir / "bin" / "python"
+            helper_path = root_dir / "scripts" / "install" / install.RHEL_FAMILY_LINUX_HELPER_SCRIPT_NAME
+
+            env_example.write_text("DEFAULT_LLM_MODEL=\n", encoding="utf-8")
+            requirements.write_text("playwright\n", encoding="utf-8")
+            venv_python.parent.mkdir(parents=True, exist_ok=True)
+            venv_python.write_text("", encoding="utf-8")
+            helper_path.parent.mkdir(parents=True, exist_ok=True)
+            helper_path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+
+            buffer = io.StringIO()
+            with patch.object(install, "ROOT_DIR", root_dir), \
+                patch.object(install, "ENV_FILE", env_file), \
+                patch.object(install, "ENV_EXAMPLE_FILE", env_example), \
+                patch.object(install, "REQUIREMENTS_FILE", requirements), \
+                patch.object(install, "VENV_DIR", venv_dir), \
+                patch.object(install, "verify_playwright_installation", return_value=False), \
+                patch.object(install, "get_bootstrap_python_command", return_value="python3"), \
+                patch.object(install, "ensure_uv_installed", return_value=["uv"]), \
+                patch.object(install, "create_virtualenv", return_value=venv_python), \
+                patch.object(install, "run_python_install_command"), \
+                patch.object(install, "run_command"), \
+                patch.object(install, "update_install_state"), \
+                patch.object(install, "verify_libreoffice_installation", side_effect=[False, False, True]), \
+                patch.object(install, "install_libreoffice_to_local_dir") as mock_install_libreoffice, \
+                patch("scripts.install.install.platform.system", return_value="Linux"), \
+                patch("scripts.install.install.platform.machine", return_value="x86_64"), \
+                patch.object(
+                    install,
+                    "read_linux_os_release",
+                    return_value={"ID": "openeuler", "ID_LIKE": "rhel fedora", "NAME": "openEuler"},
+                ), \
+                redirect_stdout(buffer):
+                result = install.main()
+
+            output = buffer.getvalue()
+            self.assertEqual(result, 0)
+            self.assertIn("manual completion is still required", output.lower())
+            self.assertIn(str(helper_path), output)
+            self.assertIn("PDF generation will not work", output)
+            self.assertIn("PDF/PPTX generation will not work correctly", output)
+            self.assertIn("manual completion is still required on RHEL-family Linux", output)
+            self.assertEqual(install.read_env_value(env_file, "SETUP_COMPLETED"), "true")
+            mock_install_libreoffice.assert_called_once()
 
     def test_main_linux_arm64_skips_bundled_libreoffice_install(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
