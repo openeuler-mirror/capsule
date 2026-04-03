@@ -54,7 +54,7 @@ async def async_search(query: str, search_image: bool = False, max_results: int 
     """
 
     if not settings.has_tavily_search_config():
-        logger.warning("Tavily search skipped: TAVILY_API_KEYS is not configured.")
+        logger.debug("Tavily search skipped: TAVILY_API_KEYS is not configured.")
         return []
 
     max_retries = 5

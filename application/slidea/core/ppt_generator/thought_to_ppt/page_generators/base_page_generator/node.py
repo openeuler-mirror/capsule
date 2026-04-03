@@ -6,7 +6,12 @@ from langchain.messages import HumanMessage
 
 from core.utils.logger import logger
 from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
-from core.ppt_generator.utils.common import get_scale_step_value, build_image_url, wait_for_page_assets_ready
+from core.ppt_generator.utils.common import (
+    build_remote_asset_request_router,
+    get_scale_step_value,
+    build_image_url,
+    wait_for_page_assets_ready,
+)
 from core.ppt_generator.utils.browser import BrowserManager
 from core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.state import PPTWorkerState
 
@@ -39,6 +44,7 @@ async def modify_ppt_page_node(state: PPTWorkerState):
 
     async with BrowserManager.get_browser_context() as browser:
         context = await browser.new_context(viewport={'width': 1280, 'height': 720}, ignore_https_errors=True)
+        await context.route("**/*", build_remote_asset_request_router())
         page = await context.new_page()
 
         try:

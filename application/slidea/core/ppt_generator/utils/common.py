@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import httpx
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 try:
     from fake_useragent import UserAgent
@@ -34,6 +34,52 @@ MACOS_SYSTEM_LIBREOFFICE_CANDIDATES = ("libreoffice", "soffice")
 WIN_SYSTEM_LIBREOFFICE_CANDIDATES = ("soffice.com", "soffice.exe", "libreoffice", "soffice")
 DEFAULT_HTML_TO_PDF_CONCURRENCY = 3
 DEFAULT_RENDER_READY_TIMEOUT_MS = 20000
+DEFAULT_REMOTE_ASSET_PROBE_TIMEOUT_S = 5.0
+REMOTE_ASSET_URL_FALLBACKS = {
+    "https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js": [
+        "https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js",
+        "https://cdn.jsdelivr.net/npm/tailwindcss-cdn@3.4.10/tailwindcss.js",
+        "https://fastly.jsdelivr.net/npm/tailwindcss-cdn@3.4.10/tailwindcss.js",
+        "https://unpkg.com/tailwindcss-cdn@3.4.10/tailwindcss.js",
+    ],
+    "https://cdn.jsdelivr.net.cn/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js": [
+        "https://cdn.jsdelivr.net.cn/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js",
+        "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js",
+        "https://fastly.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js",
+        "https://unpkg.com/@fortawesome/fontawesome-free@6.4.0/js/all.min.js",
+    ],
+    "https://cdn.jsdelivr.net.cn/npm/chart.js": [
+        "https://cdn.jsdelivr.net.cn/npm/chart.js",
+        "https://cdn.jsdelivr.net/npm/chart.js",
+        "https://fastly.jsdelivr.net/npm/chart.js",
+        "https://unpkg.com/chart.js",
+    ],
+    "https://cdn.jsdelivr.net.cn/npm/katex@0.16.9/dist/katex.min.css": [
+        "https://cdn.jsdelivr.net.cn/npm/katex@0.16.9/dist/katex.min.css",
+        "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css",
+        "https://fastly.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css",
+        "https://unpkg.com/katex@0.16.9/dist/katex.min.css",
+    ],
+    "https://cdn.jsdelivr.net.cn/npm/katex@0.16.9/dist/katex.min.js": [
+        "https://cdn.jsdelivr.net.cn/npm/katex@0.16.9/dist/katex.min.js",
+        "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js",
+        "https://fastly.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js",
+        "https://unpkg.com/katex@0.16.9/dist/katex.min.js",
+    ],
+    "https://cdn.jsdelivr.net.cn/npm/katex@0.16.9/dist/contrib/auto-render.min.js": [
+        "https://cdn.jsdelivr.net.cn/npm/katex@0.16.9/dist/contrib/auto-render.min.js",
+        "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js",
+        "https://fastly.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js",
+        "https://unpkg.com/katex@0.16.9/dist/contrib/auto-render.min.js",
+    ],
+}
+REMOTE_FONT_CSS_FALLBACK_HOSTS = (
+    "fonts.googleapis.cn",
+    "fonts.googleapis.com",
+    "fonts.loli.net",
+    "fonts.font.im",
+)
+REMOTE_FONT_CSS_MATCH_HOSTS = REMOTE_FONT_CSS_FALLBACK_HOSTS + ("fonts.googleapis.com.cn",)
 
 
 async def get_scale_step_value(html_path):
@@ -43,6 +89,7 @@ async def get_scale_step_value(html_path):
     absolute_html_path = os.path.abspath(html_path)
     async with BrowserManager.get_browser_context() as browser:
         context = await browser.new_context(viewport={'width': 1280, 'height': 720}, ignore_https_errors=True)
+        await context.route("**/*", build_remote_asset_request_router())
         page = await context.new_page()
 
         try:
@@ -147,6 +194,120 @@ def _get_render_ready_timeout_ms() -> int:
         return DEFAULT_RENDER_READY_TIMEOUT_MS
 
 
+def _build_remote_asset_probe_headers(asset_url: str) -> dict[str, str]:
+    headers = {
+        "User-Agent": UA.random,
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+    if asset_url.endswith(".css") or "fonts.googleapis" in asset_url:
+        headers["Accept"] = "text/css,*/*;q=0.1"
+    elif asset_url.endswith(".js"):
+        headers["Accept"] = "application/javascript,text/javascript,*/*;q=0.1"
+    else:
+        headers["Accept"] = "*/*"
+    return headers
+
+
+async def _probe_remote_asset_url(asset_url: str) -> bool:
+    headers = _build_remote_asset_probe_headers(asset_url)
+
+    try:
+        async with httpx.AsyncClient(
+            verify=False,
+            follow_redirects=True,
+            timeout=DEFAULT_REMOTE_ASSET_PROBE_TIMEOUT_S,
+        ) as client:
+            response = await client.get(asset_url, headers=headers)
+            response.raise_for_status()
+            return True
+    except Exception as error:
+        logger.debug(f"Remote asset probe failed for {asset_url}: {error}")
+        return False
+
+
+def _build_font_css_fallback_urls(original_url: str) -> list[str] | None:
+    parsed_url = urlparse(original_url)
+    if parsed_url.netloc not in REMOTE_FONT_CSS_MATCH_HOSTS or parsed_url.path != "/css2":
+        return None
+
+    candidate_hosts = [parsed_url.netloc, *REMOTE_FONT_CSS_FALLBACK_HOSTS]
+    fallback_urls = []
+    seen_urls = set()
+    for host in candidate_hosts:
+        candidate_url = urlunparse(
+            (
+                parsed_url.scheme or "https",
+                host,
+                parsed_url.path,
+                parsed_url.params,
+                parsed_url.query,
+                parsed_url.fragment,
+            )
+        )
+        if candidate_url in seen_urls:
+            continue
+        seen_urls.add(candidate_url)
+        fallback_urls.append(candidate_url)
+
+    return fallback_urls
+
+
+def _get_remote_asset_fallback_urls(original_url: str) -> list[str] | None:
+    fallback_urls = REMOTE_ASSET_URL_FALLBACKS.get(original_url)
+    if fallback_urls:
+        return fallback_urls
+
+    return _build_font_css_fallback_urls(original_url)
+
+
+async def _resolve_remote_asset_url(original_url: str, page_asset_source_cache: dict[str, str]) -> str:
+    cached_url = page_asset_source_cache.get(original_url)
+    if cached_url:
+        return cached_url
+
+    fallback_urls = _get_remote_asset_fallback_urls(original_url) or [original_url]
+    for candidate_url in fallback_urls:
+        if await _probe_remote_asset_url(candidate_url):
+            page_asset_source_cache[original_url] = candidate_url
+            if candidate_url != original_url:
+                logger.warning(
+                    f"Remote asset source switched: {original_url} -> {candidate_url}"
+                )
+            else:
+                logger.debug(f"Remote asset source ok: {original_url}")
+            return candidate_url
+
+    logger.warning(f"No healthy remote asset source found for {original_url}, fallback to original url")
+    page_asset_source_cache[original_url] = original_url
+    return original_url
+
+
+def build_remote_asset_request_router():
+    page_asset_source_cache: dict[str, str] = {}
+
+    async def route_remote_asset_request(route):
+        request = route.request
+        original_url = request.url
+
+        if not _get_remote_asset_fallback_urls(original_url):
+            await route.continue_()
+            return
+
+        try:
+            selected_url = await _resolve_remote_asset_url(original_url, page_asset_source_cache)
+            if selected_url != original_url:
+                await route.continue_(url=selected_url)
+                return
+        except Exception as error:
+            logger.warning(f"Remote asset routing failed for {original_url}: {error}")
+
+        await route.continue_()
+
+    return route_remote_asset_request
+
+
 async def _convert_single_html_to_pdf_with_semaphore(
     semaphore: asyncio.Semaphore,
     browser,
@@ -244,6 +405,7 @@ async def _convert_single_html_to_pdf(browser, html_file_path: str, save_dir: st
     max_attempts = 2
 
     context = await browser.new_context(viewport={'width': 1500, 'height': 920}, ignore_https_errors=True)
+    await context.route("**/*", build_remote_asset_request_router())
     page = await context.new_page()
 
     try:
