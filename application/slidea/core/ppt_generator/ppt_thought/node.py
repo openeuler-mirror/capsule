@@ -46,8 +46,11 @@ async def parse_query_node(state: ThoughtState, config: RunnableConfig | None = 
     run_dir = run_dir_from_config(config, str(app_base_dir))
     if run_dir:
         cached = load_json(f"{run_dir}/references/parsed_requirements.json")
+        logger.info(f"cached parsed_requirements: {cached}")
         if cached:
-            return {"parsed_requirements": ParseQuery(**cached)}
+            parsed = ParseQuery(**cached)
+            if not parsed.missing_info:
+                return {"parsed_requirements": parsed}
 
     request = state["request"]
     nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -71,6 +74,7 @@ async def parse_query_node(state: ThoughtState, config: RunnableConfig | None = 
 """ 
 
     result = await llm_invoke(llm, [HumanMessage(content=prompt)], pydantic_schema=ParseQuery)
+    logger.info(f"parsed_requirements: {result}")
     if run_dir and result:
         save_json(f"{run_dir}/references/parsed_requirements.json", result.model_dump())
     return {"parsed_requirements": result}
@@ -134,6 +138,8 @@ no: 用户确认不需要进行深入洞察
     if need.lower() not in ["y", "yes"]:
         logger.info(f"user don't need deep research")
         return {"research_mode": "simple"}
+    else:
+        return {}
 
 
 async def gather_content_router_node(state: ThoughtState):
@@ -181,6 +187,7 @@ async def gather_content_router_node(state: ThoughtState):
 {format_outputs}
 """
 
+    # mode为deep和simple时，都让模型返回queries列表，后续如果用户选择并不洞察，可以在simple模式下直接使用，减少模型调用
     result = await llm_invoke(llm, [HumanMessage(content=prompt)], pydantic_schema=ResearchMode)
     logger.info(f"research mode: {result}")
     if not result:

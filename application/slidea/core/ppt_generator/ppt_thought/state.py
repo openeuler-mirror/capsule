@@ -40,7 +40,7 @@ class ResearchMode(BaseModel):
     queries: list = Field(
         ..., 
         description="""
-        返回需要进一步搜索或洞察的关键词(<=5个)列表
+        返回需要进一步搜索或洞察(mode为deep或simple时)的关键词(<=5个)列表
         生成的关键词要契合主题，精确，明确标明具体的从属或约束关系，并且要素齐全，不能太过宽泛，避免产生歧义，
         """
     )

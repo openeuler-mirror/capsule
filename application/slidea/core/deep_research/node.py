@@ -305,8 +305,8 @@ async def plan_node(state: ResearchState, writer: StreamWriter):
         reviews = await review_plan(state, root_node)
         if not reviews:
             break
-
-        await research_background(state, reviews)
+        if not await research_background(state, reviews):
+            break
         subtasks = await task_planner(state, reviews)
         set_childrens(root_node, subtasks, task_map)
         references = root_node.get("references", [])
@@ -512,12 +512,16 @@ async def research_background(state: ResearchState, queries=[]):
 
     result = await llm_invoke(llm, [HumanMessage(content=prompt)], pydantic_schema=SearchItem)
     if not result:
-        return
+        return []
 
-    queries = result.queries[:5]
-    if queries:
+    queries = result.queries
+    if queries and isinstance(queries, list):
+        queries = queries[:5]
         root_node["queries"].extend(queries)
         await web_search(state, root_node, queries)
+        return queries
+    else:
+        return []
 
 
 async def initializer_node(state: ResearchState, writer: StreamWriter):
@@ -666,7 +670,11 @@ async def processor_node(state: ResearchState, writer: StreamWriter):
                     await preprocess_node(state, current_task)
                     decision = await task_decision(state, current_task)
                     action = decision["type"]
-                    queries = decision["queries"][:5]
+                    queries = decision["queries"]
+                    if queries and isinstance(queries, list):
+                        queries = queries[:5]
+                    else:
+                        queries = []
                 except Exception as e:
                     logger.warning(f"Decision failed for {title}: {e}")
 

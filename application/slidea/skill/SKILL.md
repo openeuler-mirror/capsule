@@ -120,7 +120,7 @@ Unless the user explicitly expressed a parameter preference, keep the parameter 
 If you want to set `--research-mode` to `simple` or `deep`, you must explicitly ask the user which mode they want. Do not choose the mode on the user's behalf, even if one mode seems more appropriate based on the request. Only set `--research-mode` after the user has clearly confirmed that exact choice. Otherwise, you may set `--research-mode` to `skip` without asking the user.
 
 `scripts/run_ppt_pipeline.py`:
-- `--text "<PPT request>"`: new PPT request text; `--text` or `--resume` must be provided
+- `--text "<PPT request>"`: new PPT request text; `--text` or `--resume` must be provided; Preserve user original input as much as possible.
 - `--resume "<user reply>"`: continue an interrupted `all`-stage LangGraph run using the user's answer, selection, or edited text
 - `--session-id <id>`: session / thread id, default `local`
 - `--stages <comma-separated>`: stage selection, default `all`; supported values are `all`, `parse`, `research`, `outline`, `render`
