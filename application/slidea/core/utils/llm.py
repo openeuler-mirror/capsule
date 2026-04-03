@@ -137,21 +137,19 @@ async def llm_invoke(llm, args, config=None, pydantic_schema=None, json_schema=N
                         pass
 
             import traceback
-            logger.warning(
+            logger.debug(
                 f"LLM invoke attempt {attempt}/5 failed for model={llm_model}, schema={schema_name or 'plain_text'}: {e}"
             )
             logger.debug(traceback.format_exc())
         await asyncio.sleep(10)
 
     if last_error is None:
-        raise LLMInvokeError(f"LLM invoke failed for model={llm_model} with unknown error")
+        logger.error(f"LLM invoke failed for model={llm_model}, schema={schema_name or 'plain_text'}: unknown error")
+        return None
 
     hint = _infer_llm_error_hint(last_error)
     detail = f" {hint}" if hint else ""
     logger.error(
         f"LLM invoke exhausted retries for model={llm_model}, schema={schema_name or 'plain_text'}: {last_error}.{detail}"
     )
-    raise LLMInvokeError(
-        f"LLM invoke failed after 5 attempts for model={llm_model}, schema={schema_name or 'plain_text'}: "
-        f"{last_error}. {hint}".strip()
-    ) from last_error
+    return None
