@@ -40,13 +40,13 @@ The system is designed for agent-driven usage. It supports staged execution, res
 - intermediate outputs can be cached, inspected, edited, resumed, or reused.
 
 
-## Quick Start
-
-### Recommended: install Slidea as a skill through an agent
+## Quick Start: Install Slidea as a Skill Through an Agent (Recommended)
 
 Slidea is primarily intended to be installed as a skill inside an agent environment. If your agent platform supports local skills, you can install Slidea easily. After installation, configure the required `.env` model resources inside the Slidea skill directory. We recommend using Gemini-3.1-pro, Kimi-k2.5, and DeepSeek-V3.2 as the LLMs, because PPT generation quality is not guaranteed with other models. After that, you can immediately use the skill to create the PPT you want.
 
-The Slidea skill currently supports ARM openEuler, Apple Silicon macOS, Windows WSL/PowerShell, and some other Linux environments. It can be installed and run conveniently in mainstream agent environments such as OpenClaw, Codex, and Claude Code.
+The Slidea skill currently supports openEuler, Apple Silicon macOS, Windows WSL/PowerShell, and some other Linux environments. It can be installed and run conveniently in mainstream agent environments such as OpenClaw, Codex, and Claude Code.
+
+### Install the Slidea Skill
 
 To install the Slidea skill, you can send the following instruction to your agent:
 
@@ -55,6 +55,8 @@ Please fetch and follow the installation instructions for the Slidea skill here:
 ```
 
 After the model resources are installed and configured for Slidea, restart the agent so it reloads the installed skill. Then invoke Slidea using the skill entry style supported by your agent environment.
+
+### Use the Slidea Skill
 
 In an environment like OpenClaw, you might call it like this:
 
@@ -74,7 +76,7 @@ The exact syntax depends on the host agent, but the expected experience is the s
 
 | Platform | Architecture | Support |
 | --- | --- | --- |
-| Linux | ARM64 | openEuler supported |
+| Linux | x86_64 / ARM64 | openEuler supported |
 | Linux | x86_64 | Ubuntu/Debian supported |
 | Windows | x86_64 / ARM64 | ✅ |
 | macOS | Apple Silicon | ✅ |
@@ -114,6 +116,25 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
      --run-id id_test
    ```
 
+   If `session-id` and `run-id` are not specified, the system uses the current time as the default identifier value. In the example above, `session_test` and `id_test` are just sample strings.
+
+5. Resume an interrupted run
+
+   PPT generation may pause during execution to interact with the user. The Slidea CLI supports resuming an interrupted PPT generation task.
+
+   For example, when `scripts/run_ppt_pipeline.py` returns `stage: "input_required"`, it means additional user input is required. In that case, call the CLI again with the same `run_id`, `session_id`, and `--resume`.
+
+   Example:
+
+   ```bash
+   .venv/bin/python scripts/run_ppt_pipeline.py \
+     --resume "targeted at product, engineering, and business leaders" \
+     --session-id session_test \
+     --run-id id_test
+   ```
+
+   Here `session_test` and `id_test` are identifiers that were created earlier for a run that was interrupted.
+
 For more commands, see `docs/cli.md`.
 
 If you do not want to use the installer in step 2 to prepare the runtime automatically, you can also set it up manually:
@@ -151,9 +172,9 @@ It turns source material into:
 
 This subsystem is split out to separate "how to think about the deck" from "how to render the deck".
 
-During PPT rendering, Slidea uses a few-shot approach to keep generated layouts visually consistent. 
+During PPT rendering, Slidea uses a few-shot approach to keep generated layouts visually consistent.
 
-At the moment, Slidea includes five built-in templates: general light, general dark, red political, academic report, and kids science. By default, Slidea automatically selects the most suitable template based on the user's topic, but users can also explicitly request a specific template style in the PPT generation prompt.
+At the moment, Slidea includes five built-in templates: general light, general dark, red political, academic report, and child-friendly science/popularization. By default, Slidea automatically selects the most suitable template based on the user's topic, but users can also explicitly request a specific template style in the PPT generation prompt.
 
 ### Deep Research
 
@@ -165,7 +186,7 @@ Use this subsystem when insight generation is needed before slide planning.
 
 ## CLI Overview
 
-Slidea mainly exposes three script entrypoints:
+Slidea mainly exposes four script entrypoints:
 
 - `scripts/install/install.py`: initializes local runtime dependencies for source usage or exported skill packages, and is called during skill installation
 - `scripts/export_skill.py`: exports the skill package from the source tree, and is called during skill installation
@@ -173,21 +194,6 @@ Slidea mainly exposes three script entrypoints:
 - `scripts/patch_render_missing.py`: selectively re-renders missing or specified pages, and is called when PPT rendering is incomplete
 
 For full argument documentation and JSON response contracts, see [CLI Reference](docs/cli.md).
-
-## Resume Interrupted Runs
-
-The main pipeline CLI supports resuming interrupted PPT generation tasks. For example, when `scripts/run_ppt_pipeline.py` returns `stage: "input_required"`, it means user interaction is needed and the caller must collect additional input from the user. In that case, call the CLI again with the same `run_id`, `session_id`, and `--resume`.
-
-Example:
-
-```bash
-.venv/bin/python scripts/run_ppt_pipeline.py \
-  --resume "targeted at product, engineering, and business leaders" \
-  --session-id session_test \
-  --run-id id_test
-```
-
-Here `session_test` and `id_test` are the identifiers of the interrupted PPT generation task.
 
 ## Outputs and Caching
 

@@ -51,7 +51,26 @@ body, html {
 其他语言页面也遵循同样模式：在 `body, html` 中直接写当前页面主语言对应的字体族，并确保该字体通过 `https://fonts.googleapis.cn/css2?...` 正确引入。
 
 15. 禁止使用任何半透明效果、模糊滤镜与渐变，包括但不限于 `rgba(...)`、`hsla(...)`、`transparent`、`opacity-*`、`opacity:`、`backdrop-filter`、`-webkit-backdrop-filter`、`filter: blur(...)`。PDF 导出对透明度和模糊的兼容性很差，容易导致偏色、发粉、卡片或文字整块丢失。若需要柔和层次，请只使用纯色背景、纯色边框。
-
+16. `<head>`中必须引用一下资源和规则，不允许自行改写域名，不允许输出看起来相似但错误的地址，以支持渲染行级公式和块级公式。
+```html
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body, {
+                // 自定义定界符
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},  // 块级公式
+                    {left: '$', right: '$', display: false}, // 行内公式
+                    {left: '\\(', right: '\\)', display: false},
+                    {left: '\\[', right: '\\]', display: true}
+                ],
+                throwOnError : false // 遇到错误公式不报错，而是输出红字
+            });
+        });
+    </script>
+```
 
 重要事项!!!:
 创建的PPT需要使用以下示例中完全一致的缩放机制,即:

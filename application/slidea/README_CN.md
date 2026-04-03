@@ -37,20 +37,23 @@
 - 研究、规划、大纲生成和渲染分离后，整体生成质量更稳定；
 - 中间产物可以被缓存、检查、编辑、恢复或重复利用。
 
-## 快速开始
+## 快速开始：使用 Agent 将 Slidea 安装为 Skill（推荐）
 
-### 推荐方式：使用 Agent 将 Slidea 安装为 Skill
 
 Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent 平台支持本地 skill，则可以轻松安装 Slidea，安装完成之后在 Slidea skill 目录中配置所需的 `.env`模型资源（**建议使用 Gemini-3.1-pro，Kimi-k2.5，Deepseek-V3.2三种模型作为 LLM，其他模型的 PPT 生成效果无法保障**）即可立马使用该 skill 创建你想要的 PPT。
 
-目前 Slidea Skill已适配 ARM openEuler，Apple Silicon macOS，Windows WSL/PowerShell，以及部分其他 Linux 系统。Slidea 可在主流 agent 环境中快捷安装并运行，如 OpenClaw、Codex、Claude Code 等。
+目前 Slidea Skill已适配 openEuler，Apple Silicon macOS，Windows WSL/PowerShell，以及部分其他 Linux 系统。Slidea 可在主流 agent 环境中快捷安装并运行，如 OpenClaw、Codex、Claude Code 等。
 
-安装 Slidea skill，可将以下指令发送给你的 Agent：
+### 安装 Slidea skill
+
+可将以下指令发送给你的 Agent：
 ```text
 请直接获取并遵循这里的说明安装 slidea skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/INSTALL.md
 ```
 
 安装并配置完 Slidea 模型资源后后，重启 agent，使其重新加载已安装的 skill。随后通过你的 agent 环境支持的 skill 调用方式来触发 Slidea。
+
+### 使用 Slidea Skill
 
 在 OpenClaw 这种环境中，你可能会这样调用：
 
@@ -70,12 +73,12 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 
 | 平台 | 架构 | 支持情况 |
 | --- | --- | --- |
-| Linux | ARM64 | 支持openEuler |
+| Linux | x86_64 / ARM64 | 支持openEuler |
 | Linux | x86_64 | 支持 Ubuntu/Debian |
 | Windows | x86_64 / ARM64 | ✅ |
 | macOS | Apple Silicon | ✅ |
 
-### 从源码使用
+## 从源码使用
 
 如果你是为了贡献 Slidea 本身，或需要在本地调试仓库代码，可以直接从源码使用 Slidea。
 
@@ -110,6 +113,25 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
      --session-id session_test \
      --run-id id_test
    ```
+
+   其中，若不指定 session-id 和 run-id，系统将采用当前时间作为默认 id 值。上述例子，使用字符串 `session_test` 和 `id_test` 作为示例。
+
+5. 恢复被中断的运行
+
+   生成 PPT 的过程中会中断，并与用户交互。Slidea CLI支持恢复被中断的 PPT 生成任务。
+
+   例如：当 `scripts/run_ppt_pipeline.py` 返回 `stage: "input_required"` 时，表示需要用户补充信息。这种情况下，需要使用相同的 `run_id`、`session_id` 和 `--resume` 再次调用 CLI。
+
+   示例：
+
+   ```bash
+   .venv/bin/python scripts/run_ppt_pipeline.py \
+   --resume "面向产品、技术与业务负责人" \
+   --session-id session_test \
+   --run-id id_test
+   ```
+
+   其中 session_test 和 id_test 是之前已创建但被中断执行的 id 。
 
 更多命令可以参考 `docs/cli.md`。
 
@@ -148,7 +170,7 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 
 在 PPT 渲染过程中，会采用 fewshots 的模式，让模型输出的排版保持一致的风格。
 
-当前，Slidea 内置了浅色通用，深色通用，红色政治，学术报告，幼小科普 5 种类模板。Slidea默认会根据用户输入的主题自行选择最合适的模板渲染排版，但用户也可以直接在 PPT 生成任务的请求中，明确要求Slidea采用何种风格的模板。
+当前，Slidea 内置了浅色通用，深色通用，红色政治，学术报告，幼小科普 5 种模板。Slidea默认会根据用户输入的主题自行选择最合适的模板渲染排版，但用户也可以直接在 PPT 生成任务的请求中，明确要求Slidea采用何种风格的模板。
 
 ### Deep Research
 
@@ -168,21 +190,6 @@ Slidea 主要暴露三个脚本入口：
 - `scripts/patch_render_missing.py`: 对缺失页或指定页进行补渲染，PPT 内容生成不完整时被调用
 
 完整参数说明和 JSON 返回契约请参考 [CLI Reference](docs/cli.md)。
-
-## 恢复被中断的运行
-
-主流水线 CLI 支持恢复被中断的 PPT 生成任务。例如：当 `scripts/run_ppt_pipeline.py` 返回 `stage: "input_required"` 时，表示与用户交互，需要用户补充信息。这种情况下，需要使用相同的 `run_id`、`session_id` 和 `--resume` 再次调用 CLI。
-
-示例：
-
-```bash
-.venv/bin/python scripts/run_ppt_pipeline.py \
-  --resume "面向产品、技术与业务负责人" \
-  --session-id session_test \
-  --run-id id_test
-```
-
-其中 session_test 和 id_test 是被中断的 PPT 生成任务的 id。
 
 ## 输出与缓存
 

@@ -6,7 +6,6 @@ import base64
 import copy
 from typing import List, Optional, Any
 
-import yaml
 from langchain.messages import HumanMessage
 import aiofiles.os
 from json_repair import repair_json
@@ -23,6 +22,37 @@ from core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.graph
 from core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph import generate_content_pages_app
 from core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.graph import generate_toc_page_app
 from core.ppt_generator.thought_to_ppt.page_generators.state import TemplateResult
+
+
+def load_template_styles() -> list[dict[str, str]]:
+    """Load template metadata from style.json."""
+    style_path = app_base_dir / "core" / "ppt_generator" / "assets" / "templates" / "style.json"
+    try:
+        with open(style_path, "r", encoding="utf-8") as f:
+            content = json.load(f)
+    except Exception as e:
+        logger.error(f"读取模板样式文件失败 {style_path}: {e}")
+        raise Exception("获取PPT模板样式失败") from e
+
+    templates = content.get("templates", [])
+    if not isinstance(templates, list) or not templates:
+        logger.error(f"模板样式文件格式不正确或为空: {style_path}")
+        raise Exception("获取PPT模板样式失败")
+
+    valid_templates = []
+    for item in templates:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        description = str(item.get("description", "")).strip()
+        if name:
+            valid_templates.append({"name": name, "description": description})
+
+    if not valid_templates:
+        logger.error(f"模板样式文件中没有有效模板: {style_path}")
+        raise Exception("获取PPT模板样式失败")
+
+    return valid_templates
 
 
 async def prepare_generation_context_node(state: PPTState, writer: StreamWriter):
@@ -46,16 +76,15 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter)
         html_template_name = state['html_template_name']
     logger.info(f"任务{state['query']}选取的模板名称为{html_template_name}")
 
-    template_dir = app_base_dir / "core" / "ppt_generator" / "assets" / "templates" / f"{html_template_name}.yaml"
+    template_dir = app_base_dir / "core" / "ppt_generator" / "assets" / "templates" / f"{html_template_name}.html"
     try:
         with open(template_dir, "r", encoding="utf-8") as f:
-            content = yaml.safe_load(f)
-            if isinstance(content, dict):
-                html_template = content.get("html", "")
-            else:
-                logger.error(f"YAML文件格式不正确: {template_dir}")
+            html_template = f.read()
+            if not html_template.strip():
+                logger.error(f"HTML模板文件为空: {template_dir}")
+                raise Exception("获取PPT模板失败")
     except Exception as e:
-        logger.error(f"读取YAML文件失败 {template_dir}: {e}")
+        logger.error(f"读取HTML模板文件失败 {template_dir}: {e}")
         raise Exception("获取PPT模板失败") from e
 
     # 获取PPT通用提示词
@@ -97,26 +126,7 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter)
 
 async def select_ppt_template(query, outline):
     """根据任务请求选择模板"""
-    template_dir = app_base_dir / "core" / "ppt_generator" / "assets" / "templates"
-    templates = {}
-    for yaml_file in template_dir.glob("*.yaml"):
-        file_name = yaml_file.stem
-        try:
-            with open(yaml_file, 'r', encoding='utf-8') as f:
-                content = yaml.safe_load(f)
-                if isinstance(content, dict):
-                    templates[file_name] = {
-                        "description": content.get("description", ""),
-                        "html": content.get("html", "")
-                    }
-                else:
-                    logger.warning(f"YAML文件格式不正确: {yaml_file}")
-        except Exception as e:
-            logger.warning(f"读取YAML文件失败 {yaml_file}: {e}")
-
-    template_desc = []
-    for name, info in templates.items():
-        template_desc.append({"name": name, "description": info.get("description", "")})
+    template_desc = load_template_styles()
 
     prompt = f"""
 请从模板列表中选取适合当前PPT主题和大纲的模板.
@@ -144,7 +154,8 @@ async def select_ppt_template(query, outline):
         pydantic_schema=TemplateResult
     )
     template = response.name
-    if not templates.get(template):
+    valid_template_names = {item["name"] for item in template_desc}
+    if template not in valid_template_names:
         template = template_desc[0]["name"]
     return template
 
