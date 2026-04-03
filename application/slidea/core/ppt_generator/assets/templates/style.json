@@ -1,0 +1,24 @@
+{
+  "templates": [
+    {
+      "name": "academic",
+      "description": "适用于学术会议、学术演讲等通用场合所需的PPT"
+    },
+    {
+      "name": "chinese_political",
+      "description": "适合宣传爱国主义、党员活动时、政治学习时采用的排版样式风格，红色风格。（也适用于华为风格）"
+    },
+    {
+      "name": "common_dark",
+      "description": "适用于市场调研、技术洞察等专业分享场合所需的PPT，深色风格"
+    },
+    {
+      "name": "common_light",
+      "description": "适用于市场调研、技术洞察等专业分享场合所需的PPT，浅色风格"
+    },
+    {
+      "name": "cute",
+      "description": "适用于可爱风格的PPT"
+    }
+  ]
+}
