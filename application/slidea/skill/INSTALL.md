@@ -23,6 +23,7 @@ Examples:
 - If you are Codex: `~/.codex/skills/slidea`
 - If you are Claude Code: `~/.claude/skills/slidea`
 - If you are OpenCode: `~/.config/opencode/skills/slidea`
+- You may also discover the local skills directory from environment variables exposed by the current agent/runtime.
 
 In the commands below, replace `<SKILLS_DIR>` with that directory path.
 
@@ -93,7 +94,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    - Creates `.env` from `.env.example` when needed
    - Writes `SETUP_COMPLETED=true`
 
-8. **Try to populate the default LLM settings in `.env`.**
+8. **Try to populate the default LLM settings and Tavily search keys in `.env`.**
 
    Try to reuse an LLM configuration that the user is already using locally, and fill these three mandatory fields in `<SKILLS_DIR>/slidea/.env`:
 
@@ -130,6 +131,18 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    If `curl` is not available in the user's environment, use another HTTP tool that is already available locally and can send an equivalent request.
 
    Only write the values into `.env` if this validation clearly succeeds and the response shows that the endpoint is usable.
+
+   After the default LLM settings are handled, also try to auto-discover Tavily search keys locally and write them into `<SKILLS_DIR>/slidea/.env`.
+
+   Look for either `TAVILY_API_KEY` or `TAVILY_API_KEYS` in common local config and env files, especially places such as:
+   - `~/.config/opencode/opencode.json`
+   - `~/.openclaw/openclaw.json`
+   - `~/.codex/config.toml`
+   - environment variables already exported in the current shell/session
+
+   When you find Tavily credentials, write them into `<SKILLS_DIR>/slidea/.env` by strictly following the comments immediately above `TAVILY_API_KEYS`.
+
+   Do not guess or fabricate Tavily keys. If you cannot find a reliable local value, leave `TAVILY_API_KEYS='[]'` as-is and explicitly tell the user that web search and image search will be skipped until they provide a Tavily key.
 
    Optional items:
 
