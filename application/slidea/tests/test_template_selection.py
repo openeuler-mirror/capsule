@@ -4,6 +4,7 @@ import sys
 import tempfile
 import types
 import unittest
+from enum import IntEnum
 from pathlib import Path
 from unittest.mock import patch, Mock
 
@@ -72,10 +73,39 @@ def _install_test_stubs():
     common_module.get_scale_step_value = get_scale_step_value
     common_module.wait_for_page_assets_ready = wait_for_page_assets_ready
 
+    ppt_state_module = types.ModuleType("core.ppt_generator.thought_to_ppt.state")
+
+    class PageType(IntEnum):
+        CONTENT = 1
+        TOC = 2
+        SEPARATOR = 3
+        COVER_THANKS = 4
+
+    class PPTPage:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    ppt_state_module.PPTState = dict
+    ppt_state_module.PageType = PageType
+    ppt_state_module.PPTPage = PPTPage
+
+    page_state_module = types.ModuleType("core.ppt_generator.thought_to_ppt.page_generators.state")
+
+    class TemplateResult:
+        def __init__(self, reason, name):
+            self.reason = reason
+            self.name = name
+
+    page_state_module.TemplateResult = TemplateResult
+
     llm_module = types.ModuleType("core.utils.llm")
     llm_module.default_llm = object()
     llm_module.default_vlm = object()
-    llm_module.ModelRoute = types.SimpleNamespace(DEFAULT="default", PREMIUM="premium")
+
+    class ModelRoute:
+        DEFAULT = "default"
+        PREMIUM = "premium"
 
     async def llm_invoke(*_args, **_kwargs):
         raise AssertionError("test should patch llm_invoke")
@@ -89,10 +119,12 @@ def _install_test_stubs():
     def can_vlm_invoke_route(*_args, **_kwargs):
         return False
 
+    llm_module.ModelRoute = ModelRoute
+    llm_module.can_vlm_invoke_route = can_vlm_invoke_route
     llm_module.llm_invoke = llm_invoke
+    llm_module.raw_ainvoke = llm_invoke
     llm_module.vlm_raw_invoke = vlm_raw_invoke
     llm_module.vlm_invoke = vlm_invoke
-    llm_module.can_vlm_invoke_route = can_vlm_invoke_route
 
     def make_graph_module(module_name, export_name):
         module = types.ModuleType(module_name)
@@ -112,6 +144,8 @@ def _install_test_stubs():
             "langchain_core": langchain_core_module,
             "langchain_core.runnables": langchain_core_runnables_module,
             "core.ppt_generator.utils.common": common_module,
+            "core.ppt_generator.thought_to_ppt.state": ppt_state_module,
+            "core.ppt_generator.thought_to_ppt.page_generators.state": page_state_module,
             "core.utils.llm": llm_module,
             "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph": make_graph_module(
                 "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph",
@@ -142,6 +176,9 @@ _install_test_stubs()
 from core.ppt_generator.thought_to_ppt.page_generators.state import TemplateResult
 
 page_node = importlib.import_module("core.ppt_generator.thought_to_ppt.page_generators.node")
+sys.modules.pop("core.utils.llm", None)
+sys.modules.pop("core.ppt_generator.thought_to_ppt.state", None)
+sys.modules.pop("core.ppt_generator.thought_to_ppt.page_generators.state", None)
 
 
 class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):
