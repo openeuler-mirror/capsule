@@ -2,7 +2,6 @@ import os
 from datetime import datetime
 import asyncio
 import json
-import base64
 import copy
 from typing import List, Optional, Any
 
@@ -15,7 +14,7 @@ from core.utils.logger import logger
 from core.utils.config import app_base_dir, output_files_dir, settings
 from core.utils.cache import get_run_id, run_dir_from_config, save_json
 from core.ppt_generator.utils.common import htmls_to_pptx, sanitize_filename, download_image, build_image_url
-from core.utils.llm import default_llm, default_vlm, llm_invoke
+from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
 from core.ppt_generator.thought_to_ppt.state import PPTState, PageType, PPTPage
 from core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph import generate_cover_thanks_pages_app
 from core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.graph import generate_sep_pages_app
@@ -97,7 +96,7 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter)
         raise Exception("获取PPT Prompt失败") from e
 
     # 确定语言
-    response = await llm_invoke(default_llm,
+    response = await llm_invoke(ModelRoute.DEFAULT,
                                 [
                                     HumanMessage(
                                         content=f"根据'{state['query']}'确定使用的语言,只回答'中文'、'英文'等结果。"),
@@ -147,7 +146,7 @@ async def select_ppt_template(query, outline):
 }}
 """
     response = await llm_invoke(
-        default_llm,
+        ModelRoute.DEFAULT,
         [
             HumanMessage(content=prompt),
         ],
@@ -218,8 +217,8 @@ async def distribute_images_via_vlm(outline: List[Any]) -> List[Any]:
     """
     processed_pages = copy.deepcopy(outline)
 
-    if not settings.has_default_vlm_config():
-        logger.warning("Default VLM settings are missing. Skip VLM-based image distribution.")
+    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
+        logger.warning("No available VLM route for image distribution. Skip VLM-based image distribution.")
         return processed_pages
 
     # 1. 自动检测模式
@@ -366,7 +365,7 @@ PPT页面大纲：
 """
 
     try:
-        response = await default_vlm.ainvoke([HumanMessage(
+        response = await vlm_raw_invoke(ModelRoute.DEFAULT, [HumanMessage(
             content=[
                 {"type": "text", "text": prompt},
                 {

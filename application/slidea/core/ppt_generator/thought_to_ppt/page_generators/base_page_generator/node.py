@@ -1,13 +1,11 @@
 import os
 import re
 from pathlib import Path
-import base64
 
 from langchain.messages import HumanMessage
 
 from core.utils.logger import logger
-from core.utils.config import settings
-from core.utils.llm import default_vlm, default_llm, llm_invoke
+from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
 from core.ppt_generator.utils.common import get_scale_step_value, build_image_url, wait_for_page_assets_ready
 from core.ppt_generator.utils.browser import BrowserManager
 from core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.state import PPTWorkerState
@@ -15,7 +13,7 @@ from core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.state
 
 async def generate_ppt_page_node(state: PPTWorkerState):
     """generate ppt page"""
-    response = await llm_invoke(default_llm,
+    response = await llm_invoke(ModelRoute.PREMIUM,
                                 [
                                     HumanMessage(content=state["generate_ppt_prompt"]),
                                 ]
@@ -32,8 +30,8 @@ async def modify_ppt_page_node(state: PPTWorkerState):
 
     if not html_path:
         raise ValueError("State中缺少 html_path，无法进行修改")
-    if not settings.has_default_vlm_config():
-        logger.warning("Default VLM settings are missing. Skip page modification and keep the current HTML.")
+    if not can_vlm_invoke_route(ModelRoute.PREMIUM):
+        logger.warning("No available VLM route for page modification. Skip page modification and keep the current HTML.")
         return {"html_content": state["html_content"]}
 
     async with BrowserManager.get_browser_context() as browser:
@@ -52,7 +50,6 @@ async def modify_ppt_page_node(state: PPTWorkerState):
             await page.close()
             await context.close()
 
-    # removed encode_image (use build_image_url)
     summary_prompt = f"""
 请将以下PPT单页HTML内容做结构化摘要，保留布局骨架、关键模块、文字要点与样式线索，避免冗余代码。
 要求：
@@ -63,7 +60,7 @@ async def modify_ppt_page_node(state: PPTWorkerState):
 原HTML：
 {state["html_content"]}
 """
-    summarized_html = await llm_invoke(default_llm, [HumanMessage(content=summary_prompt)])
+    summarized_html = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=summary_prompt)])
     if not summarized_html:
         summarized_html = state["html_content"]
 
@@ -80,7 +77,7 @@ PPT的HTML网页摘要如下：
 {state["ppt_prompt"]}
 """
 
-    response = await default_vlm.ainvoke([HumanMessage(
+    response = await vlm_raw_invoke(ModelRoute.PREMIUM, [HumanMessage(
         content=[
             {
                 "type": "text",

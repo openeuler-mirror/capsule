@@ -1,7 +1,24 @@
 import operator
 from typing import Annotated, List, Optional
-from typing_extensions import TypedDict
-from pydantic import BaseModel, Field
+try:
+    from typing_extensions import TypedDict
+except ImportError:  # pragma: no cover - Python 3.11+ fallback
+    from typing import TypedDict
+
+try:
+    from pydantic import BaseModel, Field
+except ImportError:  # pragma: no cover - minimal fallback for test environments
+    class BaseModel:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+        @classmethod
+        def model_json_schema(cls):
+            return {"title": cls.__name__, "type": "object"}
+
+    def Field(default=None, **_kwargs):
+        return default
 
 from core.ppt_generator.thought_to_ppt.state import GeneratedPageResult, PPTPage
 
