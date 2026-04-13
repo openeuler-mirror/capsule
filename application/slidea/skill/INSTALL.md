@@ -95,19 +95,30 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    - Creates `.env` from `.env.example` when needed
    - Writes `SETUP_COMPLETED=true` after the base Python/bootstrap dependencies are installed
 
-8. **Try to populate the default LLM settings and Tavily search keys in `.env`.**
+8. **Try to populate the default LLM settings, the premium API key when needed, and Tavily search keys in `.env`.**
 
-   Try to reuse an LLM configuration that the user is already using locally, and fill these three mandatory fields in `<SKILLS_DIR>/slidea/.env`:
+   Try to reuse an LLM configuration that the user is already using locally, and fill these minimum mandatory fields in `<SKILLS_DIR>/slidea/.env`:
 
    ```env
+   SLIDEA_MODE=ECONOMIC
    DEFAULT_LLM_MODEL=
    DEFAULT_LLM_API_KEY=
    DEFAULT_LLM_API_BASE_URL=
    ```
 
-   PPT generation will not work properly until these three values are configured.
+   PPT generation will not work properly until these values are configured.
 
-   These three settings currently support OpenAI-compatible APIs only.
+   These settings currently support OpenAI-compatible APIs only.
+
+   Premium mode is optional. If the user wants premium-routed callsites to use the premium model first, keep these fixed defaults and only try to fill in `PREMIUM_LLM_API_KEY`:
+
+   ```env
+   PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview
+   PREMIUM_LLM_API_KEY=
+   PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1
+   ```
+
+   Do not change the default `PREMIUM_LLM_MODEL` or `PREMIUM_LLM_API_BASE_URL` unless the user explicitly asks for it. `google/gemini-3.1-pro-preview` is the only recommended premium model at the moment.
 
    Good places to look include common local agent/runtime config files such as:
    - `~/.config/opencode/opencode.json`
@@ -151,11 +162,11 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    - `DEFAULT_VLM_MODEL` / `DEFAULT_VLM_API_KEY` / `DEFAULT_VLM_API_BASE_URL`: optional, used to check layout after generation
    - `IMG_GEN_MODEL` / `IMG_GEN_API_KEY` / `IMG_GEN_API_BASE_URL`: optional, used to generate illustrations for the PPT
 
-   If you cannot find a reliable OpenAI-compatible configuration locally, do not guess. Leave the values empty and clearly tell the user that they still need to fill in the three `DEFAULT_LLM_*` settings manually.
+   If you cannot find a reliable OpenAI-compatible configuration locally, do not guess. Leave the values empty and clearly tell the user that they still need to fill in `SLIDEA_MODE` and the three `DEFAULT_LLM_*` settings manually.
 
    You can also tell the user that they may send you the configuration and you can help fill it in, or they can edit `<SKILLS_DIR>/slidea/.env` manually. After the configuration is updated, they should restart the agent so the skill can take effect.
 
-   Before finishing, you must explicitly tell the user which model families are recommended for better results: **Gemini 3.1 Pro / DeepSeek V3 / Kimi K2.5**.
+   Before finishing, explicitly tell the user that the recommended premium model is **Gemini 3.1 Pro Preview**, and that they should usually only need to fill in `PREMIUM_LLM_API_KEY` when enabling premium mode.
 
 ## Verify
 
@@ -190,8 +201,8 @@ Inside that final summary block, keep the wording concise and easy to scan. Cove
    - If you already configured Tavily for the user, do not repeat `TAVILY_API_KEYS` in this optional list.
 
 4. **Required reminders**
-   - If you did not help auto-configure the default LLM settings, explicitly tell the user that they still need to fill in the three `DEFAULT_LLM_*` values.
-   - Even if the default LLM settings were already configured, still explicitly remind the user that the recommended model families are **Gemini 3.1 Pro / DeepSeek V3 / Kimi K2.5**.
+   - If you did not help auto-configure the default LLM settings, explicitly tell the user that they still need to fill in `SLIDEA_MODE` and the three `DEFAULT_LLM_*` values.
+   - If the user wants premium mode, explicitly remind them that the recommended premium model is **Gemini 3.1 Pro Preview**, and they should normally only need to fill in `PREMIUM_LLM_API_KEY`.
    - If the platform is RHEL-family Linux, you must explicitly show the full command the user needs to run next. The command must be complete and directly copyable.
 
 5. **What the user should do next**
