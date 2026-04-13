@@ -108,33 +108,31 @@ class MissingConfigClient:
         return self
 
 
-class LazyClientProxy:
-    def __init__(self, client_name: str, builder, model_name_getter):
+class _ClientHandle:
+    def __init__(self, client_name: str):
         self.client_name = client_name
-        self._builder = builder
-        self._model_name_getter = model_name_getter
         self._client = None
 
-    def _get_client(self):
+    def _get_or_create_client(self):
         if self._client is None:
-            self._client = self._builder()
+            self._client = _build_chat_client_for_name(self.client_name)
         return self._client
 
     @property
     def model_name(self) -> str:
-        if self._client is not None:
-            return _client_model_name(self._client)
-        return self._model_name_getter()
+        if self._client is None:
+            return _configured_model_name(self.client_name)
+        return _client_model_name(self._client)
 
     @property
     def model(self) -> str:
         return self.model_name
 
     async def ainvoke(self, *args, **kwargs):
-        return await self._get_client().ainvoke(*args, **kwargs)
+        return await self._get_or_create_client().ainvoke(*args, **kwargs)
 
     def with_structured_output(self, *args, **kwargs):
-        return self._get_client().with_structured_output(*args, **kwargs)
+        return self._get_or_create_client().with_structured_output(*args, **kwargs)
 
 
 def _configured_model_name(client_name: str) -> str:
@@ -211,21 +209,9 @@ else:
         openai_api_key=settings.EMBEDDING_API_KEY,
     )
 
-premium_llm = LazyClientProxy(
-    "premium_llm",
-    lambda: _build_chat_client_for_name("premium_llm"),
-    lambda: _configured_model_name("premium_llm"),
-)
-default_llm = LazyClientProxy(
-    "default_llm",
-    lambda: _build_chat_client_for_name("default_llm"),
-    lambda: _configured_model_name("default_llm"),
-)
-default_vlm = LazyClientProxy(
-    "default_vlm",
-    lambda: _build_chat_client_for_name("default_vlm"),
-    lambda: _configured_model_name("default_vlm"),
-)
+premium_llm = _ClientHandle("premium_llm")
+default_llm = _ClientHandle("default_llm")
+default_vlm = _ClientHandle("default_vlm")
 
 
 def _build_invoke_error(model_name: str, schema_name: str, last_error: Exception | None) -> LLMInvokeError:
