@@ -10,7 +10,7 @@ from langgraph.types import interrupt, StreamWriter
 from langchain_core.runnables import RunnableConfig
 
 from core.ppt_generator.ppt_thought.state import ThoughtState, ParseQuery, ResearchMode
-from core.utils.llm import default_llm as llm, llm_invoke
+from core.utils.llm import ModelRoute, llm_invoke
 from core.utils.crawl import get_content
 from core.utils.tavily_search import tavily_search
 from core.utils.interrupt import InterruptType
@@ -73,7 +73,7 @@ async def parse_query_node(state: ThoughtState, config: RunnableConfig | None = 
 {format_outputs} 
 """ 
 
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)], pydantic_schema=ParseQuery)
+    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=ParseQuery)
     logger.info(f"parsed_requirements: {result}")
     if run_dir and result:
         save_json(f"{run_dir}/references/parsed_requirements.json", result.model_dump())
@@ -134,7 +134,7 @@ async def check_research_mode_node(state: ThoughtState):
 yes: 用户确认需要进行深入洞察
 no: 用户确认不需要进行深入洞察
 """
-    need = await llm_invoke(llm, [HumanMessage(content=prompt)])
+    need = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)])
     if need.lower() not in ["y", "yes"]:
         logger.info(f"user don't need deep research")
         return {"research_mode": "simple"}
@@ -188,7 +188,7 @@ async def gather_content_router_node(state: ThoughtState):
 """
 
     # mode为deep和simple时，都让模型返回queries列表，后续如果用户选择并不洞察，可以在simple模式下直接使用，减少模型调用
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)], pydantic_schema=ResearchMode)
+    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=ResearchMode)
     logger.info(f"research mode: {result}")
     if not result:
         result = ResearchMode(mode="skip", queries=[], research_query='', reason='')
@@ -275,7 +275,7 @@ P受众信息：{requirement.audience}，演讲目标为：{requirement.goal}，
 
     run_config = config.copy()
     run_config["tags"] = run_config.get("tags", []) + ["user_visible"]
-    thought = await llm_invoke(llm, [HumanMessage(content=prompt)], config=run_config)
+    thought = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], config=run_config)
 
     run_dir = run_dir_from_config(config, str(app_base_dir))
     if run_dir:
