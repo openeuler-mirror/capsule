@@ -40,7 +40,7 @@
 ## 快速开始：使用 Agent 将 Slidea 安装为 Skill（推荐）
 
 
-Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent 平台支持本地 skill，则可以轻松安装 Slidea，安装完成之后在 Slidea skill 目录中配置所需的 `.env`模型资源（**建议使用 Gemini-3.1-pro，Kimi-k2.5，Deepseek-V3.2三种模型作为 LLM，其他模型的 PPT 生成效果无法保障**）即可立马使用该 skill 创建你想要的 PPT。
+Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent 平台支持本地 skill，则可以轻松安装 Slidea。安装完成之后，在 Slidea skill 目录中按当前二元路由配置 `.env` 即可开始使用。默认建议先配置 `DEFAULT_LLM`；如果你要开启 `PREMIUM` 模式，推荐保持 `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` 与 `PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1` 不变，通常只补充 `PREMIUM_LLM_API_KEY` 即可。
 
 目前 Slidea Skill已适配 openEuler，Apple Silicon macOS，Windows WSL/PowerShell，以及部分其他 Linux 系统。Slidea 可在主流 agent 环境中快捷安装并运行，如 OpenClaw、Codex、Claude Code 等。
 
@@ -100,10 +100,14 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
    cp .env.example .env
    ```
    然后在 `.env` 中至少配置：
+   - `SLIDEA_MODE`
    - `DEFAULT_LLM_MODEL`
    - `DEFAULT_LLM_API_KEY`
    - `DEFAULT_LLM_API_BASE_URL`
-   当前这三项仅支持 OpenAI-compatible API。
+   当前这些配置仅支持 OpenAI-compatible API。
+   最小可运行配置是 `SLIDEA_MODE=ECONOMIC` 加上三项 `DEFAULT_LLM_*`。
+   如果你希望 premium 路由调用点优先使用高级模型，再额外补充 `PREMIUM_LLM_API_KEY`。
+   `PREMIUM_LLM_MODEL` 和 `PREMIUM_LLM_API_BASE_URL` 已给出固定推荐默认值，通常不要改动；当前唯一推荐的 premium 模型是 `google/gemini-3.1-pro-preview`。
 
 4. 运行示例：
    

@@ -42,7 +42,7 @@ The system is designed for agent-driven usage. It supports staged execution, res
 
 ## Quick Start: Install Slidea as a Skill Through an Agent (Recommended)
 
-Slidea is primarily intended to be installed as a skill inside an agent environment. If your agent platform supports local skills, you can install Slidea easily. After installation, configure the required `.env` model resources inside the Slidea skill directory. We recommend using Gemini-3.1-pro, Kimi-k2.5, and DeepSeek-V3.2 as the LLMs, because PPT generation quality is not guaranteed with other models. After that, you can immediately use the skill to create the PPT you want.
+Slidea is primarily intended to be installed as a skill inside an agent environment. If your agent platform supports local skills, you can install Slidea easily. After installation, configure `.env` according to the current two-tier routing setup. In most cases you only need to configure `DEFAULT_LLM` first. If you want to enable `PREMIUM` mode, keep `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` and `PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1` unchanged, and usually only fill in `PREMIUM_LLM_API_KEY`.
 
 The Slidea skill currently supports openEuler, Apple Silicon macOS, Windows WSL/PowerShell, and some other Linux environments. It can be installed and run conveniently in mainstream agent environments such as OpenClaw, Codex, and Claude Code.
 
@@ -103,10 +103,14 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
    cp .env.example .env
    ```
    Then configure at least these values in `.env`:
+   - `SLIDEA_MODE`
    - `DEFAULT_LLM_MODEL`
    - `DEFAULT_LLM_API_KEY`
    - `DEFAULT_LLM_API_BASE_URL`
-   These three settings currently support OpenAI-compatible APIs only.
+   These settings currently support OpenAI-compatible APIs only.
+   The minimum runnable setup is `SLIDEA_MODE=ECONOMIC` plus the three `DEFAULT_LLM_*` values.
+   If you want premium-routed callsites to use the premium model first, also fill in `PREMIUM_LLM_API_KEY`.
+   `PREMIUM_LLM_MODEL` and `PREMIUM_LLM_API_BASE_URL` already have fixed recommended defaults and should usually not be changed. The only recommended premium model right now is `google/gemini-3.1-pro-preview`.
 
 4. Run an example:
    ```bash

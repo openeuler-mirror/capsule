@@ -53,10 +53,21 @@ The installer creates `.venv`, installs Python dependencies, installs Playwright
 Fill at least these fields in `.env`:
 
 ```env
+SLIDEA_MODE=ECONOMIC
 DEFAULT_LLM_MODEL=...
 DEFAULT_LLM_API_KEY=...
 DEFAULT_LLM_API_BASE_URL=...
 ```
+
+Optional premium routing setup:
+
+```env
+PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview
+PREMIUM_LLM_API_KEY=...
+PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1
+```
+
+`PREMIUM_LLM_MODEL` and `PREMIUM_LLM_API_BASE_URL` are intentionally fixed to the recommended default. In most cases you only need to fill in `PREMIUM_LLM_API_KEY`.
 
 Recommended minimum for a friction-free local setup:
 
@@ -194,7 +205,8 @@ EMBEDDING_API_BASE_URL=...
 
 If `preflight_failed` is returned:
 
-- check the three default LLM settings first,
+- check `SLIDEA_MODE` and the three default LLM settings first,
+- if `SLIDEA_MODE=PREMIUM`, also make sure `PREMIUM_LLM_API_KEY` is filled in when you want premium-routed callsites to use the premium model first,
 - make sure the local runtime has been bootstrapped with `scripts/install/install.py`,
 - ensure Playwright Chromium is available when `render` or `all` is used.
 
