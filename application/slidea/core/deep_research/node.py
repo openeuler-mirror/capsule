@@ -424,7 +424,11 @@ type: str类型，下一步决策，取值范围为：{includes}：{desc}
 reason: str类型，选择当前决策的原因，如果选择decompose，请输出需要分解的子章节描述，看是否全文的写作状态相符
 """
 
-    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], json_schema=DecisionItem.model_json_schema())
+    result = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        json_schema=DecisionItem.model_json_schema(),
+    )
     if result and result.get("type") in includes:
         return result
 

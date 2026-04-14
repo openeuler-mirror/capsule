@@ -31,7 +31,10 @@ async def modify_ppt_page_node(state: PPTWorkerState):
     if not html_path:
         raise ValueError("State中缺少 html_path，无法进行修改")
     if not can_vlm_invoke_route(ModelRoute.PREMIUM):
-        logger.warning("No available VLM route for page modification. Skip page modification and keep the current HTML.")
+        logger.warning(
+            "No available VLM route for page modification. "
+            "Skip page modification and keep the current HTML."
+        )
         return {"html_content": state["html_content"]}
 
     async with BrowserManager.get_browser_context() as browser:

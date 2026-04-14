@@ -6,7 +6,7 @@ except ImportError:  # pragma: no cover - Python 3.11+ fallback
     from typing import TypedDict
 
 try:
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field as pydantic_field
 except ImportError:  # pragma: no cover - minimal fallback for test environments
     class BaseModel:
         def __init__(self, **kwargs):
@@ -17,20 +17,20 @@ except ImportError:  # pragma: no cover - minimal fallback for test environments
         def model_json_schema(cls):
             return {"title": cls.__name__, "type": "object"}
 
-    def Field(default=None, **_kwargs):
+    def pydantic_field(default=None, **_kwargs):
         return default
 
 from core.ppt_generator.thought_to_ppt.state import GeneratedPageResult, PPTPage
 
 
 class ImageQueries(BaseModel):
-    need_search_image: list = Field([], description="网络搜图的搜索关键词。")
-    need_ai_image: list = Field([], description="AI生图的Prompt。")
+    need_search_image: list = pydantic_field(default_factory=list, description="网络搜图的搜索关键词。")
+    need_ai_image: list = pydantic_field(default_factory=list, description="AI生图的Prompt。")
 
 
 class ImageScoreResult(BaseModel):
-    img_description: str = Field(..., description="图片描述。")
-    score: float = Field(..., description="图片适合度评分。")
+    img_description: Annotated[str, pydantic_field(description="图片描述。")]
+    score: Annotated[float, pydantic_field(description="图片适合度评分。")]
 
 
 class ContentPagesState(TypedDict):

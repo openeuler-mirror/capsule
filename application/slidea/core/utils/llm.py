@@ -70,7 +70,9 @@ def _normalize_model_route(route: ModelRoute | str) -> ModelRoute:
     if raw_route == ModelRoute.PREMIUM.value:
         return ModelRoute.PREMIUM
     raise ValueError(
-        f"Unsupported model route {route!r}. Only {ModelRoute.DEFAULT.value!r} and {ModelRoute.PREMIUM.value!r} are supported."
+        f"Unsupported model route {route!r}. "
+        f"Only {ModelRoute.DEFAULT.value!r} and "
+        f"{ModelRoute.PREMIUM.value!r} are supported."
     )
 
 
@@ -151,7 +153,15 @@ def _missing_client_config(client_name: str) -> list[str]:
     return settings.missing_default_llm_settings()
 
 
-def _build_chat_client(*, model: str, api_key: str, base_url: str, timeout: int, max_retries: int, streaming: bool = False):
+def _build_chat_client(
+    *,
+    model: str,
+    api_key: str,
+    base_url: str,
+    timeout: int,
+    max_retries: int,
+    streaming: bool = False,
+):
     return ChatOpenAI(
         model=model,
         api_key=api_key,

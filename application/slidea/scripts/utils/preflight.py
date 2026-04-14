@@ -81,7 +81,9 @@ def check_runtime_python() -> dict:
     return _result(
         "runtime_python",
         "warning",
-        f"Pipeline commands must run with the Python interpreter inside {expected_venv_dir.resolve(strict=False)}; current executable is {executable.resolve(strict=False)}.",
+        "Pipeline commands must run with the Python interpreter inside "
+        f"{expected_venv_dir.resolve(strict=False)}; "
+        f"current executable is {executable.resolve(strict=False)}.",
     )
 
 
