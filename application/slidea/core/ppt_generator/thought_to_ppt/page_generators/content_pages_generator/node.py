@@ -1,17 +1,15 @@
 import asyncio
 import os
-import base64
 from typing import List
 
 from langchain.messages import HumanMessage
 from PIL import Image
-from json_repair import repair_json
 from pydantic import TypeAdapter
 
 from core.utils.logger import logger
 from core.utils.config import settings
 from core.ppt_generator.utils.common import get_web_images_content, build_image_url
-from core.utils.llm import default_vlm, default_llm, llm_invoke
+from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_invoke
 from core.utils.tavily_search import async_search
 from core.ppt_generator.utils.image import generate_ai_image, get_ai_images_content
 from core.ppt_generator.thought_to_ppt.state import PageType
@@ -59,7 +57,7 @@ async def extract_relevant_doc_node(state: ContentWorkerState):
 # 参考资料
 {page.reference_doc}
 """
-    response = await llm_invoke(default_llm, [HumanMessage(content=prompt)])
+    response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)])
     return {"relevant_material": response}
 
 
@@ -91,7 +89,7 @@ async def generate_image_queries_node(state: ContentWorkerState):
 # PPT的文字资料
 {state["relevant_material"]}
 """
-    response = await llm_invoke(default_llm, [HumanMessage(content=prompt)], pydantic_schema=ImageQueries)
+    response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=ImageQueries)
     if not response:
         response = ImageQueries(need_search_image=[], need_ai_image=[])
 
@@ -157,7 +155,7 @@ async def get_final_images_node(state: ContentWorkerState):
 {state["img_content"]}
 """
     schema = TypeAdapter(List[str]).json_schema()
-    img_list = await llm_invoke(default_llm, [HumanMessage(content=prompt)], json_schema=schema)
+    img_list = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], json_schema=schema)
     if not img_list:
         img_list = []
     img_list.extend(state["content_page"].reference_images)
@@ -213,11 +211,11 @@ async def get_img_score_node(state: ImgScoreWorkerState):
         logger.debug(f"Error in get_img_score: {e} from img: {image_path}")
         return {"img_scores": [None]}
 
-    if not settings.has_default_vlm_config():
+    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
         height, width = get_image_size(image_path)
         size = f"图片高度为{height}，宽度为{width}"
         logger.warning(
-            "Default VLM settings are missing. Use a fallback image score without VLM analysis: "
+            "No available VLM route for image scoring. Use a fallback image score without VLM analysis: "
             f"{image_path}"
         )
         return {"img_scores": [
@@ -256,7 +254,7 @@ async def get_img_score_node(state: ImgScoreWorkerState):
     )]
 
     try:
-        response_data = await llm_invoke(default_vlm, messages, pydantic_schema=ImageScoreResult)
+        response_data = await vlm_invoke(ModelRoute.DEFAULT, messages, pydantic_schema=ImageScoreResult)
 
         if not response_data or not response_data.img_description or not response_data.score:
             logger.debug(f"Error in get_img_score from img: {image_path}")

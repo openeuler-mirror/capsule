@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from core.utils.config import settings, app_base_dir
-from core.utils.llm import llm_invoke, embedding_llm, default_llm as llm
+from core.utils.llm import ModelRoute, llm_invoke
 from core.utils.logger import logger
 from core.deep_research.state import ReferenceItem
 
@@ -128,7 +128,7 @@ async def add_task_reference(existing_refs: List[ReferenceItem], datas: list, to
             if data["dont_summary"]:
                 summary = chunk
             else:
-                summary = await llm_invoke(llm, [HumanMessage(content=summary_prompt)])
+                summary = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=summary_prompt)])
                 if not summary:
                     summary = ""
 

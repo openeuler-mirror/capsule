@@ -20,7 +20,7 @@ from core.deep_research.state import (
     ResearchState, TaskStatus, TaskNode, ChapterItem,
     DecomposeItem, DecisionItem, SearchItem
 )
-from core.utils.llm import default_llm as llm, llm_invoke
+from core.utils.llm import ModelRoute, get_llm_by_route, llm_invoke
 from core.utils.tavily_search import tavily_search
 from core.utils.crawl import get_content
 
@@ -143,7 +143,7 @@ async def task_write(state: ResearchState, task: TaskNode):
 """
 
     logger.info(f"-----write chapter {title} ----")
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)])
+    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)])
     if result:
         return result
 
@@ -189,7 +189,7 @@ async def review_plan(state: ResearchState, task_node: TaskNode):
 """
 
     schema = TypeAdapter(List[Any]).json_schema()
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)], json_schema=schema)
+    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], json_schema=schema)
     if not result:
         return []
 
@@ -252,7 +252,7 @@ async def task_planner(state: ResearchState, review=[]):
 """
 
     json_schema = TypeAdapter(List[ChapterItem]).json_schema()
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)], json_schema=json_schema)
+    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], json_schema=json_schema)
     if result:
         return result
 
@@ -351,7 +351,7 @@ async def task_decompose(state: ResearchState, task: TaskNode):
 """
 
     json_schema = TypeAdapter(List[DecomposeItem]).json_schema()
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)], json_schema=json_schema)
+    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], json_schema=json_schema)
     if result:
         return result
 
@@ -424,7 +424,11 @@ type: str类型，下一步决策，取值范围为：{includes}：{desc}
 reason: str类型，选择当前决策的原因，如果选择decompose，请输出需要分解的子章节描述，看是否全文的写作状态相符
 """
 
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)], json_schema=DecisionItem.model_json_schema())
+    result = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        json_schema=DecisionItem.model_json_schema(),
+    )
     if result and result.get("type") in includes:
         return result
 
@@ -510,7 +514,7 @@ async def research_background(state: ResearchState, queries=[]):
 {format_instructions}
 """
 
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)], pydantic_schema=SearchItem)
+    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=SearchItem)
     if not result:
         return []
 
@@ -527,7 +531,9 @@ async def research_background(state: ResearchState, queries=[]):
 async def initializer_node(state: ResearchState, writer: StreamWriter):
     """初始化：接收用户请求，创建根节点"""
 
-    logger.info(f"start deep research, using model {llm.model_name}")
+    logger.info(
+        f"start deep research, using model {getattr(get_llm_by_route(ModelRoute.DEFAULT), 'model_name', 'unknown')}"
+    )
     writer({"step": "开始洞察"})
 
     research_request = state["research_request"]
@@ -640,7 +646,7 @@ async def preprocess_node(state: ResearchState, task_node: TaskNode):
 {context}
 """
 
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)])
+    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)])
     if result:
         task_node["context"] = result
 
@@ -754,7 +760,7 @@ async def reporter_node(state: ResearchState, writer: StreamWriter):
 不要包含其他内容
 """
 
-    title = await llm_invoke(llm, [HumanMessage(content=prompt)])
+    title = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)])
     full_report = f"# {title[:50]}\n" + full_report
 
     logger.debug(f"\n\n{full_report}\n\n")

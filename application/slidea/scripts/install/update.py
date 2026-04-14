@@ -4,23 +4,42 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from _common import (
-    REQUIREMENTS_FILE,
-    StepIssue,
-    VENV_DIR,
-    compute_file_hash,
-    ensure_uv_installed,
-    format_duration,
-    get_bootstrap_python_command,
-    get_venv_python_path,
-    load_install_state,
-    log_info,
-    log_step,
-    log_success,
-    record_step_failure,
-    run_python_install_command,
-    update_install_state,
-)
+try:
+    from ._common import (
+        REQUIREMENTS_FILE,
+        StepIssue,
+        VENV_DIR,
+        compute_file_hash,
+        ensure_uv_installed,
+        format_duration,
+        get_bootstrap_python_command,
+        get_venv_python_path,
+        load_install_state,
+        log_info,
+        log_step,
+        log_success,
+        record_step_failure,
+        run_python_install_command,
+        update_install_state,
+    )
+except ImportError:  # pragma: no cover - support direct script execution
+    from _common import (
+        REQUIREMENTS_FILE,
+        StepIssue,
+        VENV_DIR,
+        compute_file_hash,
+        ensure_uv_installed,
+        format_duration,
+        get_bootstrap_python_command,
+        get_venv_python_path,
+        load_install_state,
+        log_info,
+        log_step,
+        log_success,
+        record_step_failure,
+        run_python_install_command,
+        update_install_state,
+    )
 
 
 def print_post_update_summary(issues: list[StepIssue]) -> None:

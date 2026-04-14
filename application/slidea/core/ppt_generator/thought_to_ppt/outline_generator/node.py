@@ -7,7 +7,7 @@ from langchain.messages import HumanMessage
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langgraph.types import StreamWriter
 
-from core.utils.llm import default_llm as llm, llm_invoke
+from core.utils.llm import ModelRoute, llm_invoke
 from core.utils.logger import logger
 from core.ppt_generator.thought_to_ppt.outline_generator.state import (
     OutlineState,
@@ -60,7 +60,7 @@ async def analyze_input_node(state: OutlineState):
     - `reasoning`: str (简短的决策理由)
 """
 
-    result = await llm_invoke(llm, [HumanMessage(content=prompt)], pydantic_schema=UserQuery)
+    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=UserQuery)
     if not result:
         logger.warning(f"--- 页数分析出错，使用默认值 15 ---")
         target_pages = 15
@@ -114,7 +114,7 @@ PPT制作的原始需求为：
 """
 
     json_schema = TypeAdapter(List[ChapterDetail]).json_schema()
-    chapters_data = await llm_invoke(llm, [HumanMessage(content=prompt)], json_schema=json_schema)
+    chapters_data = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)], json_schema=json_schema)
     if not chapters_data:
         chapters_data = []
 
@@ -288,7 +288,7 @@ async def simple_generate_node(state: OutlineState, writer: StreamWriter):
 """
 
     schema = TypeAdapter(List[SlideDetail]).json_schema()
-    slides_data = await llm_invoke(llm, [HumanMessage(content=prompt)], json_schema=schema)
+    slides_data = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)], json_schema=schema)
     if not slides_data:
         slides_data = []
 
@@ -351,7 +351,7 @@ async def plan_and_allocate_node(state: OutlineState):
 """
 
     schema = TypeAdapter(List[ChapterItem]).json_schema()
-    plan_data = await llm_invoke(llm, [HumanMessage(content=prompt)], json_schema=schema)
+    plan_data = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)], json_schema=schema)
     if not plan_data:
         plan_data = []
 
@@ -394,7 +394,7 @@ async def generate_chapter_slides_node(state: SectionState):
 """
 
     schema = TypeAdapter(List[SlideDetail]).json_schema()
-    slides = await llm_invoke(llm, [HumanMessage(content=prompt)], json_schema=schema)
+    slides = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)], json_schema=schema)
     if not slides:
         slides = []
 
@@ -434,7 +434,7 @@ async def assemble_chapters_node(state: OutlineState, writer: StreamWriter):
 )
 """
 
-    metadata = await llm_invoke(llm, [HumanMessage(content=prompt)], pydantic_schema=CoverItem)
+    metadata = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=CoverItem)
     if metadata:
         logger.info(f"封面与目录: {metadata}")
         final_list.extend(

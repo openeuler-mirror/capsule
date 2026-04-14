@@ -185,4 +185,4 @@ The update script only reinstalls dependencies if `requirements.txt` has changed
 ## Notes
 - Keep all paths relative to the working directory unless the user explicitly asks for something else.
 - Once bootstrap is complete, all runtime commands must go through the Python interpreter inside `.venv`.
-- If `DEFAULT_LLM_MODEL`, `DEFAULT_LLM_API_KEY`, or `DEFAULT_LLM_API_BASE_URL` is empty, do not attempt to run the pipeline.
+- If `SLIDEA_MODE`, `DEFAULT_LLM_MODEL`, `DEFAULT_LLM_API_KEY`, or `DEFAULT_LLM_API_BASE_URL` is empty, do not attempt to run the pipeline.

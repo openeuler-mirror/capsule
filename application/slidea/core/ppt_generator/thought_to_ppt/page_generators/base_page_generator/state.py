@@ -1,7 +1,10 @@
 import operator
 from typing import Annotated, List, Optional
 
-from typing_extensions import Literal, TypedDict
+try:
+    from typing_extensions import Literal, TypedDict
+except ImportError:  # pragma: no cover - Python 3.11+ fallback
+    from typing import Literal, TypedDict
 
 from core.ppt_generator.thought_to_ppt.state import GeneratedPageResult
 

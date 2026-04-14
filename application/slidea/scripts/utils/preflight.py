@@ -39,13 +39,39 @@ def check_env_setup(settings: Settings | None = None) -> dict:
 
 
 def check_runtime_python() -> dict:
-    expected_venv_dir = (app_base_dir / ".venv").resolve()
+    expected_venv_dir = app_base_dir / ".venv"
+    expected_candidates = {
+        expected_venv_dir,
+        expected_venv_dir.resolve(strict=False),
+    }
     executable = Path(sys.executable)
-    runtime_prefix = Path(sys.prefix).resolve(strict=False)
+    executable_candidates = {
+        executable,
+        executable.resolve(strict=False),
+    }
+    runtime_prefix = Path(sys.prefix)
+    runtime_prefix_candidates = {
+        runtime_prefix,
+        runtime_prefix.resolve(strict=False),
+    }
     virtual_env = os.environ.get("VIRTUAL_ENV", "").strip()
-    virtual_env_path = Path(virtual_env).resolve(strict=False) if virtual_env else None
+    virtual_env_candidates = set()
+    if virtual_env:
+        virtual_env_path = Path(virtual_env)
+        virtual_env_candidates.add(virtual_env_path)
+        virtual_env_candidates.add(virtual_env_path.resolve(strict=False))
 
-    if runtime_prefix == expected_venv_dir or virtual_env_path == expected_venv_dir or expected_venv_dir in executable.parents:
+    inside_project_venv = any(candidate in expected_candidates for candidate in runtime_prefix_candidates)
+    if not inside_project_venv:
+        inside_project_venv = any(candidate in expected_candidates for candidate in virtual_env_candidates)
+    if not inside_project_venv:
+        inside_project_venv = any(
+            expected in candidate.parents or candidate == expected
+            for candidate in executable_candidates
+            for expected in expected_candidates
+        )
+
+    if inside_project_venv:
         return _result(
             "runtime_python",
             "ok",
@@ -55,7 +81,9 @@ def check_runtime_python() -> dict:
     return _result(
         "runtime_python",
         "warning",
-        f"Pipeline commands must run with the Python interpreter inside {expected_venv_dir}; current executable is {executable.resolve(strict=False)}.",
+        "Pipeline commands must run with the Python interpreter inside "
+        f"{expected_venv_dir.resolve(strict=False)}; "
+        f"current executable is {executable.resolve(strict=False)}.",
     )
 
 
@@ -220,6 +248,31 @@ def run_preflight(
         )
     else:
         checks.append(_result("default_llm", "ok", "Default LLM settings are configured."))
+
+    if settings.get_slidea_mode() == "PREMIUM":
+        if not settings.has_premium_llm_api_key():
+            checks.append(
+                _result(
+                    "premium_llm",
+                    "warning",
+                    "Premium mode is enabled, but PREMIUM_LLM_API_KEY is empty. "
+                    "Runtime will fall back to ECONOMIC mode and use default models.",
+                )
+            )
+        else:
+            missing_premium = settings.missing_premium_llm_settings()
+            if missing_premium:
+                checks.append(
+                    _result(
+                        "premium_llm",
+                        "warning",
+                        "Premium mode is enabled, but PREMIUM_LLM settings are incomplete. "
+                        "Runtime will fall back to ECONOMIC mode and use default models: "
+                        + ", ".join(missing_premium),
+                    )
+                )
+            else:
+                checks.append(_result("premium_llm", "ok", "Premium LLM settings are configured."))
 
     if settings.has_tavily_search_config():
         checks.append(_result("tavily", "ok", "Tavily is configured for web search and image search."))

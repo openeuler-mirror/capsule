@@ -8,31 +8,52 @@ import subprocess
 import ssl
 import urllib.error
 import urllib.request
-import urllib.request
 import time
 from contextlib import suppress
 from pathlib import Path
 
-from _common import (
-    REQUIREMENTS_FILE,
-    ROOT_DIR,
-    StepIssue,
-    VENV_DIR,
-    ensure_uv_installed,
-    format_duration,
-    format_exception_message,
-    get_bootstrap_python_command,
-    get_venv_python_path,
-    log_info,
-    log_step,
-    log_success,
-    log_warning,
-    record_step_failure,
-    record_step_skip,
-    run_command,
-    run_python_install_command,
-    update_install_state,
-)
+try:
+    from ._common import (
+        REQUIREMENTS_FILE,
+        ROOT_DIR,
+        StepIssue,
+        VENV_DIR,
+        ensure_uv_installed,
+        format_duration,
+        format_exception_message,
+        get_bootstrap_python_command,
+        get_venv_python_path,
+        log_info,
+        log_step,
+        log_success,
+        log_warning,
+        record_step_failure,
+        record_step_skip,
+        run_command,
+        run_python_install_command,
+        update_install_state,
+    )
+except ImportError:  # pragma: no cover - support direct script execution
+    from _common import (
+        REQUIREMENTS_FILE,
+        ROOT_DIR,
+        StepIssue,
+        VENV_DIR,
+        ensure_uv_installed,
+        format_duration,
+        format_exception_message,
+        get_bootstrap_python_command,
+        get_venv_python_path,
+        log_info,
+        log_step,
+        log_success,
+        log_warning,
+        record_step_failure,
+        record_step_skip,
+        run_command,
+        run_python_install_command,
+        update_install_state,
+    )
 
 ENV_FILE = ROOT_DIR / ".env"
 ENV_EXAMPLE_FILE = ROOT_DIR / ".env.example"

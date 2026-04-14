@@ -4,6 +4,7 @@ import sys
 import tempfile
 import types
 import unittest
+from enum import IntEnum
 from pathlib import Path
 from unittest.mock import patch, Mock
 
@@ -30,9 +31,14 @@ def _install_test_stubs():
     json_repair_module.repair_json = Mock(return_value={})
 
     langgraph_module = types.ModuleType("langgraph")
+    langgraph_graph_module = types.ModuleType("langgraph.graph")
     langgraph_types_module = types.ModuleType("langgraph.types")
+    langgraph_graph_module.StateGraph = object
+    langgraph_graph_module.START = "START"
+    langgraph_graph_module.END = "END"
     langgraph_types_module.StreamWriter = object
     langgraph_module.types = langgraph_types_module
+    langgraph_module.graph = langgraph_graph_module
 
     langchain_core_module = types.ModuleType("langchain_core")
     langchain_core_runnables_module = types.ModuleType("langchain_core.runnables")
@@ -50,19 +56,75 @@ def _install_test_stubs():
     def build_image_url(path):
         return path
 
+    async def get_web_images_content(*_args, **_kwargs):
+        return "", [], []
+
+    def get_scale_step_value(*_args, **_kwargs):
+        return 1
+
+    async def wait_for_page_assets_ready(*_args, **_kwargs):
+        return None
+
     common_module.htmls_to_pptx = Mock(return_value=None)
     common_module.sanitize_filename = sanitize_filename
     common_module.download_image = download_image
     common_module.build_image_url = build_image_url
+    common_module.get_web_images_content = get_web_images_content
+    common_module.get_scale_step_value = get_scale_step_value
+    common_module.wait_for_page_assets_ready = wait_for_page_assets_ready
+
+    ppt_state_module = types.ModuleType("core.ppt_generator.thought_to_ppt.state")
+
+    class PageType(IntEnum):
+        CONTENT = 1
+        TOC = 2
+        SEPARATOR = 3
+        COVER_THANKS = 4
+
+    class PPTPage:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    ppt_state_module.PPTState = dict
+    ppt_state_module.PageType = PageType
+    ppt_state_module.PPTPage = PPTPage
+
+    page_state_module = types.ModuleType("core.ppt_generator.thought_to_ppt.page_generators.state")
+
+    class StubTemplateResult:
+        def __init__(self, reason, name):
+            self.reason = reason
+            self.name = name
+
+    page_state_module.TemplateResult = StubTemplateResult
 
     llm_module = types.ModuleType("core.utils.llm")
     llm_module.default_llm = object()
     llm_module.default_vlm = object()
 
+    class ModelRoute:
+        DEFAULT = "default"
+        PREMIUM = "premium"
+
     async def llm_invoke(*_args, **_kwargs):
         raise AssertionError("test should patch llm_invoke")
 
+    async def vlm_raw_invoke(*_args, **_kwargs):
+        raise AssertionError("test should not call vlm_raw_invoke")
+
+    async def vlm_invoke(*_args, **_kwargs):
+        raise AssertionError("test should not call vlm_invoke")
+
+    def can_vlm_invoke_route(*_args, **_kwargs):
+        return False
+
+    llm_module.ModelRoute = ModelRoute
+    llm_module.can_vlm_invoke_route = can_vlm_invoke_route
     llm_module.llm_invoke = llm_invoke
+    llm_module.raw_ainvoke = llm_invoke
+    llm_module.vlm_raw_invoke = vlm_raw_invoke
+    llm_module.vlm_invoke = vlm_invoke
 
     def make_graph_module(module_name, export_name):
         module = types.ModuleType(module_name)
@@ -77,10 +139,13 @@ def _install_test_stubs():
             "aiofiles.os": aiofiles_os_module,
             "json_repair": json_repair_module,
             "langgraph": langgraph_module,
+            "langgraph.graph": langgraph_graph_module,
             "langgraph.types": langgraph_types_module,
             "langchain_core": langchain_core_module,
             "langchain_core.runnables": langchain_core_runnables_module,
             "core.ppt_generator.utils.common": common_module,
+            "core.ppt_generator.thought_to_ppt.state": ppt_state_module,
+            "core.ppt_generator.thought_to_ppt.page_generators.state": page_state_module,
             "core.utils.llm": llm_module,
             "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph": make_graph_module(
                 "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph",
@@ -93,6 +158,10 @@ def _install_test_stubs():
             "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph": make_graph_module(
                 "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph",
                 "generate_content_pages_app",
+            ),
+            "core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph": make_graph_module(
+                "core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph",
+                "generate_ppt_page_app",
             ),
             "core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.graph": make_graph_module(
                 "core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.graph",
@@ -107,6 +176,9 @@ _install_test_stubs()
 from core.ppt_generator.thought_to_ppt.page_generators.state import TemplateResult
 
 page_node = importlib.import_module("core.ppt_generator.thought_to_ppt.page_generators.node")
+sys.modules.pop("core.utils.llm", None)
+sys.modules.pop("core.ppt_generator.thought_to_ppt.state", None)
+sys.modules.pop("core.ppt_generator.thought_to_ppt.page_generators.state", None)
 
 
 class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):

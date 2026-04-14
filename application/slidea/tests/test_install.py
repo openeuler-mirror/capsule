@@ -569,7 +569,7 @@ class EnsureDependenciesTests(unittest.TestCase):
             venv_dir = root_dir / ".venv"
             venv_python = venv_dir / "bin" / "python"
 
-            env_example.write_text("DEFAULT_LLM_MODEL=\n", encoding="utf-8")
+            env_example.write_text("SLIDEA_MODE=ECONOMIC\nDEFAULT_LLM_MODEL=\n", encoding="utf-8")
             requirements.write_text("playwright\n", encoding="utf-8")
             venv_python.parent.mkdir(parents=True, exist_ok=True)
             venv_python.write_text("", encoding="utf-8")
@@ -666,7 +666,7 @@ class EnsureDependenciesTests(unittest.TestCase):
             venv_python = venv_dir / "bin" / "python"
 
             env_file.write_text("SETUP_COMPLETED=true\n", encoding="utf-8")
-            env_example.write_text("DEFAULT_LLM_MODEL=\n", encoding="utf-8")
+            env_example.write_text("SLIDEA_MODE=ECONOMIC\nDEFAULT_LLM_MODEL=\n", encoding="utf-8")
             requirements.write_text("playwright\n", encoding="utf-8")
             venv_python.parent.mkdir(parents=True, exist_ok=True)
             venv_python.write_text("", encoding="utf-8")
@@ -706,7 +706,7 @@ class EnsureDependenciesTests(unittest.TestCase):
             venv_python = venv_dir / "bin" / "python"
             helper_path = root_dir / "scripts" / "install" / install.RHEL_FAMILY_LINUX_HELPER_SCRIPT_NAME
 
-            env_example.write_text("DEFAULT_LLM_MODEL=\n", encoding="utf-8")
+            env_example.write_text("SLIDEA_MODE=ECONOMIC\nDEFAULT_LLM_MODEL=\n", encoding="utf-8")
             requirements.write_text("playwright\n", encoding="utf-8")
             venv_python.parent.mkdir(parents=True, exist_ok=True)
             venv_python.write_text("", encoding="utf-8")
@@ -757,7 +757,7 @@ class EnsureDependenciesTests(unittest.TestCase):
             venv_dir = root_dir / ".venv"
             venv_python = venv_dir / "bin" / "python"
 
-            env_example.write_text("DEFAULT_LLM_MODEL=\n", encoding="utf-8")
+            env_example.write_text("SLIDEA_MODE=ECONOMIC\nDEFAULT_LLM_MODEL=\n", encoding="utf-8")
             requirements.write_text("playwright\n", encoding="utf-8")
             venv_python.parent.mkdir(parents=True, exist_ok=True)
             venv_python.write_text("", encoding="utf-8")
@@ -794,7 +794,7 @@ class EnsureDependenciesTests(unittest.TestCase):
             venv_dir = root_dir / ".venv"
             venv_python = venv_dir / "bin" / "python"
 
-            env_example.write_text("DEFAULT_LLM_MODEL=\n", encoding="utf-8")
+            env_example.write_text("SLIDEA_MODE=ECONOMIC\nDEFAULT_LLM_MODEL=\n", encoding="utf-8")
             requirements.write_text("playwright\n", encoding="utf-8")
             venv_python.parent.mkdir(parents=True, exist_ok=True)
             venv_python.write_text("", encoding="utf-8")

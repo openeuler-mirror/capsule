@@ -103,6 +103,7 @@ Preflight checks include:
 - use of the project `.venv` Python interpreter,
 - Playwright/browser runtime for HTML-to-PDF during `render` and `all`, including a Chromium launchability smoke check,
 - default LLM settings,
+- premium LLM settings when `SLIDEA_MODE=PREMIUM`,
 - Tavily availability for web search and image search,
 - default VLM settings,
 - embedding configuration for deep research,
@@ -113,7 +114,7 @@ The CLI also prints a human-readable preflight summary with warning/error lines 
 Blocking vs advisory behavior:
 
 - `env_setup` when `.env` is missing, and `default_llm`, are blocking checks.
-- `tavily`, `default_vlm`, `embedding`, and `libreoffice` are advisory warnings for agents.
+- `premium_llm`, `tavily`, `default_vlm`, `embedding`, and `libreoffice` are advisory warnings for agents.
 - `runtime_python`, `browser`, and incomplete `SETUP_COMPLETED` are warnings in phase 1 and should not stop execution on their own.
 
 Possible top-level outcomes:
