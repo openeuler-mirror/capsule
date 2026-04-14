@@ -30,9 +30,14 @@ def _install_test_stubs():
     json_repair_module.repair_json = Mock(return_value={})
 
     langgraph_module = types.ModuleType("langgraph")
+    langgraph_graph_module = types.ModuleType("langgraph.graph")
     langgraph_types_module = types.ModuleType("langgraph.types")
+    langgraph_graph_module.StateGraph = object
+    langgraph_graph_module.START = "START"
+    langgraph_graph_module.END = "END"
     langgraph_types_module.StreamWriter = object
     langgraph_module.types = langgraph_types_module
+    langgraph_module.graph = langgraph_graph_module
 
     langchain_core_module = types.ModuleType("langchain_core")
     langchain_core_runnables_module = types.ModuleType("langchain_core.runnables")
@@ -50,19 +55,44 @@ def _install_test_stubs():
     def build_image_url(path):
         return path
 
+    async def get_web_images_content(*_args, **_kwargs):
+        return "", [], []
+
+    def get_scale_step_value(*_args, **_kwargs):
+        return 1
+
+    async def wait_for_page_assets_ready(*_args, **_kwargs):
+        return None
+
     common_module.htmls_to_pptx = Mock(return_value=None)
     common_module.sanitize_filename = sanitize_filename
     common_module.download_image = download_image
     common_module.build_image_url = build_image_url
+    common_module.get_web_images_content = get_web_images_content
+    common_module.get_scale_step_value = get_scale_step_value
+    common_module.wait_for_page_assets_ready = wait_for_page_assets_ready
 
     llm_module = types.ModuleType("core.utils.llm")
     llm_module.default_llm = object()
     llm_module.default_vlm = object()
+    llm_module.ModelRoute = types.SimpleNamespace(DEFAULT="default", PREMIUM="premium")
 
     async def llm_invoke(*_args, **_kwargs):
         raise AssertionError("test should patch llm_invoke")
 
+    async def vlm_raw_invoke(*_args, **_kwargs):
+        raise AssertionError("test should not call vlm_raw_invoke")
+
+    async def vlm_invoke(*_args, **_kwargs):
+        raise AssertionError("test should not call vlm_invoke")
+
+    def can_vlm_invoke_route(*_args, **_kwargs):
+        return False
+
     llm_module.llm_invoke = llm_invoke
+    llm_module.vlm_raw_invoke = vlm_raw_invoke
+    llm_module.vlm_invoke = vlm_invoke
+    llm_module.can_vlm_invoke_route = can_vlm_invoke_route
 
     def make_graph_module(module_name, export_name):
         module = types.ModuleType(module_name)
@@ -77,6 +107,7 @@ def _install_test_stubs():
             "aiofiles.os": aiofiles_os_module,
             "json_repair": json_repair_module,
             "langgraph": langgraph_module,
+            "langgraph.graph": langgraph_graph_module,
             "langgraph.types": langgraph_types_module,
             "langchain_core": langchain_core_module,
             "langchain_core.runnables": langchain_core_runnables_module,
@@ -93,6 +124,10 @@ def _install_test_stubs():
             "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph": make_graph_module(
                 "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph",
                 "generate_content_pages_app",
+            ),
+            "core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph": make_graph_module(
+                "core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph",
+                "generate_ppt_page_app",
             ),
             "core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.graph": make_graph_module(
                 "core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.graph",

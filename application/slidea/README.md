@@ -197,7 +197,7 @@ For full argument documentation and JSON response contracts, see [CLI Reference]
 
 ## Outputs and Caching
 
-Each PPT generation run is identified by a `run_id`. All intermediate outputs generated during the run are cached under `output/<run_id>/` in the Slidea skill installation directory.
+Each PPT generation run is identified by a `run_id`. `output/<run_id>/` is the run cache and metadata directory in the Slidea skill installation directory. All intermediate outputs generated during the run are cached there.
 
 Typical cached files include:
 
@@ -208,7 +208,7 @@ Typical cached files include:
 - `outline/outline.json`
 - `ppt.json`
 
-The final rendered HTML, PDF, and PPTX artifacts are stored in the `render_dir` path recorded in `ppt.json`. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
+The final rendered artifacts are written to the render directory recorded in `ppt.json`. In typical runs, this includes the generated HTML, PDF, and PPTX files. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
 
 ## Runtime Degradation Behavior
 
@@ -230,6 +230,14 @@ Start here depending on your goal:
 - [App Overview](docs/core/README.md)
 - [Deep Research App](docs/core/deep-research.md)
 - [PPT Generator App](docs/core/ppt-generator.md)
+
+## Verification
+
+For a lightweight regression check of the documented portability and runtime behavior, run:
+
+```bash
+./.venv/bin/python -m unittest tests.test_preflight tests.test_runtime_options tests.test_portability_polish
+```
 
 ## Contributing
 

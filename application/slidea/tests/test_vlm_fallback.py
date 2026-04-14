@@ -19,7 +19,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             "html_content": "<html>existing</html>",
         }
 
-        with patch.object(base_node.settings, "has_default_vlm_config", return_value=False), patch.object(
+        with patch.object(base_node, "can_vlm_invoke_route", return_value=False), patch.object(
             base_node.BrowserManager,
             "get_browser_context",
             side_effect=AssertionError("browser should not be used without VLM"),
@@ -48,7 +48,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        with patch.object(page_node.settings, "has_default_vlm_config", return_value=False):
+        with patch.object(page_node, "can_vlm_invoke_route", return_value=False):
             result = await page_node.distribute_images_via_vlm(outline)
 
         self.assertEqual(result[0].reference_images, ["a.png", "b.png"])
@@ -84,7 +84,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
                 )
                 content_node = importlib.reload(content_node)
 
-                with patch.object(content_node.settings, "has_default_vlm_config", return_value=False):
+                with patch.object(content_node, "can_vlm_invoke_route", return_value=False):
                     result = await content_node.get_img_score_node(
                         {
                             "relevant_material": "demo material",

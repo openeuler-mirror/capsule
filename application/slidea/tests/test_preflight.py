@@ -145,6 +145,7 @@ class PreflightTests(unittest.TestCase):
              patch("scripts.utils.preflight.check_libreoffice_runtime", return_value={"name": "libreoffice", "status": "warning", "message": "missing"}):
             result = run_preflight(
                 Settings(
+                    SLIDEA_MODE="ECONOMIC",
                     DEFAULT_LLM_MODEL="demo",
                     DEFAULT_LLM_API_KEY="key",
                     DEFAULT_LLM_API_BASE_URL="https://example.com",
@@ -178,6 +179,7 @@ class PreflightTests(unittest.TestCase):
              patch("scripts.utils.preflight.check_libreoffice_runtime", return_value={"name": "libreoffice", "status": "warning", "message": "libreoffice"}):
             result = run_preflight(
                 Settings(
+                    SLIDEA_MODE="ECONOMIC",
                     DEFAULT_LLM_MODEL="demo",
                     DEFAULT_LLM_API_KEY="key",
                     DEFAULT_LLM_API_BASE_URL="https://example.com",
