@@ -51,12 +51,16 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertTrue(any("Falling back to ECONOMIC mode" in message for message in logs.output))
 
     def test_invalid_slidea_mode_fails_during_module_import(self):
+        def fake_load_dotenv(*args, **kwargs):
+            del args, kwargs
+            return False
+
         original_mode = os.environ.get("SLIDEA_MODE")
         original_dotenv = sys.modules.get("dotenv")
         sys.modules.pop("core.utils.config", None)
         os.environ["SLIDEA_MODE"] = "fast"
         fake_dotenv = types.ModuleType("dotenv")
-        fake_dotenv.load_dotenv = lambda *args, **kwargs: False
+        fake_dotenv.load_dotenv = fake_load_dotenv
         sys.modules["dotenv"] = fake_dotenv
 
         try:

@@ -92,12 +92,12 @@ def _install_test_stubs():
 
     page_state_module = types.ModuleType("core.ppt_generator.thought_to_ppt.page_generators.state")
 
-    class TemplateResult:
+    class StubTemplateResult:
         def __init__(self, reason, name):
             self.reason = reason
             self.name = name
 
-    page_state_module.TemplateResult = TemplateResult
+    page_state_module.TemplateResult = StubTemplateResult
 
     llm_module = types.ModuleType("core.utils.llm")
     llm_module.default_llm = object()

@@ -21,13 +21,22 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
         async def makedirs(path, exist_ok=False):
             Path(path).mkdir(parents=True, exist_ok=exist_ok)
 
+        def build_image_url(path):
+            return path
+
+        def sanitize_filename(name):
+            return name.replace(" ", "_")
+
+        def repair_json(value, **_kwargs):
+            return value
+
         common_module = types.ModuleType("core.ppt_generator.utils.common")
         common_module.get_scale_step_value = Mock(return_value=1.0)
-        common_module.build_image_url = lambda path: path
+        common_module.build_image_url = build_image_url
         common_module.wait_for_page_assets_ready = Mock(return_value=None)
         common_module.get_web_images_content = Mock(return_value=("", [], {}))
         common_module.download_image = Mock(return_value="")
-        common_module.sanitize_filename = lambda name: name.replace(" ", "_")
+        common_module.sanitize_filename = sanitize_filename
         common_module.htmls_to_pptx = Mock(return_value=None)
 
         browser_module = types.ModuleType("core.ppt_generator.utils.browser")
@@ -47,7 +56,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
         tavily_module.async_search = Mock(return_value=[])
 
         json_repair_module = types.ModuleType("json_repair")
-        json_repair_module.repair_json = lambda value, **_kwargs: value
+        json_repair_module.repair_json = repair_json
 
         pydantic_module = types.ModuleType("pydantic")
 
@@ -60,18 +69,19 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             def model_json_schema(cls):
                 return {"title": cls.__name__, "type": "object"}
 
-        def Field(default=None, **_kwargs):
+        def pydantic_field(default=None, **_kwargs):
             return default
 
         class TypeAdapter:
             def __init__(self, _annotation):
                 self._annotation = _annotation
 
-            def json_schema(self):
+            @staticmethod
+            def json_schema():
                 return {"type": "array"}
 
         pydantic_module.BaseModel = BaseModel
-        pydantic_module.Field = Field
+        pydantic_module.Field = pydantic_field
         pydantic_module.TypeAdapter = TypeAdapter
 
         langchain_module = types.ModuleType("langchain")
@@ -217,7 +227,10 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             def __exit__(self, exc_type, exc, tb):
                 return False
 
-        image_module = types.SimpleNamespace(open=lambda _path: FakeImageFile())
+        def open_image(_path):
+            return FakeImageFile()
+
+        image_module = types.SimpleNamespace(open=open_image)
         pil_module.Image = image_module
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -340,10 +353,14 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             def convert(self, _mode):
                 return self
 
-            def save(self, *_args, **_kwargs):
+            @staticmethod
+            def save(*_args, **_kwargs):
                 return None
 
-        image_module = types.SimpleNamespace(open=lambda _path: FakeImageFile())
+        def open_image(_path):
+            return FakeImageFile()
+
+        image_module = types.SimpleNamespace(open=open_image)
         pil_module.Image = image_module
 
         with tempfile.TemporaryDirectory() as tmp_dir:
