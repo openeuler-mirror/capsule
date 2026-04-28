@@ -1,23 +1,81 @@
 
 严格遵守以下要求:
-1. 文字内容不要过多，尽量精简！
-2. 合理控制内容量以避免垂直溢出，确保内容在1280px × 720px的尺寸内合理展示。
-3. 使用一致的样式和色彩方案，与下方已有页面保持一致！
-4. 非必要尽量不要使用卡片样式,除非内容很适合使用卡片进行展示!非必要尽量不要使用卡片样式,除非内容很适合使用卡片进行展示!
-5. 任何地方都不要使用absolute布局!
-6. 使用margin-bottom而不是margin-top。
-7. 不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！
-8. 生成PPT需要与已有PPT的header，footer风格样式保持完全一致。header，footer不要设置background-color！header，footer的css需要和模板中的css保持完全一致！
-9. 合适的内容需要使用chart.js生成图表进行表示（如折线图、柱状图、饼图等），但是不要使用动画效果。只有在素材中有准确数据的情况下才使用chart.js绘制图表，不要自己杜撰数据！！！图表 Canvas 必须包裹在具有 flex-shrink-0 的容器内，严禁由父级布局自动撑开 Canvas 高度，以防止垂直溢出！！！
-10. 图片应使用 max-w-full 和具体的 max-h-[x] 来限制大小，保持 w-auto h-auto 以确保真实占位，并配合父级的 Flex 居中属性。！！！例如：<img src="images/c627d5816a391c42ff05085ee0d4e571.jpg" alt="戈壁科研" class="max-w-full max-h-48 w-auto h-auto">。不要使用参考资料中没有的图片！不要使用参考资料中没有的图片！不要使用参考资料中没有的图片！
-11. 图片记得要水平居中、垂直居中显示！！！
-12. 禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！应采用多列或网格化布局，利用横向空间以避免垂直高度过大导致缩放失效。
-13. 严禁使用任何 emoji 字符作为图标、标签前缀或装饰元素（例如 📚、📅、✍️、🚀 等），因为导出链路中 emoji 容易丢失或显示为方框。需要图标时，必须使用 FontAwesome，不要使用 emoji 代替。
-14. `<head>`中的外部资源引用必须严格遵守以下规则，不允许自行改写域名，不允许输出看起来相似但错误的地址。
+1. 合理控制内容量以避免垂直溢出，确保内容在 1280px × 720px 的尺寸内合理展示。
+2. 使用一致的样式和色彩方案，与下方已有页面保持一致！
+3. 任何地方都不要使用absolute布局，且各个内容块之间要有一定的间隔距离，尤其是上下块之间不要紧贴！！！
+4. 不要添加右上角、右下角、左下角任何标志，也不需要添加页码。
+5. 不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！不要使用任何阴影（shadow）！！！
+6. 不要使用 overflow: auto / scroll，以避免内容中出现滚动条。
+7. 只有素材中有准确数据时才使用 chart.js生成图表（折线图、柱状图、饼图等），不使用动画效果，不要杜撰数据。
+   Canvas 容器规则（与规则 7 同思路）：
+   - 容器显式声明 style="flex: N 1 0; min-height: 0;" 按比例分配空间
+   - 内层用 flex items-center justify-center 包裹 canvas
+   - Chart.js 配置必须设置 responsive: true 和 maintainAspectRatio: false，
+     让图表填满容器，而不是反向撑大容器
+   - 不要给 canvas 写固定像素高度
+   ✅ 正确示范：
+   <div class="flex flex-col" style="flex: 2 1 0; min-height: 0;">
+       <p class="flex-none mb-2">图表标题</p >
+       <div class="flex-1 flex items-center justify-center" style="min-height: 0;">
+           <canvas id="myChart"></canvas>
+       </div>
+   </div>
+   <script>
+       new Chart(document.getElementById('myChart'), {
+           type: 'bar',
+           data: {...},
+           options: { responsive: true, maintainAspectRatio: false, animation: false }
+       });
+   </script>
+8. 图片应使用 max-w-full 和具体的 max-h-[x] 来限制大小，保持 w-auto h-auto 以确保真实占位，并配合父级的 Flex 居中属性！！！
+    例如：<img src="images/c627d5816a391c42ff05085ee0d4e571.jpg" alt="戈壁科研" class="max-w-full max-h-48 w-auto h-auto">。
+    不要使用参考资料中没有的图片！不要使用参考资料中没有的图片！不要使用参考资料中没有的图片！
+9. 图片占位与尺寸约束：
+    a) 只能使用参考资料中提供的图片，不要使用参考资料中没有的图片。
+    b) 图片必须水平垂直居中。
+    c) 严禁使用 max-h-[具体像素] 这类需要 AI 估算的高度写法。图片高度一律由 flex 容器分配，图片自身只负责"不超出分配的空间"。
+    d) 图片所在的 flex 子项必须按比例分配空间（不要让 AI 估算具体像素高度）：
+       - 容器显式声明 style="flex: N 1 0; min-height: 0;"（N 是相对比例，如 3、2、1）
+       - 内层用 flex items-center justify-center 居中
+       - 图片用 class="max-w-full w-auto h-auto" + style="max-height: 100%; object-fit: contain;"
+       
+       原理：flex 子项默认 min-height: auto 会被图片固有尺寸撑破；
+       图片用 max-height: 100% 始终被父容器约束，object-fit: contain 保证不变形不裁切；
+       不要依赖 justify-around / space-y 自然撑开图片位，必须用 flex 比例显式分配。
+    ✅ 正确示范：
+    <div class="flex flex-col" style="flex: 3 1 0; min-height: 0;">
+        <p class="flex-none mb-2">标题</p >
+        <div class="flex-1 flex items-center justify-center" style="min-height: 0;">
+            < img src="images/xxx.png" alt="..." 
+                 class="max-w-full w-auto h-auto"
+                 style="max-height: 100%; object-fit: contain;">
+        </div>
+    </div>
+    ❌ 错误示范：
+    <!-- 错1：用 max-h-[具体像素] 估算高度 -->
+    < img src="images/xxx.png" class="max-w-full max-h-[320px] w-auto h-auto">
+    
+    <!-- 错2：缺 min-height: 0，图片会顶破容器 -->
+    <div class="flex-1 flex flex-col justify-around">
+        <div class="flex items-center justify-center">
+            < img src="images/xxx.png">
+        </div>
+    </div>
+10. 多组件垂直排列的高度锁定与平分规则（解决垂直溢出核心问题）：
+    a) 当多个内容卡片（Card）、列表项或文本块在垂直方向排列时，严禁任由其随文字内容自然撑开高度，这会导致内容顶破 720px 的底边。
+    b) 必须通过 Flex 比例显式分配垂直空间。父容器设置 flex flex-col，子项（如每一条卡片）必须声明 style="flex: 1 1 0; min-height: 0;"。
+    flex: 1 1 0 确保所有卡片在容器内绝对平分剩余高度，不因文字多寡而变形。
+    min-height: 0 是关键：它允许容器的大小小于其内部文字的自然高度，配合整体缩放脚本工作。
+    c) 内容块内部必须配合 justify-center 或 justify-between 以及 min-h-0
+    d) 内容块之间必须使用 gap-N 或 space-y-N 保持间距，且间距不宜过大（建议 gap-2）。
+    e) min-height: 0 必须从父链顶端一路传到图片所在 flex 子项，中间任何一层 flex 容器（含 .section-container、.scalable-content、内层 wrapper、行/列容器）只要少一层，图片固有高度就会反向撑破容器，导致"加图前占位小、加图后变大"。所有嵌套的 flex 父容器都要显式声明 style="min-height: 0;"（Tailwind 的 min-h-0 也可，但注意 min-height-0 是无效写法）。
+
+11.禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！禁止采用“全宽纵向堆叠”的布局方式！！！应采用多列或网格化布局，利用横向空间以避免垂直高度过大导致缩放失效。
+12. 严禁使用任何 emoji 字符作为图标、标签前缀或装饰元素（例如 📚、📅、✍️、🚀 等），因为导出链路中 emoji 容易丢失或显示为方框。
+13. `<head>`中的外部资源引用必须严格遵守以下规则，不允许自行改写域名，不允许输出看起来相似但错误的地址。
 脚本资源必须使用且只能使用以下固定地址：
 ```html
 <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
-<script defer src="https://cdn.jsdelivr.net.cn/npm/@fortawesome/fontawesome-free@6.4.0/js/all.min.js"></script>
 <script src="https://cdn.jsdelivr.net.cn/npm/chart.js"></script>
 ```
 字体 `<link>` 必须从 `https://fonts.googleapis.cn/css2?...` 获取，并且只选择当前页面主语言实际需要的 Google 字体，不要使用 `fonts.googleapis.com`、`fonts.googleapis.com.cn` 或其他域名变体。
@@ -50,8 +108,8 @@ body, html {
 }
 其他语言页面也遵循同样模式：在 `body, html` 中直接写当前页面主语言对应的字体族，并确保该字体通过 `https://fonts.googleapis.cn/css2?...` 正确引入。
 
-15. 禁止使用任何半透明效果、模糊滤镜与渐变，包括但不限于 `rgba(...)`、`hsla(...)`、`transparent`、`opacity-*`、`opacity:`、`backdrop-filter`、`-webkit-backdrop-filter`、`filter: blur(...)`。PDF 导出对透明度和模糊的兼容性很差，容易导致偏色、发粉、卡片或文字整块丢失。若需要柔和层次，请只使用纯色背景、纯色边框。
-16. `<head>`中必须引用一下资源和规则，不允许自行改写域名，不允许输出看起来相似但错误的地址，以支持渲染行级公式和块级公式。
+14. 禁止使用任何半透明效果、模糊滤镜与渐变，包括但不限于 `rgba(...)`、`hsla(...)`、`transparent`、`opacity-*`、`opacity:`、`backdrop-filter`、`-webkit-backdrop-filter`、`filter: blur(...)`。PDF 导出对透明度和模糊的兼容性很差，容易导致偏色、发粉、卡片或文字整块丢失。若需要柔和层次，请只使用纯色背景、纯色边框。
+15. `<head>`中必须引用一下资源和规则，不允许自行改写域名，不允许输出看起来相似但错误的地址，以支持渲染行级公式和块级公式。
 ```html
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
