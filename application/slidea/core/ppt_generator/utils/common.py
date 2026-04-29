@@ -7,9 +7,10 @@ import platform
 import re
 import shutil
 import subprocess
-import httpx
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
+
+import httpx
 
 try:
     from fake_useragent import UserAgent
