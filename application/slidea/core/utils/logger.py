@@ -10,6 +10,15 @@ LOG_DIR = Path(app_base_dir) / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _silence_noisy_third_party_loggers() -> None:
+    """抑制第三方库默认 INFO 级别的请求/响应噪音日志。"""
+    for name in ("httpx", "httpcore", "openai", "urllib3", "asyncio"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
+_silence_noisy_third_party_loggers()
+
+
 def _build_stdlib_logger() -> logging.Logger:
     logger = logging.getLogger("slidea")
     if logger.handlers:

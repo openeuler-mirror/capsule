@@ -111,9 +111,9 @@ body, html {
 14. 禁止使用任何半透明效果、模糊滤镜与渐变，包括但不限于 `rgba(...)`、`hsla(...)`、`transparent`、`opacity-*`、`opacity:`、`backdrop-filter`、`-webkit-backdrop-filter`、`filter: blur(...)`。PDF 导出对透明度和模糊的兼容性很差，容易导致偏色、发粉、卡片或文字整块丢失。若需要柔和层次，请只使用纯色背景、纯色边框。
 15. `<head>`中必须引用一下资源和规则，不允许自行改写域名，不允许输出看起来相似但错误的地址，以支持渲染行级公式和块级公式。
 ```html
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net.cn/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net.cn/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net.cn/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             renderMathInElement(document.body, {

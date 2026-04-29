@@ -149,10 +149,12 @@ async def get_final_images_node(state: ContentWorkerState):
 
 # 输出格式要求
 只返回一个json格式的列表，如：
-['图片1路径'， '图片2路径']
+['图片1绝对路径'， '图片2绝对路径']
 
-# 图片路径以及描述
+# 图片绝对路径以及描述
 {state["img_content"]}
+
+每个路径一定要以完整的绝对路径输出！！
 """
     schema = TypeAdapter(List[str]).json_schema()
     img_list = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], json_schema=schema)

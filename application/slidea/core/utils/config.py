@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     DEFAULT_VLM_API_KEY: str = ""
     DEFAULT_VLM_API_BASE_URL: str = ""
 
+    # 是否启用基于截图的 VLM 视觉审阅与修改路径
+    ENABLE_VLM_VISUAL_REVIEW: bool = True
+
     # Embedding Settings
     EMBEDDING_MODEL: str = ""
     EMBEDDING_API_KEY: str = ""
