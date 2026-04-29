@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Blue Template</title>
+    
+    <!-- 必须的 Tailwind CSS -->
+    <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
+    <!-- 必须的 Chart.js -->
+    <script src="https://cdn.jsdelivr.net.cn/npm/chart.js"></script>
+
+    <!-- 必须的 KaTeX -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body, {
+                delimiters:[
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\(', right: '\\)', display: false},
+                    {left: '\\[', right: '\\]', display: true}
+                ],
+                throwOnError : false
+            });
+        });
+    </script>
+
+    <!-- 必须的 Google Fonts (Noto Sans SC) -->
+    <link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet"/>
+    <style>
+        body, html {
+            font-family: 'Noto Sans SC', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* 核心缩放容器样式 */
+        #ppt-container {
+            width: 1280px;
+            height: 720px;
+            box-sizing: border-box;
+            overflow: hidden;
+            background-color: #ffffff;
+        }
+
+        .section-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            overflow: hidden;
+            flex-direction: column;
+            box-sizing: border-box;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            min-height: 0;
+        }
+
+        .scalable-content {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            transform-origin: top left;
+            min-height: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 主容器 -->
+    <div id="ppt-container" class="border-t-[8px] border-b-[8px] border-[#005aab] flex flex-col box-border">
+        
+        <!-- Header -->
+        <header class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
+            <div class="flex items-center">
+                <h1 class="text-3xl font-bold text-gray-800">{{PAGE_TITLE}}</h1>
+            </div>
+        </header>
+
+        <!-- Main Content 区域 (带缩放兼容结构) -->
+        <div class="section-container flex-1 px-10 py-2">
+            <div class="scalable-content">
+                <!-- 顶级容器架构: flex-1 flex flex-col -->
+                <div class="flex-1 flex flex-col w-full h-full border-2 border-dashed border-gray-200 p-8 min-h-0">
+                    
+                    <!-- 内容区布局: flex-1 flex flex-col justify-around (后续在此处放入真实内容模块) -->
+                    <div class="flex-1 flex flex-col justify-around items-center min-h-0">
+                        <div class="text-center text-gray-400 min-h-0">
+                            <p class="text-3xl font-bold mb-4">{{CONTENT_AREA}}</p>
+                            <p class="text-base">(由 Executor 根据实际内容自由布局)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 必须保留的缩放脚本 -->
+    <script>
+        function scaleContentToFit() {
+            const sections = document.querySelectorAll('.section-container');
+            sections.forEach(section => {
+                const contentWrapper = section.querySelector('.scalable-content');
+                const content = contentWrapper ? contentWrapper.firstElementChild : null;
+                if (!contentWrapper || !content) return;
+
+                contentWrapper.style.transform = 'scale(1)';
+                contentWrapper.style.zoom = 1;
+
+                const styles = window.getComputedStyle(section);
+
+                const paddingTop = parseFloat(styles.paddingTop);
+                const paddingBottom = parseFloat(styles.paddingBottom);
+                const paddingLeft = parseFloat(styles.paddingLeft);
+                const paddingRight = parseFloat(styles.paddingRight);
+
+                const ORIGINAL_HEIGHT = section.clientHeight - paddingTop - paddingBottom;
+                const ORIGINAL_WIDTH = section.clientWidth - paddingLeft - paddingRight;
+                if (Math.abs(contentWrapper.scrollWidth - ORIGINAL_WIDTH) < 1 && Math.abs(contentWrapper.scrollHeight - ORIGINAL_HEIGHT) < 1) {
+                    window.final_ratio = 1;
+                    return;
+                }
+
+                const TARGET_ASPECT_RATIO = ORIGINAL_HEIGHT / ORIGINAL_WIDTH;
+
+                let testWidth = ORIGINAL_WIDTH;
+
+                let bestWidth = ORIGINAL_WIDTH;
+                let minDifference = Infinity;
+
+                for (let i = 0; i < 300; i++) {
+                    testWidth = testWidth + 5;
+                    content.style.width = `${testWidth}px`;
+
+                    const actualHeight = content.scrollHeight;
+                    const targetHeight = testWidth * TARGET_ASPECT_RATIO;
+
+                    const currentDifference = Math.abs(actualHeight - targetHeight);
+
+                    if (currentDifference < minDifference) {
+                        minDifference = currentDifference;
+                        bestWidth = testWidth;
+                    }
+                }
+
+                content.style.width = `${bestWidth}px`;
+
+                const finalWidth = content.scrollWidth;
+                const finalHeight = content.scrollHeight;
+
+                const scaleX = ORIGINAL_WIDTH / finalWidth;
+                const scaleY = ORIGINAL_HEIGHT / finalHeight;
+
+                const scaleRatio = Math.min(scaleX, scaleY);
+                window.final_ratio = scaleRatio;
+                contentWrapper.style.transform = 'none';
+                contentWrapper.style.zoom = scaleRatio;
+            });
+        }
+
+        window.addEventListener('load', scaleContentToFit);
+        window.addEventListener('resize', scaleContentToFit);
+    </script>
+</body>
+</html>
