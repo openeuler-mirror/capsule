@@ -447,7 +447,7 @@ async def batch_search(queries: list):
             source = url + '：' + r.get('title', "")
             content = r.get("raw_content", "")
             if url and not content:
-                content = await get_content(url)
+                content = (await get_content(url))["text"]
 
             if not content:
                 content = r.get('content', "")

@@ -7,6 +7,7 @@ class GenPPTState(TypedDict):
     thought:str
     deep_report:str
     references: str
+    images: list
 
     htmls: list
     final_pdf_path: Optional[str]

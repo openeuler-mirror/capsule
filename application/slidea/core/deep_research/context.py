@@ -8,8 +8,9 @@ import httpx
 from langchain_core.messages import HumanMessage
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from core.utils.config import settings, app_base_dir
+from core.utils.config import settings, output_files_dir
 from core.utils.llm import ModelRoute, llm_invoke
+
 from core.utils.logger import logger
 from core.deep_research.state import ReferenceItem
 
@@ -41,7 +42,7 @@ async def embed_text(text: str):
     return data["data"][0]["embedding"]
 
 
-WORKSPACE_DIR = os.path.join(app_base_dir, "research_workspace")
+WORKSPACE_DIR = os.path.join(output_files_dir, "research_workspace")
 os.makedirs(WORKSPACE_DIR, exist_ok=True)
 
 MAX_CONTEXT_LEN = 81920

@@ -59,6 +59,7 @@ class ThoughtState(TypedDict):
     messages: List[str]  # 对话历史（用于支持交互）
 
     raw_content: str  # 用户指定的文件/网页内容
+    images: list  # 提取出的图片路径列表
     parsed_requirements: ParseQuery  # 解析出的结构：受众、主题、目的等
     interaction_count: int
     invalid_reseaon: str

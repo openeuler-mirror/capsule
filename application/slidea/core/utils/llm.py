@@ -21,10 +21,9 @@ except ImportError:  # pragma: no cover - optional dependency in minimal test en
         return None
 
 try:
-    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-except ImportError:  # pragma: no cover - exercised in minimal runtime environments
+    from langchain_openai import ChatOpenAI
+except ImportError:
     ChatOpenAI = None
-    OpenAIEmbeddings = None
 
 from core.utils.config import settings
 
@@ -209,15 +208,6 @@ def _build_chat_client_for_name(client_name: str):
         streaming=False,
     )
 
-
-if OpenAIEmbeddings is None:
-    embedding_llm = MissingDependencyClient("langchain_openai")
-else:
-    embedding_llm = OpenAIEmbeddings(
-        model=settings.EMBEDDING_MODEL,
-        openai_api_base=settings.EMBEDDING_API_BASE_URL,
-        openai_api_key=settings.EMBEDDING_API_KEY,
-    )
 
 premium_llm = _ClientHandle("premium_llm")
 default_llm = _ClientHandle("default_llm")

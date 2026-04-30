@@ -1,104 +1,115 @@
-import os
+import argparse
 import asyncio
-import tempfile
-import re
-import requests
-from urllib.parse import unquote
-
-from langchain_unstructured import UnstructuredLoader
+import os
+from pathlib import Path
+from datetime import datetime, timezone
 
 from core.utils.logger import logger
+from core.utils.config import output_files_dir
+from core.utils.document_parser.parser import (
+    DocumentParser, ParserConfig, MIME_TO_EXT
+)
 
 
-
-def download_pdf_content(url):
-    """下载PDF文件内容到临时文件"""
-    try:
-        response = requests.get(
-            url,
-            stream=True,
-            timeout=60,
-            allow_redirects=True,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-            }
-        )
-        response.raise_for_status()
-        content_type = response.headers.get("Content-Type", "").split("; ")[0].strip()
-        if content_type != "application/pdf":
-            return None
-        
-        file_name = None
-        cd_header = response.headers.get("Content-Disposition", "")
-        if cd_header:
-            match = re.search(r'filename\*?=[\'"]([^\'"]+)[\'"]', cd_header)
-            if match:
-                file_name = unquote(match.group(1).strip())
-
-        if not file_name:
-            file_name = f"download_{hash(url) & 0xFFFFFFFF:08x}.pdf"
-
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
-            temp_file_path = tmp_file.name
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    tmp_file.write(chunk)
-
-        logger.debug(f"[下载] 完成 | 路径={temp_file_path} | 大小={os.path.getsize(temp_file_path)}")
-        return temp_file_path
-    except requests.exceptions.RequestException as e:
-        logger.debug(f"[下载] 失败 | URL={url} | 网络请求失败={str(e)}")
-    except Exception as e:
-        logger.debug(f"[下载] 失败 | URL={url} | 错误={str(e)}")
-    
-    return None
+_SUPPORTED_EXTENSIONS = {
+    ".txt", ".md", ".markdown",
+    ".pdf",
+    ".doc", ".docx",
+    ".xls", ".xlsx",
+    ".ppt", ".pptx",
+    ".html", ".htm",
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".avif", ".tiff", ".tif",
+}
 
 
-async def get_content(file_path: str):
-    """get content of document"""
-    import logging
-    logging.getLogger("pdfminer").setLevel(logging.ERROR)
-    logging.getLogger("unstructured").setLevel(logging.ERROR)
-    from pathlib import Path
+def _collect_files(path: str) -> list[str]:
+    """如果路径是目录，递归收集其中支持的文件；否则直接返回该路径"""
+    if not os.path.isdir(path):
+        return [path]
+    result = []
+    for root, _dirs, files in os.walk(path):
+        for fname in sorted(files):
+            file_path = os.path.join(root, fname)
+            mime_type = DocumentParser.detect_mime_type(file_path)
+            ext = MIME_TO_EXT.get(mime_type, Path(file_path).suffix.lower())
+            if ext in _SUPPORTED_EXTENSIONS:
+                result.append(os.path.join(root, fname))
+    if not result:
+        logger.warning("_collect_files 目录 {} 中未找到可解析的文件", path)
+    return result
 
-    loader = None
-    logger.info(f"read content {file_path}")
-    try:
-        if not Path(file_path).is_file():
-            # UnstructuredLoader处理pdf依赖unstructured[pdf]包，过于庞大，通过pdfminer处理
-            pdf_file = download_pdf_content(file_path)
-            if pdf_file:
-                file_path = pdf_file
 
-        if not Path(file_path).is_file():
-            loader = UnstructuredLoader(web_url=file_path, strategy="fast",
-                                        include_metadata=False,
-                                        languages=["zh", "eng"])
-        else:
-            if file_path.endswith(".md"):
-                with open(file_path, "r", encoding="utf-8") as f:
-                    full_text = f.read()
-                    return full_text
-            elif file_path.endswith(".pdf"):
-                from pdfminer.high_level import extract_text
-                full_text = extract_text(file_path)
-                logger.info(f"get {file_path} content success: {len(full_text)}")
-                return full_text
-            else:
-                loader = UnstructuredLoader(file_path=file_path, strategy="fast",
-                                        include_metadata=False,
-                                        languages=["zh", "eng"])
+async def get_content(file_path: str, extract_images: bool = False, output_dir: str = None):
+    """get content of document, supports file path and directory path"""
+    file_paths = _collect_files(file_path)
+    if not file_paths:
+        return {"text": "", "images": [], "markdown_file": []}
 
-        if loader:
-            async with asyncio.timeout(60):
-                data = await loader.aload()
-                full_text = "\n".join([doc.page_content for doc in data])
-                logger.info(f"get {file_path} content success: {len(full_text)}")
-                return full_text
-    except Exception as e:
-        logger.warning(f"get file content of {file_path} failed {e}")
-        return ""
+    merged_text = []
+    merged_images = []
+    merged_markdown_files = []
+
+    parser = DocumentParser(
+        config=ParserConfig(extract_images=extract_images, output_dir=output_dir)
+    )
+    semaphore = asyncio.Semaphore(3)
+
+    async def _parse_one(fp):
+        async with semaphore:
+            try:
+                return await parser.parse(fp)
+            except Exception as e:
+                import traceback
+                logger.error("get_content 解析文档 {} 失败: {}", fp, e)
+                traceback.print_exc()
+                return {"text": "", "images": [], "markdown_file": ""}
+
+    results = await asyncio.gather(*[_parse_one(fp) for fp in file_paths])
+    for result in results:
+        merged_text.append(result.get("text", ""))
+        merged_images.extend(result.get("images", []))
+        if result.get("markdown_file"):
+            merged_markdown_files.append(result.get("markdown_file"))
+
+    return {
+        "text": "\n\n".join(merged_text),
+        "images": merged_images,
+        "markdown_file": merged_markdown_files,
+    }
+
+
+async def get_contents(file_paths: list[str], extract_images: bool = False, output_dir: str = None):
+    """解析多个文档，合并 markdown 和 images。支持传入目录路径，会自动遍历目录下的文件"""
+    merged_text = []
+    merged_images = []
+    merged_markdown_files = []
+
+    semaphore = asyncio.Semaphore(3)
+
+    async def _get_one(file_path):
+        async with semaphore:
+            return await get_content(file_path, extract_images=extract_images, output_dir=output_dir)
+
+    results = await asyncio.gather(*[_get_one(fp) for fp in file_paths])
+    for result in results:
+        merged_text.append(result.get("text", ""))
+        merged_images.extend(result.get("images", []))
+        merged_markdown_files.extend(result.get("markdown_file", []))
+
+    return {
+        "text": "\n\n".join(merged_text),
+        "images": merged_images,
+        "markdown_file": merged_markdown_files,
+    }
 
 
 if __name__ == "__main__":
-    print(asyncio.run(get_content("https://arxiv.org/pdf/2310.08560")))
+    parser = argparse.ArgumentParser(description="解析文档并提取内容")
+    parser.add_argument("--file_path", nargs="+", help="文件路径或 URL，支持多个")
+    parser.add_argument("--extract-images", action="store_true", default=False, help="是否提取图片 (默认: False)")
+    args = parser.parse_args()
+    output_dir = os.path.join(output_files_dir, "documents")
+    output_dir = os.path.join(output_dir, datetime.now(timezone.utc).strftime("%Y%m%d"))
+    result = asyncio.run(get_contents(args.file_path, extract_images=args.extract_images, output_dir=output_dir))
+    logger.info("解析完成，文本长度: {} 字符，图片链接: {}:  解析文本路径: {}",
+                len(result["text"]), result["images"], result["markdown_file"])

@@ -28,16 +28,20 @@ async def get_reference_node(state: ThoughtState, writer: StreamWriter, config: 
             return {"raw_content": cached}
 
     contents = ""
+    images = []
     urls = state["parsed_requirements"].urls
     logger.info(f"read urls: {urls}")
     for url in urls:
         writer({"step": f"阅读资料：{url}"})
-        contents = contents + await get_content(url)
+        result = await get_content(file_path=url, extract_images=True)
+        contents = contents + result['text']
+        images.extend(img['path'] for img in result['images'])
 
     if run_dir:
         save_text(f"{run_dir}/references/references.txt", contents)
+        save_json(f"{run_dir}/references/images.json", images)
 
-    return {"raw_content": contents}
+    return {"raw_content": contents, "images": images}
 
 
 async def parse_query_node(state: ThoughtState, config: RunnableConfig | None = None):
