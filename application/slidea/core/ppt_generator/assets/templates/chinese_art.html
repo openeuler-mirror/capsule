@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Common Light Template</title>
-
+    <title>Chinese Style Template - Light</title>
+    
     <!-- 必须的 Tailwind CSS -->
     <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
     <!-- 必须的 Chart.js -->
@@ -28,14 +28,16 @@
         });
     </script>
 
-    <!-- 必须的 Google Fonts (Noto Sans SC) -->
-    <link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet"/>
+    <!-- 引入国风字体：站酷小薇体 (标题/装饰) 和 思源宋体 (正文阅读) -->
+    <link href="https://fonts.googleapis.cn/css2?family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet"/>
     <style>
         body, html {
-            font-family: 'Noto Sans SC', sans-serif;
+            /* 优先使用站酷小薇体，降级为思源宋体和系统自带的楷体/仿宋 */
+            font-family: 'Noto Serif SC', 'STKaiti', 'KaiTi', 'FangSong', serif;
             margin: 0;
             padding: 0;
-            background-color: #ffffff;
+            background-color: #E6DECD; /* 页面外围浅茶底色 */
+            color: #2D2B29; /* 全局水墨黑文字 */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -48,7 +50,8 @@
             height: 720px;
             box-sizing: border-box;
             overflow: hidden;
-            background-color: #ffffff;
+            background-color: #FDF9EE; /* PPT内部宣纸底色 */
+            border: 1px solid #D7C8B6;
         }
 
         .section-container {
@@ -75,27 +78,29 @@
 </head>
 <body>
 
-    <!-- 主容器 -->
-    <div id="ppt-container" class="border-t-[8px] border-b-[8px] border-[#005aab] flex flex-col box-border">
+    <!-- 主容器 (去除了上下粗蓝边框) -->
+    <div id="ppt-container" class="flex flex-col box-border">
         
         <!-- Header -->
         <header class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
             <div class="flex items-center">
-                <h1 class="text-3xl font-bold text-gray-800">{{PAGE_TITLE}}</h1>
+                <!-- 标题采用水墨深色，字体加大以展现书法气韵 -->
+                <h1 class="text-4xl font-bold text-[#3E3832] tracking-wide">{{标题}}</h1>
             </div>
         </header>
 
         <!-- Main Content 区域 (带缩放兼容结构) -->
         <div class="section-container flex-1 px-10 py-2">
             <div class="scalable-content">
-                <!-- 顶级容器架构: flex-1 flex flex-col -->
-                <div class="flex-1 flex flex-col w-full h-full border-2 border-dashed border-gray-200 p-8 min-h-0">
+                <!-- 顶级容器架构：边框改为古典的双实线和浅褐色，模拟古籍版式 -->
+                <div class="flex-1 flex flex-col w-full h-full border-double border-[4px] border-[#C6B6A5] p-8 min-h-0">
                     
                     <!-- 内容区布局: flex-1 flex flex-col justify-around (后续在此处放入真实内容模块) -->
                     <div class="flex-1 flex flex-col justify-around items-center min-h-0">
-                        <div class="text-center text-gray-400 min-h-0">
-                            <p class="text-3xl font-bold mb-4">{{CONTENT_AREA}}</p>
-                            <p class="text-base">(由 Executor 根据实际内容自由布局)</p>
+                        <div class="text-center min-h-0">
+                            <!-- 占位文字同样使用国风配色 -->
+                            <p class="text-3xl font-bold mb-4 text-[#5D5144] tracking-widest">{{CONTENT_AREA}}</p>
+                            <p class="text-lg text-[#8C8070]">(根据实际内容自由布局)</p>
                         </div>
                     </div>
                 </div>

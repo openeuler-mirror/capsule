@@ -30,6 +30,7 @@ def _load_common_module():
                 "Logger",
                 (),
                 {
+                    "debug": lambda *args, **kwargs: None,
                     "info": lambda *args, **kwargs: None,
                     "warning": lambda *args, **kwargs: None,
                     "error": lambda *args, **kwargs: None,
@@ -111,6 +112,55 @@ class CommonUtilsTests(unittest.TestCase):
             result = common._get_local_libreoffice_executable()
 
         self.assertEqual(result, Path(r"C:\Program Files") / "LibreOffice" / "program" / "soffice.com")
+
+    def test_render_asset_candidate_urls_keep_original_cache_key_with_fallbacks(self):
+        common = _load_common_module()
+
+        result = common.get_render_asset_candidate_urls(
+            "https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"
+        )
+
+        self.assertEqual(
+            result[:2],
+            [
+                "https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js",
+                "https://cdn.jsdelivr.net/npm/tailwindcss-cdn@3.4.10/tailwindcss.js",
+            ],
+        )
+        self.assertEqual(len(result), len(set(result)))
+
+    def test_font_css_urls_are_cacheable_render_assets(self):
+        common = _load_common_module()
+
+        self.assertTrue(
+            common.is_cacheable_render_asset_url(
+                "https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;700&display=swap",
+                None,
+            )
+        )
+
+    def test_local_urls_are_not_cacheable_render_assets(self):
+        common = _load_common_module()
+
+        self.assertFalse(common.is_cacheable_render_asset_url("file:///tmp/demo.css", "stylesheet"))
+
+    def test_rewrite_css_relative_urls_uses_download_source_url(self):
+        common = _load_common_module()
+        css_body = (
+            b"@font-face{src:url(fonts/demo.woff2)}"
+            b".icon{background:url('../img/a.png')}"
+            b".x{background:url(data:image/png;base64,abc)}"
+        )
+
+        rewritten = common.rewrite_css_relative_urls(
+            css_body,
+            "https://fallback.example.com/npm/katex@0.16.9/dist/katex.min.css",
+            "text/css",
+        ).decode("utf-8")
+
+        self.assertIn("url(https://fallback.example.com/npm/katex@0.16.9/dist/fonts/demo.woff2)", rewritten)
+        self.assertIn("url('https://fallback.example.com/npm/katex@0.16.9/img/a.png')", rewritten)
+        self.assertIn("url(data:image/png;base64,abc)", rewritten)
 
 
 if __name__ == "__main__":

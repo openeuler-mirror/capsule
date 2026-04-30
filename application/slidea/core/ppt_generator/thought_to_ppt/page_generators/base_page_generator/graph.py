@@ -7,6 +7,7 @@ from core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.node 
     ratio_evaluator_node,
     vlm_judge_node,
     vlm_modify_node,
+    vlm_select_best_node,
     ppt_submitter_node,
     route_after_generate,
     route_after_judge,
@@ -20,6 +21,7 @@ workflow.add_node("modify_ppt_page", modify_ppt_page_node)
 workflow.add_node("ratio_evaluator_node", ratio_evaluator_node)
 workflow.add_node("vlm_judge", vlm_judge_node)
 workflow.add_node("vlm_modify", vlm_modify_node)
+workflow.add_node("vlm_select_best", vlm_select_best_node)
 workflow.add_node("ppt_submitter", ppt_submitter_node)
 
 workflow.add_edge(START, "generate_ppt_page")
@@ -51,10 +53,12 @@ workflow.add_conditional_edges(
     route_after_judge,
     {
         "MODIFY": "vlm_modify",
+        "SELECT_BEST": "vlm_select_best",
         "FINISH": "ppt_submitter",
     },
 )
 workflow.add_edge("vlm_modify", "vlm_judge")
+workflow.add_edge("vlm_select_best", "ppt_submitter")
 
 workflow.add_edge("ppt_submitter", END)
 
