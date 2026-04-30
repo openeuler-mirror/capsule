@@ -58,13 +58,13 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 在 OpenClaw 这种环境中，你可能会这样调用：
 
 ```text
-使用 slidea skill 创建一份关于 AI Agent 的 PPT，10 页左右，面向产品、技术与业务负责人
+使用 slidea skill 创建一份关于 AI Agent 的 PPT，10 页左右，面向产品、技术与业务负责人，不要深入洞察
 ```
 
 在 claude code 这种支持 slash 风格 skill 命令的环境中，你可能会这样调用：
 
 ```text
-/slidea 创建一份关于 AI Agent 的 PPT，10 页左右，面向产品、技术与业务负责人
+/slidea 创建一份关于 AI Agent 的 PPT，10 页左右，面向产品、技术与业务负责人，不要深入洞察
 ```
 
 具体语法取决于宿主 agent，但预期体验是一致的：agent 加载 Slidea skill，在必要时补充缺失信息，并将幻灯片生成流水线执行到最终产物。
@@ -89,7 +89,7 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
    ```
 
 2. 使用脚本自动创建虚拟环境并安装相关依赖：
-   这一步会自动处理 Python 依赖、Playwright 浏览器以及 LibreOffice 相关准备。
+   这一步会自动安装 Python 依赖、Playwright 浏览器以及 LibreOffice。
    ```bash
    python3 scripts/install/install.py
    ```
@@ -109,18 +109,27 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
    如果你希望 premium 路由调用点优先使用高级模型，再额外补充 `PREMIUM_LLM_API_KEY`。
    `PREMIUM_LLM_MODEL` 和 `PREMIUM_LLM_API_BASE_URL` 已给出固定推荐默认值，通常不要改动；当前唯一推荐的 premium 模型是 `google/gemini-3.1-pro-preview`。
 
-4. 运行示例：
+4. 快速示例：
+
+   ```bash
+   .venv/bin/python scripts/run_ppt_pipeline.py \
+     --text "生成一份 10 页的 PPT，介绍 AI Agent，不要深入洞察，面向技术人员介绍 Agent 技术发展趋势" \
+   ```
+
+   任务发起之后，大约 15 分钟左右，会生成 PPTX 文件，并在 Agent 上下文中告知文件路径。
+
+5. 详细示例 #1：
    
    ```bash
    .venv/bin/python scripts/run_ppt_pipeline.py \
-     --text "生成一份 10 页的 PPT，介绍 AI Agent" \
+     --text "生成一份 10 页的 PPT，介绍 AI Agent，不要深入洞察" \
      --session-id session_test \
      --run-id id_test
    ```
 
    其中，若不指定 session-id 和 run-id，系统将采用当前时间作为默认 id 值。上述例子，使用字符串 `session_test` 和 `id_test` 作为示例。
 
-5. 恢复被中断的运行
+   **恢复被中断的运行**
 
    生成 PPT 的过程中会中断，并与用户交互。Slidea CLI支持恢复被中断的 PPT 生成任务。
 
@@ -130,16 +139,28 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 
    ```bash
    .venv/bin/python scripts/run_ppt_pipeline.py \
-   --resume "面向产品、技术与业务负责人" \
+   --resume "面向技术人员介绍 Agent 技术发展趋势" \
    --session-id session_test \
    --run-id id_test
    ```
 
    其中 session_test 和 id_test 是之前已创建但被中断执行的 id 。
 
+6. 详细示例 #2：
+   
+   ```bash
+   .venv/bin/python scripts/run_ppt_pipeline.py \
+     --text "生成一份 10 页的 PPT，介绍 AI Agent，请深入洞察，面向技术人员介绍 Agent 技术发展趋势" \
+     --session-id session_test \
+     --run-id id_test
+   ```
+
+   slidea 自带深入洞察能力，如果 PPT 制作主题较为宽泛，可发起深入洞察（20-30 分钟），再基于洞察报告生成 PPTX 文件。
+
+
 更多命令可以参考 `docs/cli.md`。
 
-如果你不想使用2中的安装脚本自动处理运行环境，也可以手动完成：
+如果你不想使用步骤2中的安装脚本自动准备运行环境，也可以手动完成，步骤如下：
    ```bash
    python3 -m venv .venv
    . .venv/bin/activate
@@ -174,7 +195,7 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 
 在 PPT 渲染过程中，会采用 fewshots 的模式，让模型输出的排版保持一致的风格。
 
-当前，Slidea 内置了浅色通用，深色通用，红色政治，学术报告，幼小科普 5 种模板。Slidea默认会根据用户输入的主题自行选择最合适的模板渲染排版，但用户也可以直接在 PPT 生成任务的请求中，明确要求Slidea采用何种风格的模板。
+当前，Slidea 内置了浅色通用，深色通用，红色政治，蓝色学术，幼小科普，中文艺术，英文艺术 7 种模板。Slidea默认会根据用户输入的主题自行选择最合适的模板渲染排版，但用户也可以直接在 PPT 生成任务的请求中，明确要求Slidea采用何种风格的模板。
 
 ### Deep Research
 
