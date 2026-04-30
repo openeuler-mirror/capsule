@@ -61,13 +61,13 @@ After the model resources are installed and configured for Slidea, restart the a
 In an environment like OpenClaw, you might call it like this:
 
 ```text
-Use the slidea skill to create a PPT about AI Agents, around 10 slides, targeted at product, engineering, and business leaders
+Use the slidea skill to create a PPT about AI Agents, around 10 slides, targeted at product, engineering, and business leaders，without deepresearch
 ```
 
 In an environment like Claude Code that supports slash-style skill commands, you might call it like this:
 
 ```text
-/slidea Create a PPT about AI Agents, around 10 slides, targeted at product, engineering, and business leaders
+/slidea Create a PPT about AI Agents, around 10 slides, targeted at product, engineering, and business leaders，without deepresearch
 ```
 
 The exact syntax depends on the host agent, but the expected experience is the same: the agent loads the Slidea skill, gathers missing information when needed, and runs the slide generation pipeline to final artifacts.
@@ -112,17 +112,25 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
    If you want premium-routed callsites to use the premium model first, also fill in `PREMIUM_LLM_API_KEY`.
    `PREMIUM_LLM_MODEL` and `PREMIUM_LLM_API_BASE_URL` already have fixed recommended defaults and should usually not be changed. The only recommended premium model right now is `google/gemini-3.1-pro-preview`.
 
-4. Run an example:
+4. Quick example:
    ```bash
    .venv/bin/python scripts/run_ppt_pipeline.py \
-     --text "Create a 10-slide PPT introducing AI Agents" \
+     --text "Create a 10-slide PPT introducing AI Agents, without deepresearch, targeted at engineers and covering Agent technology trends" \
+   ```
+
+   After the task starts, a PPTX file will be generated in about 15 minutes, and the file path will be reported in the agent context.
+
+5. Detailed example #1:
+   ```bash
+   .venv/bin/python scripts/run_ppt_pipeline.py \
+     --text "Create a 10-slide PPT introducing AI Agents, without deepresearch" \
      --session-id session_test \
      --run-id id_test
    ```
 
    If `session-id` and `run-id` are not specified, the system uses the current time as the default identifier value. In the example above, `session_test` and `id_test` are just sample strings.
 
-5. Resume an interrupted run
+   **Resume an interrupted run**
 
    PPT generation may pause during execution to interact with the user. The Slidea CLI supports resuming an interrupted PPT generation task.
 
@@ -132,16 +140,27 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
 
    ```bash
    .venv/bin/python scripts/run_ppt_pipeline.py \
-     --resume "targeted at product, engineering, and business leaders" \
+     --resume "targeted at engineers and covering Agent technology trends" \
      --session-id session_test \
      --run-id id_test
    ```
 
    Here `session_test` and `id_test` are identifiers that were created earlier for a run that was interrupted.
 
+6. Detailed example #2:
+
+   ```bash
+   .venv/bin/python scripts/run_ppt_pipeline.py \
+     --text "Create a 10-slide PPT introducing AI Agents, with deepresearch, targeted at engineers and covering Agent technology trends" \
+     --session-id session_test \
+     --run-id id_test
+   ```
+
+   Slidea includes built-in deepresearch capabilities. If the presentation topic is broad, you can request deepresearch first (20-30 minutes), then generate the PPTX file based on the report.
+
 For more commands, see `docs/cli.md`.
 
-If you do not want to use the installer in step 2 to prepare the runtime automatically, you can also set it up manually:
+If you do not want to use the installer in step 2 to prepare the runtime automatically, you can also set it up manually as follows:
 
 ```bash
 python3 -m venv .venv
@@ -178,7 +197,7 @@ This subsystem is split out to separate "how to think about the deck" from "how 
 
 During PPT rendering, Slidea uses a few-shot approach to keep generated layouts visually consistent.
 
-At the moment, Slidea includes five built-in templates: general light, general dark, red political, academic report, and child-friendly science/popularization. By default, Slidea automatically selects the most suitable template based on the user's topic, but users can also explicitly request a specific template style in the PPT generation prompt.
+Slidea features 7 built-in templates: General Light, General Dark, Political Red, Academic Blue, Cute Color, Chinese Art, and English Art. While Slidea typically auto-selects the best template based on the topic, users can manually specify a style in their generation request.
 
 ### Deep Research
 
