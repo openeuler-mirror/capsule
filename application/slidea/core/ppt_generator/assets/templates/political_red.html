@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Business Blue Template</title>
+    <title>Political Red Template</title>
     
     <!-- 必须的 Tailwind CSS -->
     <script src="https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
@@ -35,7 +35,7 @@
             font-family: 'Noto Sans SC', sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #ffffff;
+            background-color: #fcfcfc; /* 稍微偏暖的整体背景 */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -49,6 +49,7 @@
             box-sizing: border-box;
             overflow: hidden;
             background-color: #ffffff;
+            box-shadow: 0 4px 20px rgba(222, 41, 16, 0.05); /* 添加极其微弱的红色阴影增加质感 */
         }
 
         .section-container {
@@ -75,21 +76,22 @@
 </head>
 <body>
 
-    <!-- 主容器 -->
-    <div id="ppt-container" class="border-t-[8px] border-b-[8px] border-[#005aab] flex flex-col box-border">
+    <!-- 主容器：边框改为中国红 #de2910 -->
+    <div id="ppt-container" class="border-t-[8px] border-b-[8px] border-[#de2910] flex flex-col box-border">
         
         <!-- Header -->
         <header class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
             <div class="flex items-center">
-                <h1 class="text-3xl font-bold text-gray-800">{{PAGE_TITLE}}</h1>
+                <!-- 标题文字改为中国红 -->
+                <h1 class="text-3xl font-bold text-[#de2910]">{{PAGE_TITLE}}</h1>
             </div>
         </header>
 
         <!-- Main Content 区域 (带缩放兼容结构) -->
         <div class="section-container flex-1 px-10 py-2">
             <div class="scalable-content">
-                <!-- 顶级容器架构: flex-1 flex flex-col -->
-                <div class="flex-1 flex flex-col w-full h-full border-2 border-dashed border-gray-200 p-8 min-h-0">
+                <!-- 顶级容器架构: 边框改为淡红色 border-red-200 -->
+                <div class="flex-1 flex flex-col w-full h-full border-2 border-dashed border-red-200 p-8 min-h-0">
                     
                     <!-- 内容区布局: flex-1 flex flex-col justify-around (后续在此处放入真实内容模块) -->
                     <div class="flex-1 flex flex-col justify-around items-center min-h-0">
