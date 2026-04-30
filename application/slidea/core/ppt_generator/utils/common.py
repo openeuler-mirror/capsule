@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 import hashlib
 import mimetypes
 import os
@@ -7,8 +8,9 @@ import platform
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 
@@ -35,7 +37,8 @@ MACOS_SYSTEM_LIBREOFFICE_CANDIDATES = ("libreoffice", "soffice")
 WIN_SYSTEM_LIBREOFFICE_CANDIDATES = ("soffice.com", "soffice.exe", "libreoffice", "soffice")
 DEFAULT_HTML_TO_PDF_CONCURRENCY = 3
 DEFAULT_RENDER_READY_TIMEOUT_MS = 20000
-DEFAULT_REMOTE_ASSET_PROBE_TIMEOUT_S = 5.0
+DEFAULT_RENDER_ASSET_FETCH_TIMEOUT_S = 15.0
+DEFAULT_RENDER_ASSET_CACHE_MAX_MB = 2048
 REMOTE_ASSET_URL_FALLBACKS = {
     "https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js": [
         "https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js",
@@ -81,6 +84,26 @@ REMOTE_FONT_CSS_FALLBACK_HOSTS = (
     "fonts.font.im",
 )
 REMOTE_FONT_CSS_MATCH_HOSTS = REMOTE_FONT_CSS_FALLBACK_HOSTS + ("fonts.googleapis.com.cn",)
+RENDER_ASSET_CACHEABLE_RESOURCE_TYPES = {"script", "stylesheet", "font"}
+RENDER_ASSET_CACHEABLE_EXTENSIONS = {
+    ".css",
+    ".js",
+    ".mjs",
+    ".woff2",
+    ".woff",
+    ".ttf",
+    ".otf",
+    ".eot",
+}
+RENDER_ASSET_WARMUP_URLS = tuple(
+    dict.fromkeys(
+        url
+        for fallback_urls in REMOTE_ASSET_URL_FALLBACKS.values()
+        for url in fallback_urls[:1]
+    )
+)
+_RENDER_ASSET_LOCKS: dict[str, asyncio.Lock] = {}
+_RENDER_ASSET_LOCKS_GUARD = asyncio.Lock()
 
 
 async def get_scale_step_value(html_path):
@@ -94,7 +117,7 @@ async def get_scale_step_value(html_path):
         page = await context.new_page()
 
         try:
-            await page.goto(f'file://{absolute_html_path}', wait_until='domcontentloaded', timeout=60000)
+            await page.goto(f'file://{absolute_html_path}', wait_until='domcontentloaded', timeout=120000)
             await wait_for_page_assets_ready(page, absolute_html_path)
             await page.wait_for_function(
                 "() => window.final_ratio !== undefined && window.final_ratio !== null",
@@ -158,6 +181,7 @@ async def _batch_html_to_pdf(html_file_paths: list[str], save_dir: str) -> list[
     """
     并行处理 HTML 到 PDF 的转换 (使用全局 Browser 实例)
     """
+    await warmup_render_assets()
     semaphore = asyncio.Semaphore(_get_html_to_pdf_concurrency())
     async with BrowserManager.get_browser_context() as browser:
         tasks = [
@@ -195,6 +219,184 @@ def _get_render_ready_timeout_ms() -> int:
         return DEFAULT_RENDER_READY_TIMEOUT_MS
 
 
+def _is_env_enabled(name: str, default: bool = True) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _get_render_asset_cache_dir() -> Path:
+    raw_value = os.getenv("SLIDEA_RENDER_ASSET_CACHE_DIR")
+    if raw_value:
+        return Path(raw_value).expanduser()
+    return Path(app_base_dir) / ".cache" / "render_assets"
+
+
+def _get_render_asset_fetch_timeout_s() -> float:
+    raw_value = os.getenv("SLIDEA_RENDER_ASSET_FETCH_TIMEOUT_S", str(DEFAULT_RENDER_ASSET_FETCH_TIMEOUT_S))
+    try:
+        return max(1.0, float(raw_value))
+    except (TypeError, ValueError):
+        logger.warning(
+            f"Invalid SLIDEA_RENDER_ASSET_FETCH_TIMEOUT_S={raw_value}, "
+            f"fallback to {DEFAULT_RENDER_ASSET_FETCH_TIMEOUT_S}"
+        )
+        return DEFAULT_RENDER_ASSET_FETCH_TIMEOUT_S
+
+
+def _get_render_asset_cache_max_bytes() -> int:
+    raw_value = os.getenv("SLIDEA_RENDER_ASSET_CACHE_MAX_MB", str(DEFAULT_RENDER_ASSET_CACHE_MAX_MB))
+    try:
+        return max(1, int(raw_value)) * 1024 * 1024
+    except (TypeError, ValueError):
+        logger.warning(
+            f"Invalid SLIDEA_RENDER_ASSET_CACHE_MAX_MB={raw_value}, "
+            f"fallback to {DEFAULT_RENDER_ASSET_CACHE_MAX_MB}"
+        )
+        return DEFAULT_RENDER_ASSET_CACHE_MAX_MB * 1024 * 1024
+
+
+def _is_render_asset_cache_enabled() -> bool:
+    return _is_env_enabled("SLIDEA_RENDER_ASSET_CACHE_ENABLED", True)
+
+
+def _is_render_asset_warmup_enabled() -> bool:
+    return _is_env_enabled("SLIDEA_RENDER_ASSET_WARMUP_ENABLED", True)
+
+
+def _is_remote_url(asset_url: str) -> bool:
+    return urlparse(asset_url).scheme in {"http", "https"}
+
+
+def _is_font_css_url(asset_url: str) -> bool:
+    return _build_font_css_fallback_urls(asset_url) is not None
+
+
+def _is_cacheable_render_asset_url(asset_url: str, resource_type: str | None = None) -> bool:
+    if not _is_remote_url(asset_url):
+        return False
+    if resource_type in RENDER_ASSET_CACHEABLE_RESOURCE_TYPES:
+        return True
+    if _is_font_css_url(asset_url):
+        return True
+
+    parsed_url = urlparse(asset_url)
+    path = parsed_url.path.lower()
+    return any(path.endswith(extension) for extension in RENDER_ASSET_CACHEABLE_EXTENSIONS)
+
+
+def _guess_render_asset_content_type(asset_url: str, fallback_content_type: str | None = None) -> str:
+    if fallback_content_type:
+        return fallback_content_type.split(";")[0].strip()
+    if _is_font_css_url(asset_url) or urlparse(asset_url).path.endswith(".css"):
+        return "text/css"
+    if urlparse(asset_url).path.endswith((".js", ".mjs")):
+        return "application/javascript"
+    guessed_type, _ = mimetypes.guess_type(urlparse(asset_url).path)
+    return guessed_type or "application/octet-stream"
+
+
+def _get_render_asset_cache_paths(asset_url: str) -> tuple[Path, Path]:
+    cache_key = hashlib.sha256(asset_url.encode("utf-8")).hexdigest()
+    cache_dir = _get_render_asset_cache_dir()
+    return cache_dir / "responses" / cache_key, cache_dir / "metadata" / f"{cache_key}.json"
+
+
+async def _get_render_asset_lock(asset_url: str) -> asyncio.Lock:
+    async with _RENDER_ASSET_LOCKS_GUARD:
+        lock = _RENDER_ASSET_LOCKS.get(asset_url)
+        if lock is None:
+            lock = asyncio.Lock()
+            _RENDER_ASSET_LOCKS[asset_url] = lock
+        return lock
+
+
+def _read_cached_render_asset(asset_url: str) -> tuple[bytes, dict] | None:
+    body_path, metadata_path = _get_render_asset_cache_paths(asset_url)
+    if not body_path.exists() or not metadata_path.exists():
+        return None
+
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        body = body_path.read_bytes()
+        metadata["last_used_at"] = time.time()
+        metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        return body, metadata
+    except Exception as error:
+        logger.warning(f"Failed reading render asset cache for {asset_url}: {error}")
+        return None
+
+
+def _write_cached_render_asset(
+    asset_url: str,
+    source_url: str,
+    body: bytes,
+    content_type: str,
+    status_code: int,
+) -> dict:
+    body_path, metadata_path = _get_render_asset_cache_paths(asset_url)
+    body_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+
+    body_path.write_bytes(body)
+    now = time.time()
+    metadata = {
+        "url": asset_url,
+        "source_url": source_url,
+        "content_type": content_type,
+        "status": status_code,
+        "created_at": now,
+        "last_used_at": now,
+        "size": len(body),
+    }
+    metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    _prune_render_asset_cache()
+    return metadata
+
+
+def _prune_render_asset_cache():
+    cache_dir = _get_render_asset_cache_dir()
+    responses_dir = cache_dir / "responses"
+    metadata_dir = cache_dir / "metadata"
+    if not responses_dir.exists():
+        return
+
+    max_bytes = _get_render_asset_cache_max_bytes()
+    try:
+        entries = []
+        total_size = 0
+        for body_path in responses_dir.iterdir():
+            if not body_path.is_file():
+                continue
+            size = body_path.stat().st_size
+            total_size += size
+            metadata_path = metadata_dir / f"{body_path.name}.json"
+            last_used_at = body_path.stat().st_mtime
+            if metadata_path.exists():
+                try:
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    last_used_at = float(metadata.get("last_used_at") or last_used_at)
+                except Exception as error:
+                    logger.debug(f"Failed reading render asset cache metadata {metadata_path}: {error}")
+            entries.append((last_used_at, size, body_path, metadata_path))
+
+        if total_size <= max_bytes:
+            return
+
+        for _, size, body_path, metadata_path in sorted(entries, key=lambda item: item[0]):
+            try:
+                body_path.unlink(missing_ok=True)
+                metadata_path.unlink(missing_ok=True)
+                total_size -= size
+                if total_size <= max_bytes:
+                    break
+            except Exception as error:
+                logger.warning(f"Failed pruning render asset cache file {body_path}: {error}")
+    except Exception as error:
+        logger.warning(f"Failed pruning render asset cache: {error}")
+
+
 def _build_remote_asset_probe_headers(asset_url: str) -> dict[str, str]:
     headers = {
         "User-Agent": UA.random,
@@ -211,21 +413,49 @@ def _build_remote_asset_probe_headers(asset_url: str) -> dict[str, str]:
     return headers
 
 
-async def _probe_remote_asset_url(asset_url: str) -> bool:
+async def _fetch_render_asset_candidate(asset_url: str) -> tuple[bytes, str, int]:
     headers = _build_remote_asset_probe_headers(asset_url)
+    timeout_s = _get_render_asset_fetch_timeout_s()
+
+    async with httpx.AsyncClient(
+        verify=False,
+        follow_redirects=True,
+        timeout=timeout_s,
+    ) as client:
+        response = await client.get(asset_url, headers=headers)
+        response.raise_for_status()
+        content_type = _guess_render_asset_content_type(asset_url, response.headers.get("content-type"))
+        return response.content, content_type, response.status_code
+
+
+def _rewrite_css_relative_urls(css_body: bytes, source_url: str, content_type: str) -> bytes:
+    if content_type != "text/css":
+        return css_body
 
     try:
-        async with httpx.AsyncClient(
-            verify=False,
-            follow_redirects=True,
-            timeout=DEFAULT_REMOTE_ASSET_PROBE_TIMEOUT_S,
-        ) as client:
-            response = await client.get(asset_url, headers=headers)
-            response.raise_for_status()
-            return True
-    except Exception as error:
-        logger.debug(f"Remote asset probe failed for {asset_url}: {error}")
-        return False
+        css_text = css_body.decode("utf-8")
+    except UnicodeDecodeError:
+        return css_body
+
+    def replace_url(match):
+        quote = match.group("quote") or ""
+        raw_url = match.group("url").strip()
+        if _should_keep_css_url(raw_url):
+            return match.group(0)
+        return f"url({quote}{urljoin(source_url, raw_url)}{quote})"
+
+    rewritten = re.sub(
+        r"url\(\s*(?P<quote>['\"]?)(?P<url>[^'\")]+)(?P=quote)\s*\)",
+        replace_url,
+        css_text,
+    )
+    return rewritten.encode("utf-8")
+
+
+def _should_keep_css_url(raw_url: str) -> bool:
+    if not raw_url or raw_url.startswith(("#", "data:", "blob:", "//")):
+        return True
+    return bool(urlparse(raw_url).scheme)
 
 
 def _build_font_css_fallback_urls(original_url: str) -> list[str] | None:
@@ -263,48 +493,109 @@ def _get_remote_asset_fallback_urls(original_url: str) -> list[str] | None:
     return _build_font_css_fallback_urls(original_url)
 
 
-async def _resolve_remote_asset_url(original_url: str, page_asset_source_cache: dict[str, str]) -> str:
-    cached_url = page_asset_source_cache.get(original_url)
-    if cached_url:
-        return cached_url
-
+def _get_render_asset_candidate_urls(original_url: str) -> list[str]:
     fallback_urls = _get_remote_asset_fallback_urls(original_url) or [original_url]
-    for candidate_url in fallback_urls:
-        if await _probe_remote_asset_url(candidate_url):
-            page_asset_source_cache[original_url] = candidate_url
-            if candidate_url != original_url:
-                logger.warning(
-                    f"Remote asset source switched: {original_url} -> {candidate_url}"
-                )
-            else:
-                logger.debug(f"Remote asset source ok: {original_url}")
-            return candidate_url
+    candidate_urls = []
+    seen_urls = set()
+    for candidate_url in [original_url, *fallback_urls]:
+        if candidate_url in seen_urls:
+            continue
+        seen_urls.add(candidate_url)
+        candidate_urls.append(candidate_url)
+    return candidate_urls
 
-    logger.warning(f"No healthy remote asset source found for {original_url}, fallback to original url")
-    page_asset_source_cache[original_url] = original_url
-    return original_url
+
+def get_render_asset_candidate_urls(original_url: str) -> list[str]:
+    return _get_render_asset_candidate_urls(original_url)
+
+
+def is_cacheable_render_asset_url(asset_url: str, resource_type: str | None = None) -> bool:
+    return _is_cacheable_render_asset_url(asset_url, resource_type)
+
+
+def rewrite_css_relative_urls(css_body: bytes, source_url: str, content_type: str) -> bytes:
+    return _rewrite_css_relative_urls(css_body, source_url, content_type)
+
+
+async def _get_or_fetch_render_asset(asset_url: str) -> tuple[bytes, dict]:
+    cached_asset = _read_cached_render_asset(asset_url)
+    if cached_asset:
+        logger.debug(f"Render asset cache hit: {asset_url}")
+        return cached_asset
+
+    lock = await _get_render_asset_lock(asset_url)
+    async with lock:
+        cached_asset = _read_cached_render_asset(asset_url)
+        if cached_asset:
+            logger.debug(f"Render asset cache hit after wait: {asset_url}")
+            return cached_asset
+
+        last_error = None
+        for candidate_url in _get_render_asset_candidate_urls(asset_url):
+            try:
+                body, content_type, status_code = await _fetch_render_asset_candidate(candidate_url)
+                body = _rewrite_css_relative_urls(body, candidate_url, content_type)
+                metadata = _write_cached_render_asset(
+                    asset_url,
+                    candidate_url,
+                    body,
+                    content_type,
+                    status_code,
+                )
+                if candidate_url != asset_url:
+                    logger.warning(f"Render asset fallback fetched: {asset_url} -> {candidate_url}")
+                else:
+                    logger.info(f"Render asset cached: {asset_url}")
+                return body, metadata
+            except Exception as error:
+                last_error = error
+                logger.warning(f"Render asset fetch failed for {candidate_url}: {error}")
+
+        raise RuntimeError(f"Failed to fetch render asset {asset_url}: {last_error}")
+
+
+async def warmup_render_assets():
+    if not _is_render_asset_cache_enabled() or not _is_render_asset_warmup_enabled():
+        return
+
+    results = await asyncio.gather(
+        *(_get_or_fetch_render_asset(asset_url) for asset_url in RENDER_ASSET_WARMUP_URLS),
+        return_exceptions=True,
+    )
+    failed_count = sum(1 for result in results if isinstance(result, Exception))
+    if failed_count:
+        logger.warning(f"Render asset warmup finished with {failed_count} failed asset(s)")
 
 
 def build_remote_asset_request_router():
-    page_asset_source_cache: dict[str, str] = {}
-
     async def route_remote_asset_request(route):
         request = route.request
         original_url = request.url
 
-        if not _get_remote_asset_fallback_urls(original_url):
+        if not _is_render_asset_cache_enabled() or not _is_cacheable_render_asset_url(
+            original_url,
+            getattr(request, "resource_type", None),
+        ):
             await route.continue_()
             return
 
         try:
-            selected_url = await _resolve_remote_asset_url(original_url, page_asset_source_cache)
-            if selected_url != original_url:
-                await route.continue_(url=selected_url)
-                return
+            body, metadata = await _get_or_fetch_render_asset(original_url)
+            await route.fulfill(
+                status=int(metadata.get("status") or 200),
+                body=body,
+                headers={
+                    "content-type": metadata.get("content_type") or _guess_render_asset_content_type(original_url),
+                    "access-control-allow-origin": "*",
+                    "cache-control": "public, max-age=31536000",
+                },
+            )
         except Exception as error:
-            logger.warning(f"Remote asset routing failed for {original_url}: {error}")
-
-        await route.continue_()
+            logger.warning(
+                f"Render asset cache/proxy failed for {original_url}, "
+                f"continue with original request: {error}"
+            )
+            await route.continue_()
 
     return route_remote_asset_request
 
@@ -395,6 +686,12 @@ async def wait_for_page_assets_ready(page, html_file_path: str):
         logger.warning(f"FontAwesome render wait skipped for {html_file_path}: {error}")
 
     await page.wait_for_timeout(1000)
+    critical_asset_failures = getattr(page, "_slidea_critical_asset_failures", [])
+    if critical_asset_failures:
+        raise RuntimeError(
+            f"Critical render asset failed for {html_file_path}: "
+            + "; ".join(critical_asset_failures[:5])
+        )
 
 
 async def _convert_single_html_to_pdf(browser, html_file_path: str, save_dir: str) -> str | None:
@@ -412,7 +709,8 @@ async def _convert_single_html_to_pdf(browser, html_file_path: str, save_dir: st
     try:
         for attempt in range(1, max_attempts + 1):
             try:
-                await page.goto(f'file://{absolute_html_path}', wait_until='domcontentloaded', timeout=30000)
+                setattr(page, "_slidea_critical_asset_failures", [])
+                await page.goto(f'file://{absolute_html_path}', wait_until='domcontentloaded', timeout=120000)
                 await wait_for_page_assets_ready(page, absolute_html_path)
 
                 # 打印 PDF
@@ -531,7 +829,8 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
 
     if executable is None or not executable.exists():
         logger.warning(
-            "PDF to PPTX conversion skipped: no usable LibreOffice executable was found in the bundled directory or system PATH"
+            "PDF to PPTX conversion skipped: no usable LibreOffice executable "
+            "was found in the bundled directory or system PATH"
         )
         return ""
 

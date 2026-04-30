@@ -7,6 +7,7 @@ output/
 logs/
 libreoffice/
 .venv/
+.cache/
 *.sqlite*
 .install_state.json
 

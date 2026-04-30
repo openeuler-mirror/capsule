@@ -16,7 +16,7 @@ async def screenshot_html(html_path: str, output_path: str) -> str:
         await context.route("**/*", build_remote_asset_request_router())
         page = await context.new_page()
         try:
-            await page.goto(f"file://{absolute_html_path}", wait_until="domcontentloaded", timeout=60000)
+            await page.goto(f"file://{absolute_html_path}", wait_until="domcontentloaded", timeout=120000)
             await wait_for_page_assets_ready(page, absolute_html_path)
             await page.screenshot(path=output_path)
             logger.info(f"截图已保存到: {output_path}")

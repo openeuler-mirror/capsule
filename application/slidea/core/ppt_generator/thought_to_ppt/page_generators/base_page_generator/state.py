@@ -2,9 +2,9 @@ import operator
 from typing import Annotated, List, Optional, Any, Dict
 
 try:
-    from typing_extensions import Literal, TypedDict
+    from typing_extensions import Literal, NotRequired, TypedDict
 except ImportError:  # pragma: no cover - Python 3.11+ fallback
-    from typing import Literal, TypedDict
+    from typing import Literal, NotRequired, TypedDict
 
 from core.ppt_generator.thought_to_ppt.state import GeneratedPageResult
 
@@ -26,12 +26,12 @@ class PPTWorkerState(TypedDict):
     generated_pages: Annotated[List[GeneratedPageResult], operator.add]  # 生成的PPT页面结果列表
 
     # VLM 视觉审阅路径状态
-    vlm_iteration: int  # VLM judge/modify 迭代次数
-    screenshot_path: Optional[str]  # 最近一次截图路径
-    judge_result: Optional[Dict[str, Any]]  # 最近一次 judge 结构化结果
-    vlm_judge_history: Optional[List[Dict[str, Any]]]  # 压缩后的 VLM 审阅历史
-    best_html_content: Optional[str]  # 历史最佳版本的 HTML
-    best_file_path: Optional[str]  # 历史最佳版本的文件路径
-    best_severity: Optional[Literal["none", "minor", "critical"]]  # 历史最佳版本的严重度
-    best_score: Optional[float]  # 历史最佳版本的视觉评分
-    best_issue_count: Optional[int]  # 历史最佳版本的问题数量
+    vlm_iteration: NotRequired[int]  # VLM judge/modify 迭代次数
+    screenshot_path: NotRequired[Optional[str]]  # 最近一次截图路径
+    judge_result: NotRequired[Optional[Dict[str, Any]]]  # 最近一次 judge 结构化结果
+    vlm_judge_history: NotRequired[Optional[List[Dict[str, Any]]]]  # 压缩后的 VLM 审阅历史
+    vlm_candidates: NotRequired[Optional[List[Dict[str, Any]]]]  # 可供最终横向选择的 VLM 候选版本
+    best_html_content: NotRequired[Optional[str]]  # 历史最佳版本的 HTML
+    best_file_path: NotRequired[Optional[str]]  # 历史最佳版本的文件路径
+    best_severity: NotRequired[Optional[Literal["none", "minor", "critical"]]]  # 历史最佳版本的严重度
+    best_issue_count: NotRequired[Optional[int]]  # 历史最佳版本的问题数量
