@@ -10,7 +10,7 @@ from core.utils.logger import logger
 from core.utils.config import settings
 from core.ppt_generator.utils.common import get_web_images_content, build_image_url
 from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_invoke
-from core.utils.tavily_search import async_search
+from core.utils.search import async_search
 from core.ppt_generator.utils.image import generate_ai_image, get_ai_images_content
 from core.ppt_generator.thought_to_ppt.state import PageType
 from core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.state import (

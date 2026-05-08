@@ -21,7 +21,7 @@ from core.deep_research.state import (
     DecomposeItem, DecisionItem, SearchItem
 )
 from core.utils.llm import ModelRoute, get_llm_by_route, llm_invoke
-from core.utils.tavily_search import tavily_search
+from core.utils.search import tavily_search
 from core.utils.crawl import get_content
 
 

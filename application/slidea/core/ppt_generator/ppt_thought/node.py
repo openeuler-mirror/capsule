@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnableConfig
 from core.ppt_generator.ppt_thought.state import ThoughtState, ParseQuery, ResearchMode
 from core.utils.llm import ModelRoute, llm_invoke
 from core.utils.crawl import get_content
-from core.utils.tavily_search import tavily_search
+from core.utils.search import tavily_search
 from core.utils.interrupt import InterruptType
 from core.utils.cache import run_dir_from_config, load_json, save_json, save_text, load_text
 from core.utils.config import settings, app_base_dir

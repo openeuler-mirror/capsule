@@ -9,7 +9,7 @@ def get_markdown_images(markdown_text: str) -> list[str]:
     image_links = []
     for match in matches:
         url = match.split(" ")[0].strip()
-        if url:
+        if url and url.startswith(("http://", "https://")):
             image_links.append(url)
 
     return image_links
