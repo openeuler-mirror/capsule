@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 from typing import List
 import random
@@ -44,7 +45,7 @@ class KeyPool:
 key_pool = KeyPool(settings.TAVILY_API_KEYS)
 
 
-async def async_search(query: str, search_image: bool = False, max_results: int = 5):
+async def async_search(query: str, search_image: bool = False, include_raw: bool = True, max_results: int = 5):
     """
     执行搜索。
     机制：
@@ -75,7 +76,7 @@ async def async_search(query: str, search_image: bool = False, max_results: int 
                 max_results=max_results,
                 include_images=search_image,
                 include_image_descriptions=search_image,
-                include_raw_content = True
+                include_raw_content=include_raw
             )
 
             if search_image:
@@ -98,7 +99,12 @@ async def async_search(query: str, search_image: bool = False, max_results: int 
     return []
 
 
-async def tavily_search(queries: str | list, search_image: bool = False, max_results: int = 5):
+async def tavily_search(
+    queries: str | list,
+    search_image: bool = False,
+    include_raw: bool = True,
+    max_results: int = 5
+):
     """support batch tavily search"""
 
     if not queries:
@@ -110,7 +116,7 @@ async def tavily_search(queries: str | list, search_image: bool = False, max_res
     tasks = []
     for query in queries:
         task = asyncio.create_task(
-            async_search(query, search_image=search_image, max_results=max_results)
+            async_search(query, search_image=search_image, include_raw=include_raw, max_results=max_results)
         )
         tasks.append(task)
 
@@ -122,10 +128,19 @@ async def tavily_search(queries: str | list, search_image: bool = False, max_res
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Tavily 搜索")
+    parser.add_argument("queries", nargs="+", help="搜索关键词，支持多个")
+    parser.add_argument("--search-image", action="store_true", default=False, help="是否搜索图片 (默认: False)")
+    parser.add_argument("--include-raw", action="store_true", default=False, help="是否包含原始内容 (默认: False)")
+    parser.add_argument("--max-results", type=int, default=5, help="每个查询的最大结果数 (默认: 5)")
+    args = parser.parse_args()
     logger.info(
         asyncio.run(
             tavily_search(
-                ["EcoCup智能恒温咖啡杯产品详情", "再生材料在咖啡杯中的应用案例"]
+                args.queries,
+                search_image=args.search_image,
+                include_raw=args.include_raw,
+                max_results=args.max_results
             )
         )
     )

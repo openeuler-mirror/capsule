@@ -1,4 +1,5 @@
 import os
+import shutil
 from datetime import datetime
 import asyncio
 import json
@@ -104,7 +105,7 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter)
                                 )
 
     # 下载outline中的图片
-    outline = await download_outline_images(state["outline"], images_dir)
+    outline = await download_outline_images(state, state["outline"], images_dir)
 
     writer(
         {
@@ -159,10 +160,9 @@ async def select_ppt_template(query, outline):
     return template
 
 
-async def download_outline_images(outline: list[PPTPage], images_dir: str):
+async def download_outline_images(state: PPTState, outline: list[PPTPage], images_dir: str):
     """download and replace all images in outline"""
     all_tasks = []
-
     for page in outline:
         page_tasks = [download_image(url, images_dir) for url in page.reference_images]
         all_tasks.append(asyncio.gather(*page_tasks))
@@ -177,29 +177,8 @@ async def download_outline_images(outline: list[PPTPage], images_dir: str):
             if img:
                 res.append(img)
         page.reference_images = res
-    outline = await distribute_images_via_vlm(outline)
+    outline = await distribute_images_via_vlm(state, outline, images_dir)
     return outline
-
-
-def detect_distribution_mode(pages: List[Any]) -> str:
-    """
-    根据 reference_images 的分布特征自动判定模式：
-    """
-    content_pages = [p for p in pages if p.type.name == 'CONTENT']
-
-    if not content_pages:
-        return "global"
-
-    # 获取第一个内容页的图片列表作为基准
-    first_page_imgs = content_pages[0].reference_images
-
-    # 检查后续所有内容页是否与第一页完全一致
-    for p in content_pages[1:]:
-        if p.reference_images != first_page_imgs:
-            logger.info("Detected section mode in distribute images.")
-            return "section"
-    logger.info("Detected global mode in distribute images.")
-    return "global"
 
 
 def encode_image(image_path: str) -> str:
@@ -211,7 +190,7 @@ def encode_image(image_path: str) -> str:
         return ""
 
 
-async def distribute_images_via_vlm(outline: List[Any]) -> List[Any]:
+async def distribute_images_via_vlm(state: PPTState, outline: List[Any], images_dir: str) -> List[Any]:
     """
     自动判断模式并分发图片到最合适的页面
     """
@@ -221,23 +200,16 @@ async def distribute_images_via_vlm(outline: List[Any]) -> List[Any]:
         logger.warning("No available VLM route for image distribution. Skip VLM-based image distribution.")
         return processed_pages
 
-    # 1. 自动检测模式
-    mode = detect_distribution_mode(processed_pages)
-
-    # 2. 根据模式分发
-    if mode == "global":
-        await _process_global_mode(processed_pages)
-    elif mode == "section":
-        await _process_section_mode(processed_pages)
-
+    await _process_section_mode(processed_pages)
+    await _process_global_mode(state, processed_pages, images_dir)
     return processed_pages
 
 
-async def _process_global_mode(pages: List[Any]):
+async def _process_global_mode(state: PPTState, pages: List[Any], images_dir: str):
     """
     整份 PPT 的 Content 页共享同一组 Reference Images
     """
-    # 1. 筛选所有 Content 页面的索引
+    # 筛选所有 Content 页面的索引
     content_indices = [
         i for i, p in enumerate(pages)
         if p.type.name == 'CONTENT'
@@ -246,38 +218,30 @@ async def _process_global_mode(pages: List[Any]):
     if not content_indices:
         return
 
-    # 2. 获取去重后的图片列表 (取第一个有图的页面即可)
-    unique_images = []
-    for idx in content_indices:
-        # 直接访问属性
-        if pages[idx].reference_images:
-            unique_images = pages[idx].reference_images
-            break
-
-    if not unique_images:
+    global_imgs = state.get("images", [])
+    if not global_imgs:
         return
 
-    # 3. 清空所有 Content 页原本冗余的 reference_images
-    for idx in content_indices:
-        pages[idx].reference_images = []
+    moved_imgs = []
+    for img in global_imgs:
+        if os.path.exists(img) and os.path.dirname(img) != images_dir:
+            dest = os.path.join(images_dir, os.path.basename(img))
+            shutil.move(img, dest)
+            moved_imgs.append(dest)
+        else:
+            moved_imgs.append(img)
 
-    # 4. 构建上下文文本
     context_text = _build_page_context(pages, content_indices)
-
-    # 5. 并发请求
     tasks = [
         _ask_vlm_for_single_image(img_path, context_text, valid_indices=content_indices)
-        for img_path in unique_images
+        for img_path in moved_imgs
     ]
 
-    # 6. 等待结果
     results = await asyncio.gather(*tasks)
-
-    # 7. 分配结果
     for img_path, target_index in results:
         if target_index is not None:
-            # 直接 append 到 Pydantic 对象的 list 属性中
             pages[target_index].reference_images.append(img_path)
+            logger.debug(f"Assign image {img_path} to CONTENT page {target_index}")
 
 
 async def _process_section_mode(pages: List[Any]):

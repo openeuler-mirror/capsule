@@ -4,11 +4,9 @@ import json
 import hashlib
 import mimetypes
 import os
-import platform
 import re
-import shutil
-import subprocess
 import time
+
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -27,14 +25,12 @@ from PIL import Image
 
 from core.utils.logger import logger
 from core.utils.config import app_base_dir
-from core.ppt_generator.utils.browser import BrowserManager
 from core.utils.image_payload import build_image_url
+from core.utils.libreoffice import get_available_libreoffice_executable
+from core.ppt_generator.utils.browser import BrowserManager
+
 
 UA = UserAgent()
-LIBREOFFICE_DIR = Path(app_base_dir) / "libreoffice"
-LINUX_SYSTEM_LIBREOFFICE_CANDIDATES = ("libreoffice26.2", "libreoffice", "soffice")
-MACOS_SYSTEM_LIBREOFFICE_CANDIDATES = ("libreoffice", "soffice")
-WIN_SYSTEM_LIBREOFFICE_CANDIDATES = ("soffice.com", "soffice.exe", "libreoffice", "soffice")
 DEFAULT_HTML_TO_PDF_CONCURRENCY = 3
 DEFAULT_RENDER_READY_TIMEOUT_MS = 20000
 DEFAULT_RENDER_ASSET_FETCH_TIMEOUT_S = 15.0
@@ -754,51 +750,6 @@ def _merge_pdfs(pdf_paths: list[str], output_path: str):
     merger.close()
 
 
-def _get_local_libreoffice_executable() -> Path:
-    os_type = platform.system()
-
-    if os_type == "Windows":
-        program_files_dir = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
-        return program_files_dir / "LibreOffice" / "program" / "soffice.com"
-    if os_type == "Darwin":
-        return LIBREOFFICE_DIR / "LibreOffice.app" / "Contents" / "MacOS" / "soffice"
-    if os_type == "Linux":
-        return LIBREOFFICE_DIR / "libreoffice-app" / "AppRun"
-
-    raise RuntimeError(f"Unsupported operating system for LibreOffice: {os_type}")
-
-
-def _get_system_libreoffice_executable() -> Path | None:
-    os_type = platform.system()
-
-    candidates = []
-    if os_type == "Linux":
-        candidates = LINUX_SYSTEM_LIBREOFFICE_CANDIDATES
-    elif os_type == "Darwin":
-        candidates = MACOS_SYSTEM_LIBREOFFICE_CANDIDATES
-    elif os_type == "Windows":
-        candidates = WIN_SYSTEM_LIBREOFFICE_CANDIDATES
-
-    for candidate in candidates:
-        executable = shutil.which(candidate)
-        logger.info(f"Found LibreOffice {candidate} executable: {executable}")
-        if executable:
-            return Path(executable)
-    return None
-
-
-def _get_available_libreoffice_executable() -> Path | None:
-    system_executable = _get_system_libreoffice_executable()
-    if system_executable is not None:
-        return system_executable
-
-    local_executable = _get_local_libreoffice_executable()
-    if local_executable.exists():
-        return local_executable
-
-    return None
-
-
 def _build_libreoffice_pdf_to_pptx_command(
     executable: Path, file_path: str, output_dir: str
 ) -> list[str]:
@@ -825,7 +776,7 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
 
     pptx_path = os.path.splitext(file_path)[0] + ".pptx"
     output_dir = os.path.dirname(file_path)
-    executable = _get_available_libreoffice_executable()
+    executable = get_available_libreoffice_executable()
 
     if executable is None or not executable.exists():
         logger.warning(
@@ -964,6 +915,7 @@ def _ensure_placeholder_image(image_dir: str) -> str:
 
 async def download_image(img_url, image_dir):
     """download image and return img used in html"""
+
     if img_url.startswith("//"):
         img_url = "https:" + img_url
     headers = {

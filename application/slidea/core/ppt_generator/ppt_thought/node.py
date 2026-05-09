@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnableConfig
 from core.ppt_generator.ppt_thought.state import ThoughtState, ParseQuery, ResearchMode
 from core.utils.llm import ModelRoute, llm_invoke
 from core.utils.crawl import get_content
-from core.utils.tavily_search import tavily_search
+from core.utils.search import tavily_search
 from core.utils.interrupt import InterruptType
 from core.utils.cache import run_dir_from_config, load_json, save_json, save_text, load_text
 from core.utils.config import settings, app_base_dir
@@ -28,16 +28,20 @@ async def get_reference_node(state: ThoughtState, writer: StreamWriter, config: 
             return {"raw_content": cached}
 
     contents = ""
+    images = []
     urls = state["parsed_requirements"].urls
     logger.info(f"read urls: {urls}")
     for url in urls:
         writer({"step": f"阅读资料：{url}"})
-        contents = contents + await get_content(url)
+        result = await get_content(file_path=url, extract_images=True)
+        contents = contents + result['text']
+        images.extend(img['path'] for img in result['images'])
 
     if run_dir:
         save_text(f"{run_dir}/references/references.txt", contents)
+        save_json(f"{run_dir}/references/images.json", images)
 
-    return {"raw_content": contents}
+    return {"raw_content": contents, "images": images}
 
 
 async def parse_query_node(state: ThoughtState, config: RunnableConfig | None = None):

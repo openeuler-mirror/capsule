@@ -198,8 +198,10 @@ async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: st
     if "outline" in stages:
         deep_report = await _load_cached_text(out_dir, 'research/deep_report.md')
         refs_all = await _load_cached_text(out_dir, 'references/references_all.txt')
+        images = load_json(f"{out_dir}/references/images.json") or []
         state["ori_doc"] = deep_report or refs_all or ""
         state["is_markdown_doc"] = True if deep_report else False
+        state["images"] = images
         result = await generate_outline_node(state, config=config)
         state.update(result)
 

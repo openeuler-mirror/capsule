@@ -1,13 +1,41 @@
 {
   "include": [
-    { "from": "core", "to": "core" },
-    { "from": "docs", "to": "docs" },
-    { "from": "requirements.txt", "to": "requirements.txt" },
-    { "from": ".env.example", "to": ".env.example" },
-    { "from": "skill/SKILL.md", "to": "SKILL.md" },
-    { "from": "skill/UPDATE.md", "to": "UPDATE.md" },
-    { "from": "skill/INSTALL.md", "to": "INSTALL.md" },
-    { "from": "scripts", "to": "scripts" }
+    {
+      "from": "core",
+      "to": "core"
+    },
+    {
+      "from": "docs",
+      "to": "docs"
+    },
+    {
+      "from": "requirements.txt",
+      "to": "requirements.txt"
+    },
+    {
+      "from": ".env.example",
+      "to": ".env.example"
+    },
+    {
+      "from": "skill/SKILL.md",
+      "to": "SKILL.md"
+    },
+    {
+      "from": "skill/UPDATE.md",
+      "to": "UPDATE.md"
+    },
+    {
+      "from": "skill/INSTALL.md",
+      "to": "INSTALL.md"
+    },
+    {
+      "from": "skill/research_speech.md",
+      "to": "research_speech.md"
+    },
+    {
+      "from": "scripts",
+      "to": "scripts"
+    }
   ],
   "exclude": [
     "scripts/export_skill.py",

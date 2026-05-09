@@ -21,7 +21,7 @@ from core.deep_research.state import (
     DecomposeItem, DecisionItem, SearchItem
 )
 from core.utils.llm import ModelRoute, get_llm_by_route, llm_invoke
-from core.utils.tavily_search import tavily_search
+from core.utils.search import tavily_search
 from core.utils.crawl import get_content
 
 
@@ -447,7 +447,7 @@ async def batch_search(queries: list):
             source = url + '：' + r.get('title', "")
             content = r.get("raw_content", "")
             if url and not content:
-                content = await get_content(url)
+                content = (await get_content(url))["text"]
 
             if not content:
                 content = r.get('content', "")

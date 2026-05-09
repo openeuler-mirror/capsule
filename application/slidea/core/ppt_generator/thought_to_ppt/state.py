@@ -68,6 +68,7 @@ class PPTState(TypedDict):
     """全局状态"""
     query: str  # 用户输入的原始要求
     ori_doc: str  # 用于生成PPT的原始文档
+    images: list  # 用于生成PPT的图片列表
     is_markdown_doc: bool  # 原始文档是否为Markdown格式
     outline: List[PPTPage]  # PPT大纲
     save_dir: str  # PPT保存目录
@@ -88,3 +89,4 @@ class InputSchema(TypedDict):
     ori_doc: str  # 用于生成PPT的原始文档
     is_markdown_doc: bool  # 原始文档是否为Markdown格式
     html_template_name: Optional[str]  # 模板名称
+    images: list  # 用于生成PPT的图片列表
