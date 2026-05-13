@@ -105,8 +105,8 @@ _SERIF_LATIN = {
 
 # SVG stroke-dasharray -> DrawingML prstDash
 DASH_PRESETS = {
-    '4,4': 'dash',  '4 4': 'dash',
-    '6,3': 'dash',  '6 3': 'dash',
+    '4,4': 'dash', '4 4': 'dash',
+    '6,3': 'dash', '6 3': 'dash',
     '2,2': 'sysDot', '2 2': 'sysDot',
     '8,4': 'lgDash', '8 4': 'lgDash',
     '8,4,2,4': 'lgDashDot', '8 4 2 4': 'lgDashDot',

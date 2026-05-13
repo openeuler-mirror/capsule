@@ -25,7 +25,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.append(str(ROOT))
+
+from core.utils.logger import logger
 
 
 SVG_SUFFIXES = {".svg"}
@@ -55,19 +57,19 @@ def _resolve_inputs(inputs: list[Path]) -> tuple[list[str], Path]:
         input_dir = inputs[0]
         svg_paths = _collect_svg_files_from_dir(input_dir)
         if not svg_paths:
-            raise SystemExit(f"在目录中未找到 SVG 文件: {input_dir}")
+            raise ValueError(f"在目录中未找到 SVG 文件: {input_dir}")
         return svg_paths, input_dir
 
     svg_paths: list[str] = []
     for path in inputs:
         if not path.exists():
-            raise SystemExit(f"输入路径不存在: {path}")
+            raise ValueError(f"输入路径不存在: {path}")
         if path.is_dir():
-            raise SystemExit(
+            raise ValueError(
                 f"混合输入不支持：当提供多个路径时每个都必须是 SVG 文件，但 {path} 是目录"
             )
         if path.suffix.lower() not in SVG_SUFFIXES:
-            raise SystemExit(f"不是 SVG 文件: {path}")
+            raise ValueError(f"不是 SVG 文件: {path}")
         svg_paths.append(str(path))
     return svg_paths, inputs[0].parent
 
@@ -77,19 +79,18 @@ async def _convert(svg_paths: list[str], output_dir: Path, filename: str) -> Non
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f">>> 共 {len(svg_paths)} 个 SVG 文件，按以下顺序合成：")
+    logger.info(f">>> 共 {len(svg_paths)} 个 SVG 文件，按以下顺序合成：")
     for idx, path in enumerate(svg_paths):
-        print(f"    [{idx + 1:02d}] {path}")
-    print(f">>> 输出目录: {output_dir}")
-    print(f">>> 输出文件名: {filename}")
+        logger.info(f"    [{idx + 1:02d}] {path}")
+    logger.info(f">>> 输出目录: {output_dir}")
+    logger.info(f">>> 输出文件名: {filename}")
 
     _, pptx_path = await svgs_to_pptx(svg_paths, str(output_dir), filename)
 
     if pptx_path:
-        print(f"\n>>> 生成 PPTX: {pptx_path}")
+        logger.info(f">>> 生成 PPTX: {pptx_path}")
     else:
-        print("\n>>> SVG 转 PPTX 失败，请检查转换日志。")
-        raise SystemExit(1)
+        raise RuntimeError("SVG 转 PPTX 失败，请检查转换日志。")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -130,4 +131,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        logger.error(str(exc))
+        raise

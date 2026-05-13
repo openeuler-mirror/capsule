@@ -1,6 +1,7 @@
 """Slide XML and slide relationship XML generation."""
 # 以下代码源自 PPT Master (https://github.com/hugohe3/ppt-master)
 # 原始项目采用 MIT 许可证，版权所有 (c) 2025-2026 Hugo He
+# pylint: disable=too-many-arguments,huawei-too-many-arguments
 
 
 from __future__ import annotations
@@ -50,7 +51,9 @@ def create_slide_xml_with_svg(
         blip_xml = f'''<a:blip r:embed="{png_rid}">
             <a:extLst>
               <a:ext uri="{{96DAC541-7B7A-43D3-8B79-37D633B846F1}}">
-                <asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="{svg_rid}"/>
+                <asvg:svgBlip
+                  xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main"
+                  r:embed="{svg_rid}"/>
               </a:ext>
             </a:extLst>
           </a:blip>'''
@@ -127,13 +130,23 @@ def create_slide_rels_xml(
     if use_compat_mode:
         return f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
-  <Relationship Id="{png_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/{png_filename}"/>
-  <Relationship Id="{svg_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/{svg_filename}"/>
+  <Relationship Id="rId1"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
+    Target="../slideLayouts/slideLayout1.xml"/>
+  <Relationship Id="{png_rid}"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+    Target="../media/{png_filename}"/>
+  <Relationship Id="{svg_rid}"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+    Target="../media/{svg_filename}"/>
 </Relationships>'''
     else:
         return f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
-  <Relationship Id="{svg_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/{svg_filename}"/>
+  <Relationship Id="rId1"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
+    Target="../slideLayouts/slideLayout1.xml"/>
+  <Relationship Id="{svg_rid}"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+    Target="../media/{svg_filename}"/>
 </Relationships>'''

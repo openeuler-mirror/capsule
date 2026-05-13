@@ -16,6 +16,7 @@ from json_repair import repair_json
 from langchain_core.runnables import RunnableConfig
 import json
 
+
 def _normalize_outline_list(outline_list: list) -> list:
     """Drop malformed slides and fill missing optional fields.
 

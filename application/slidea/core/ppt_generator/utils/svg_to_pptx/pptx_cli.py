@@ -5,12 +5,12 @@
 
 from __future__ import annotations
 
-import sys
 import shutil
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
+from core.utils.logger import logger
 from .pptx_dimensions import CANVAS_FORMATS, get_project_info
 from .pptx_discovery import find_svg_files, find_notes_files
 from .pptx_builder import create_pptx_with_native_svg
@@ -22,7 +22,7 @@ except ImportError:
     _ANIMATIONS = {}
 
 
-def main() -> None:
+def main() -> int:
     """CLI entry point for the SVG to PPTX conversion tool."""
     transition_choices = (
         ['none'] + (list(TRANSITIONS.keys()) if TRANSITIONS
@@ -40,7 +40,7 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f'''
 Examples:
-    %(prog)s examples/ppt169_demo -s final    # Default: main pptx -> exports/, SVG snapshot + svg_output -> backup/<ts>/
+    %(prog)s examples/ppt169_demo -s final
     %(prog)s examples/ppt169_demo --only native   # Only native shapes version
     %(prog)s examples/ppt169_demo --only legacy   # Only SVG image version
     %(prog)s examples/ppt169_demo -o out.pptx     # Explicit path (SVG ref -> out_svg.pptx)
@@ -135,14 +135,15 @@ Speaker notes (enabled by default):
 
     project_path = Path(args.project_path)
     if not project_path.exists():
-        print(f"Error: Path does not exist: {project_path}")
-        sys.exit(1)
+        logger.error(f"Path does not exist: {project_path}")
+        return 1
 
     try:
         project_info = get_project_info(str(project_path))
         project_name = project_info.get('name', project_path.name)
         detected_format = project_info.get('format')
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"Failed to read project info from {project_path}: {exc}")
         project_name = project_path.name
         detected_format = None
 
@@ -153,8 +154,8 @@ Speaker notes (enabled by default):
     svg_files, source_dir_name = find_svg_files(project_path, args.source)
 
     if not svg_files:
-        print("Error: No SVG files found")
-        sys.exit(1)
+        logger.error("No SVG files found")
+        return 1
 
     # Determine which versions to generate
     only_mode = args.only
@@ -165,7 +166,7 @@ Speaker notes (enabled by default):
     if args.native and only_mode is None:
         gen_legacy = False
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
 
     backup_dir: Path | None = None
     if args.output:
@@ -216,12 +217,12 @@ Speaker notes (enabled by default):
     # --- Native shapes version (primary) ---
     if gen_native:
         if verbose:
-            print("PPT Master - SVG to PPTX Tool")
-            print("=" * 50)
-            print(f"  Project path: {project_path}")
-            print(f"  SVG directory: {source_dir_name}")
-            print(f"  Output file: {native_path}")
-            print()
+            logger.info("PPT Master - SVG to PPTX Tool")
+            logger.info("=" * 50)
+            logger.info(f"Project path: {project_path}")
+            logger.info(f"SVG directory: {source_dir_name}")
+            logger.info(f"Output file: {native_path}")
+            logger.info("")
 
         ok = create_pptx_with_native_svg(
             output_path=native_path,
@@ -234,14 +235,14 @@ Speaker notes (enabled by default):
     if gen_legacy:
         if verbose:
             if gen_native:
-                print()
-                print("-" * 50)
-            print("PPT Master - SVG to PPTX Tool (SVG Reference)")
-            print("=" * 50)
-            print(f"  Project path: {project_path}")
-            print(f"  SVG directory: {source_dir_name}")
-            print(f"  Output file: {legacy_path}")
-            print()
+                logger.info("")
+                logger.info("-" * 50)
+            logger.info("PPT Master - SVG to PPTX Tool (SVG Reference)")
+            logger.info("=" * 50)
+            logger.info(f"Project path: {project_path}")
+            logger.info(f"SVG directory: {source_dir_name}")
+            logger.info(f"Output file: {legacy_path}")
+            logger.info("")
 
         ok = create_pptx_with_native_svg(
             output_path=legacy_path,
@@ -257,11 +258,17 @@ Speaker notes (enabled by default):
                 try:
                     shutil.copytree(svg_output_src, svg_output_dst)
                     if verbose:
-                        print(f"  svg_output backup: {svg_output_dst}")
+                        logger.info(f"svg_output backup: {svg_output_dst}")
                 except Exception as exc:
                     if verbose:
-                        print(f"  [warn] svg_output backup skipped: {exc}")
+                        logger.warning(f"svg_output backup skipped: {exc}")
             elif verbose:
-                print(f"  [info] svg_output/ not found, backup skipped")
+                logger.info("svg_output/ not found, backup skipped")
 
-    sys.exit(0 if success else 1)
+    return 0 if success else 1
+
+
+if __name__ == "__main__":
+    exit_code = main()
+    if exit_code:
+        raise RuntimeError(f"SVG to PPTX conversion failed with exit code {exit_code}")

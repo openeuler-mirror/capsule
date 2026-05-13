@@ -59,8 +59,8 @@ class ScreenshotSvgFontTests(unittest.TestCase):
 <text x="60" y="65" font-family="Microsoft YaHei, Arial, sans-serif">中文</text>
 </svg>'''.encode("utf-8")
 
-        with patch.object(screenshot, "_detect_system_cjk_fonts", return_value=("Source Han Sans SC",)):
-            patched = screenshot._add_cjk_font_fallbacks(svg)
+        with patch.object(screenshot, "detect_system_cjk_fonts", return_value=("Source Han Sans SC",)):
+            patched = screenshot.add_cjk_font_fallbacks(svg)
         root = ET.fromstring(patched)
         text = next(elem for elem in root.iter() if elem.tag.rsplit("}", 1)[-1] == "text")
 
@@ -73,8 +73,8 @@ class ScreenshotSvgFontTests(unittest.TestCase):
 <text x="60" y="65" font-family="Noto Sans CJK SC, sans-serif">中文</text>
 </svg>'''.encode("utf-8")
 
-        with patch.object(screenshot, "_detect_system_cjk_fonts", return_value=("Noto Sans CJK SC",)):
-            patched = screenshot._add_cjk_font_fallbacks(svg)
+        with patch.object(screenshot, "detect_system_cjk_fonts", return_value=("Noto Sans CJK SC",)):
+            patched = screenshot.add_cjk_font_fallbacks(svg)
         root = ET.fromstring(patched)
         text = next(elem for elem in root.iter() if elem.tag.rsplit("}", 1)[-1] == "text")
 
@@ -96,7 +96,7 @@ class ScreenshotSvgFontTests(unittest.TestCase):
                 "run",
                 return_value=types.SimpleNamespace(returncode=0, stdout=fc_list_output),
             ):
-            result = screenshot._detect_system_cjk_fonts(False)
+            result = screenshot.detect_system_cjk_fonts(False)
 
         self.assertEqual(result[0], "Noto Sans CJK SC")
 

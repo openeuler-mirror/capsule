@@ -15,7 +15,7 @@ logging.getLogger("langgraph.checkpoint.serde.jsonplus").addFilter(NoUnregistere
 
 
 root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(root))
+sys.path.append(str(root))
 
 from core.utils.cache import new_run_id, run_dir, save_json, load_json
 from scripts.utils.cli_output import emit_stage_payload
@@ -211,9 +211,16 @@ async def _run_all_stages(args, run_id: str, out_dir: str):
 async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: str):
     from core.ppt_generator.thought_to_ppt.node import generate_outline_node, generate_pages_node
     from core.ppt_generator.thought_to_ppt.state import PPTState
-    from core.ppt_generator.ppt_thought.node import parse_query_node, get_reference_node, gather_content_router_node, simple_search_node, deep_research_node, generate_thought_node
+    from core.ppt_generator.ppt_thought.node import (
+        parse_query_node,
+        get_reference_node,
+        gather_content_router_node,
+        simple_search_node,
+        deep_research_node,
+        generate_thought_node,
+    )
     from core.ppt_generator.ppt_thought.state import ThoughtState
-    from core.utils.cache import load_json
+    from core.utils.cache import load_json as cache_load_json
 
     config = {"configurable": {"thread_id": args.session_id, "run_id": run_id}, "recursion_limit": args.recursion_limit}
     writer = SimpleWriter()
@@ -282,12 +289,28 @@ async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: st
                 tstate.update(await simple_search_node(tstate, writer, config=config))
             tstate.update(await generate_thought_node(tstate, config=config, writer=writer))
 
-    state: PPTState = {"query": args.text or "", "render_mode": args.render_mode, "ori_doc": "", "is_markdown_doc": False, "outline": [], "save_dir": "", "topic": "", "template_name": "", "template": "", "ppt_prompt": "", "language": "", "generated_pages": [], "page_files": [], "final_pdf_path": None, "final_pptx_path": None}
+    state: PPTState = {
+        "query": args.text or "",
+        "render_mode": args.render_mode,
+        "ori_doc": "",
+        "is_markdown_doc": False,
+        "outline": [],
+        "save_dir": "",
+        "topic": "",
+        "template_name": "",
+        "template": "",
+        "ppt_prompt": "",
+        "language": "",
+        "generated_pages": [],
+        "page_files": [],
+        "final_pdf_path": None,
+        "final_pptx_path": None,
+    }
 
     if "outline" in stages:
         deep_report = await _load_cached_text(out_dir, 'research/deep_report.md')
         refs_all = await _load_cached_text(out_dir, 'references/references_all.txt')
-        images = load_json(f"{out_dir}/references/images.json") or []
+        images = cache_load_json(f"{out_dir}/references/images.json") or []
         state["ori_doc"] = deep_report or refs_all or ""
         state["is_markdown_doc"] = True if deep_report else False
         state["images"] = images

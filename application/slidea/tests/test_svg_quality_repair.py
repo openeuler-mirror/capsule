@@ -27,7 +27,8 @@ class SVGQualityRepairTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             svg_path = Path(tmp_dir) / "01_bad.svg"
             svg_path.write_text(
-                '<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg"><style>.x{fill:red}</style></svg>',
+                '<svg width="1280" height="720" viewBox="0 0 1280 720" '
+                'xmlns="http://www.w3.org/2000/svg"><style>.x{fill:red}</style></svg>',
                 encoding="utf-8",
             )
             writer = DummyWriter()
@@ -44,7 +45,7 @@ class SVGQualityRepairTests(unittest.IsolatedAsyncioTestCase):
             repaired_content = svg_path.read_text(encoding="utf-8")
 
         self.assertIn("Fixed", repaired_content)
-        self.assertEqual(result["svg_quality_report"][0]["passed"], True)
+        self.assertTrue(result["svg_quality_report"][0]["passed"])
         self.assertTrue(any(payload.get("step", "").endswith("自动修复") for payload in writer.payloads))
 
     async def test_quality_check_raises_when_repair_fails(self):

@@ -1,6 +1,7 @@
 """SVG element converters: rect, circle, line, path, polygon, polyline, text, image, ellipse."""
 # 以下代码源自 PPT Master (https://github.com/hugohe3/ppt-master)
 # 原始项目采用 MIT 许可证，版权所有 (c) 2025-2026 Hugo He
+# pylint: disable=too-many-arguments,huawei-too-many-arguments
 
 
 from __future__ import annotations
@@ -10,6 +11,8 @@ import re
 import base64
 from typing import Any
 from xml.etree import ElementTree as ET
+
+from core.utils.logger import logger
 
 from .drawingml_context import ConvertContext, ShapeResult
 from .drawingml_utils import (
@@ -994,20 +997,20 @@ def _resolve_clip_geometry(
     Returns:
         DrawingML geometry XML string.
     """
-    DEFAULT = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+    default_geom = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
 
     clip_ref = elem.get('clip-path', '')
     if not clip_ref or clip_ref == 'none':
-        return DEFAULT
+        return default_geom
 
     clip_id = resolve_url_id(clip_ref)
     if not clip_id or clip_id not in ctx.defs:
-        return DEFAULT
+        return default_geom
 
     clip_elem = ctx.defs[clip_id]
     clip_tag = clip_elem.tag.replace(f'{{{SVG_NS}}}', '')
     if clip_tag != 'clipPath':
-        return DEFAULT
+        return default_geom
 
     # Find the first shape child of the clipPath
     shape = None
@@ -1018,7 +1021,7 @@ def _resolve_clip_geometry(
             break
 
     if shape is None:
-        return DEFAULT
+        return default_geom
 
     shape_tag = shape.tag.replace(f'{{{SVG_NS}}}', '')
     is_obb = clip_elem.get('clipPathUnits') == 'objectBoundingBox'
@@ -1032,13 +1035,13 @@ def _resolve_clip_geometry(
         rx = _f(shape.get('rx'))
         ry = _f(shape.get('ry'), rx)
         if rx <= 0 and ry <= 0:
-            return DEFAULT  # plain rect clip is a no-op
+            return default_geom  # plain rect clip is a no-op
         r = max(rx, ry)
         if is_obb:
             r = r * min(raw_w, raw_h)
         shorter = min(raw_w, raw_h)
         if shorter <= 0:
-            return DEFAULT
+            return default_geom
         adj = int(min(r / (shorter / 2), 1.0) * 50000)
         return (
             f'<a:prstGeom prst="roundRect"><a:avLst>'
@@ -1050,12 +1053,12 @@ def _resolve_clip_geometry(
     if shape_tag == 'path':
         d = shape.get('d', '')
         if not d:
-            return DEFAULT
+            return default_geom
         commands = parse_svg_path(d)
         commands = svg_path_to_absolute(commands)
         commands = normalize_path_commands(commands)
         if not commands:
-            return DEFAULT
+            return default_geom
         return _clip_commands_to_geom(
             commands, raw_x, raw_y, raw_w, raw_h, is_obb,
         )
@@ -1064,7 +1067,7 @@ def _resolve_clip_geometry(
     if shape_tag == 'polygon':
         pts = _parse_points(shape.get('points', ''))
         if not pts:
-            return DEFAULT
+            return default_geom
         commands = [PathCommand('M', [pts[0][0], pts[0][1]])]
         for px_, py_ in pts[1:]:
             commands.append(PathCommand('L', [px_, py_]))
@@ -1073,7 +1076,7 @@ def _resolve_clip_geometry(
             commands, raw_x, raw_y, raw_w, raw_h, is_obb,
         )
 
-    return DEFAULT
+    return default_geom
 
 
 # ---------------------------------------------------------------------------
@@ -1121,7 +1124,7 @@ def convert_image(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
         if not img_path.exists():
             img_path = ctx.svg_dir.parent / href
         if not img_path.exists():
-            print(f'  Warning: External image not found: {href}')
+            logger.warning(f'External image not found: {href}')
             return None
         img_format = img_path.suffix.lstrip('.').lower()
         if img_format == 'jpeg':

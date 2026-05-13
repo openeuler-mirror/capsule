@@ -13,6 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "run_ppt_pipeline.py"
 
 
+def _extract_text_resume_input(payload):
+    return payload.get("text")
+
+
 class CliStageSmokeTests(unittest.TestCase):
     def _load_script_module(self):
         module = types.ModuleType("ppt_pipeline_test_module")
@@ -254,14 +258,25 @@ class CliStageSmokeTests(unittest.TestCase):
             )
 
             quality_module = types.ModuleType("core.ppt_generator.utils.svg_pipeline.quality_checker")
-            quality_module.check_svg_files = lambda paths: [
-                {"file": Path(path).name, "path": path, "passed": True, "errors": [], "warnings": []}
-                for path in paths
-            ]
-            quality_module.format_quality_issues = lambda _results: ""
+
+            def check_svg_files(paths):
+                return [
+                    {"file": Path(path).name, "path": path, "passed": True, "errors": [], "warnings": []}
+                    for path in paths
+                ]
+
+            def format_quality_issues(_results):
+                return ""
+
+            quality_module.check_svg_files = check_svg_files
+            quality_module.format_quality_issues = format_quality_issues
 
             finalize_module = types.ModuleType("core.ppt_generator.utils.svg_pipeline.finalize_svg")
-            finalize_module.finalize_svg_files = lambda paths, _save_dir: paths
+
+            def finalize_svg_files(paths, _save_dir):
+                return paths
+
+            finalize_module.finalize_svg_files = finalize_svg_files
 
             export_module = types.ModuleType("core.ppt_generator.utils.svg_export")
 
@@ -353,7 +368,7 @@ class CliStageSmokeTests(unittest.TestCase):
             )
 
             pipeline_module = types.ModuleType("scripts.utils.pipeline")
-            pipeline_module.extract_resume_input = lambda payload: payload.get("text")
+            pipeline_module.extract_resume_input = _extract_text_resume_input
 
             async def run_thinkflow_app(_app, graph_input, _config, *, emit_ctx):
                 return {"stage": "input_required"}
@@ -413,7 +428,7 @@ class CliStageSmokeTests(unittest.TestCase):
             )
 
             pipeline_module = types.ModuleType("scripts.utils.pipeline")
-            pipeline_module.extract_resume_input = lambda payload: payload.get("text")
+            pipeline_module.extract_resume_input = _extract_text_resume_input
 
             async def run_thinkflow_app(_app, graph_input, _config, *, emit_ctx):
                 return {"stage": "input_required"}
@@ -473,7 +488,7 @@ class CliStageSmokeTests(unittest.TestCase):
             )
 
             pipeline_module = types.ModuleType("scripts.utils.pipeline")
-            pipeline_module.extract_resume_input = lambda payload: payload.get("text")
+            pipeline_module.extract_resume_input = _extract_text_resume_input
 
             async def run_thinkflow_app(_app, graph_input, _config, *, emit_ctx):
                 return {"stage": "input_required"}

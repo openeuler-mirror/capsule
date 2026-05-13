@@ -1,6 +1,6 @@
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import json
 import copy
@@ -15,10 +15,17 @@ from langgraph.types import StreamWriter
 from core.utils.logger import logger
 from core.utils.config import app_base_dir, output_files_dir
 from core.utils.cache import get_run_id, run_dir_from_config, save_json
-from core.ppt_generator.utils.common import htmls_to_pptx, sanitize_filename, download_image, build_image_url
+from core.ppt_generator.utils.common import (
+    htmls_to_pptx,
+    sanitize_filename,
+    download_image,
+    build_image_url,
+)
 from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
 from core.ppt_generator.thought_to_ppt.state import PPTState, PageType, PPTPage
-from core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph import generate_cover_thanks_pages_app
+from core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph import (
+    generate_cover_thanks_pages_app,
+)
 from core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.graph import generate_sep_pages_app
 from core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph import generate_content_pages_app
 from core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.graph import generate_toc_page_app
@@ -57,9 +64,11 @@ def load_template_styles() -> list[dict[str, str]]:
 
 
 async def prepare_generation_context_node(state: PPTState, writer: StreamWriter):
-    """HTML-route preparation: build save_dir, pick an HTML template, download outline
-    images, set language and ppt_prompt, load template content into state."""
-    time_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
+    """
+    HTML-route preparation: build save_dir, pick an HTML template, download
+    outline images, set language and ppt_prompt, load template content into state.
+    """
+    time_prefix = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
     if not state.get("save_dir", None):
         save_dir = os.path.join(output_files_dir, f'{time_prefix}_{sanitize_filename(state["topic"])}')
     else:

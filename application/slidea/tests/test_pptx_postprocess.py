@@ -25,7 +25,15 @@ def _make_slide_xml_blank_pptx() -> Presentation:
     return prs
 
 
-def _build_grpSp_xml(*, off, ext, chOff, chExt, child_xml: str, rot: str = "") -> str:
+def _shape_tree(slide):
+    return getattr(slide.shapes, "_spTree")
+
+
+def _background_element(slide):
+    return getattr(slide.background, "_element")
+
+
+def _build_group_shape_xml(*, off, ext, child_off, child_ext, child_xml: str, rot: str = "") -> str:
     rot_attr = f' rot="{rot}"' if rot else ""
     return f"""
     <p:grpSp xmlns:p="{PPTX_NS['p']}" xmlns:a="{PPTX_NS['a']}">
@@ -38,8 +46,8 @@ def _build_grpSp_xml(*, off, ext, chOff, chExt, child_xml: str, rot: str = "") -
         <a:xfrm{rot_attr}>
           <a:off x="{off[0]}" y="{off[1]}"/>
           <a:ext cx="{ext[0]}" cy="{ext[1]}"/>
-          <a:chOff x="{chOff[0]}" y="{chOff[1]}"/>
-          <a:chExt cx="{chExt[0]}" cy="{chExt[1]}"/>
+          <a:chOff x="{child_off[0]}" y="{child_off[1]}"/>
+          <a:chExt cx="{child_ext[0]}" cy="{child_ext[1]}"/>
         </a:xfrm>
       </p:grpSpPr>
       {child_xml}
@@ -73,17 +81,17 @@ class FlattenAllGroupsTests(unittest.TestCase):
 
         prs = _make_slide_xml_blank_pptx()
         slide = prs.slides[0]
-        spTree = slide.shapes._spTree
+        shape_tree = _shape_tree(slide)
 
         child = _build_rect_xml(off=(914400, 1828800), ext=(2743200, 1371600), shape_id=201)
-        grp = _build_grpSp_xml(
+        grp = _build_group_shape_xml(
             off=(914400, 1828800),
             ext=(2743200, 1371600),
-            chOff=(914400, 1828800),  # identity mapping (same as drawingml_converter does)
-            chExt=(2743200, 1371600),
+            child_off=(914400, 1828800),  # identity mapping (same as drawingml_converter does)
+            child_ext=(2743200, 1371600),
             child_xml=child,
         )
-        spTree.append(etree.fromstring(grp))
+        shape_tree.append(etree.fromstring(grp))
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = Path(tmp_dir) / "demo.pptx"
@@ -93,10 +101,10 @@ class FlattenAllGroupsTests(unittest.TestCase):
 
             prs2 = Presentation(str(path))
             slide2 = prs2.slides[0]
-            spTree2 = slide2.shapes._spTree
+            shape_tree_two = _shape_tree(slide2)
 
-            self.assertEqual(len(spTree2.findall(qn("p:grpSp"))), 0, "group should be dissolved")
-            sps = spTree2.findall(qn("p:sp"))
+            self.assertEqual(len(shape_tree_two.findall(qn("p:grpSp"))), 0, "group should be dissolved")
+            sps = shape_tree_two.findall(qn("p:sp"))
             self.assertEqual(len(sps), 1)
             off = sps[0].find(qn("p:spPr") + "/" + qn("a:xfrm") + "/" + qn("a:off"))
             ext = sps[0].find(qn("p:spPr") + "/" + qn("a:xfrm") + "/" + qn("a:ext"))
@@ -110,21 +118,21 @@ class FlattenAllGroupsTests(unittest.TestCase):
 
         prs = _make_slide_xml_blank_pptx()
         slide = prs.slides[0]
-        spTree = slide.shapes._spTree
+        shape_tree = _shape_tree(slide)
 
         # Group at slide (1000, 2000) with size 4000x2000 on slide,
         # but inner coord system is 0..2000 x 0..1000 → 2x scale.
         # Child at (500, 250) inner, 1000x500 inner → should land at
         # slide (1000 + 500*2, 2000 + 250*2) = (2000, 2500), size 2000x1000.
         child = _build_rect_xml(off=(500, 250), ext=(1000, 500), shape_id=202)
-        grp = _build_grpSp_xml(
+        grp = _build_group_shape_xml(
             off=(1000, 2000),
             ext=(4000, 2000),
-            chOff=(0, 0),
-            chExt=(2000, 1000),
+            child_off=(0, 0),
+            child_ext=(2000, 1000),
             child_xml=child,
         )
-        spTree.append(etree.fromstring(grp))
+        shape_tree.append(etree.fromstring(grp))
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = Path(tmp_dir) / "demo.pptx"
@@ -134,7 +142,7 @@ class FlattenAllGroupsTests(unittest.TestCase):
 
             prs2 = Presentation(str(path))
             slide2 = prs2.slides[0]
-            sp = slide2.shapes._spTree.findall(qn("p:sp"))[0]
+            sp = _shape_tree(slide2).findall(qn("p:sp"))[0]
             off = sp.find(qn("p:spPr") + "/" + qn("a:xfrm") + "/" + qn("a:off"))
             ext = sp.find(qn("p:spPr") + "/" + qn("a:xfrm") + "/" + qn("a:ext"))
             self.assertEqual(int(off.get("x")), 2000)
@@ -147,14 +155,14 @@ class FlattenAllGroupsTests(unittest.TestCase):
 
         prs = _make_slide_xml_blank_pptx()
         slide = prs.slides[0]
-        spTree = slide.shapes._spTree
+        shape_tree = _shape_tree(slide)
 
         child = _build_rect_xml(off=(0, 0), ext=(100, 100), shape_id=203)
-        grp = _build_grpSp_xml(
-            off=(0, 0), ext=(100, 100), chOff=(0, 0), chExt=(100, 100),
+        grp = _build_group_shape_xml(
+            off=(0, 0), ext=(100, 100), child_off=(0, 0), child_ext=(100, 100),
             child_xml=child, rot="2700000",  # 45deg in 1/60000 units
         )
-        spTree.append(etree.fromstring(grp))
+        shape_tree.append(etree.fromstring(grp))
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = Path(tmp_dir) / "demo.pptx"
@@ -163,28 +171,28 @@ class FlattenAllGroupsTests(unittest.TestCase):
             flatten_all_groups(path)
 
             prs2 = Presentation(str(path))
-            spTree2 = prs2.slides[0].shapes._spTree
-            self.assertEqual(len(spTree2.findall(qn("p:grpSp"))), 1, "rotated group must remain")
+            shape_tree_two = _shape_tree(prs2.slides[0])
+            self.assertEqual(len(shape_tree_two.findall(qn("p:grpSp"))), 1, "rotated group must remain")
 
     def test_nested_groups_flatten_recursively(self):
         from lxml import etree
 
         prs = _make_slide_xml_blank_pptx()
         slide = prs.slides[0]
-        spTree = slide.shapes._spTree
+        shape_tree = _shape_tree(slide)
 
         # Inner group: identity, holds one rect at (100, 100) size 200x200.
         inner_child = _build_rect_xml(off=(100, 100), ext=(200, 200), shape_id=204)
-        inner_grp = _build_grpSp_xml(
-            off=(100, 100), ext=(200, 200), chOff=(100, 100), chExt=(200, 200),
+        inner_grp = _build_group_shape_xml(
+            off=(100, 100), ext=(200, 200), child_off=(100, 100), child_ext=(200, 200),
             child_xml=inner_child,
         )
         # Outer group: identity wrap of the inner group.
-        outer_grp = _build_grpSp_xml(
-            off=(100, 100), ext=(200, 200), chOff=(100, 100), chExt=(200, 200),
+        outer_grp = _build_group_shape_xml(
+            off=(100, 100), ext=(200, 200), child_off=(100, 100), child_ext=(200, 200),
             child_xml=inner_grp,
         )
-        spTree.append(etree.fromstring(outer_grp))
+        shape_tree.append(etree.fromstring(outer_grp))
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = Path(tmp_dir) / "demo.pptx"
@@ -193,9 +201,9 @@ class FlattenAllGroupsTests(unittest.TestCase):
             flatten_all_groups(path)
 
             prs2 = Presentation(str(path))
-            spTree2 = prs2.slides[0].shapes._spTree
-            self.assertEqual(len(spTree2.findall(qn("p:grpSp"))), 0)
-            sps = spTree2.findall(qn("p:sp"))
+            shape_tree_two = _shape_tree(prs2.slides[0])
+            self.assertEqual(len(shape_tree_two.findall(qn("p:grpSp"))), 0)
+            sps = shape_tree_two.findall(qn("p:sp"))
             self.assertEqual(len(sps), 1)
 
 
@@ -205,7 +213,7 @@ class RemoveFullSlideSolidBackdropTests(unittest.TestCase):
 
         prs = _make_slide_xml_blank_pptx()
         slide = prs.slides[0]
-        spTree = slide.shapes._spTree
+        shape_tree = _shape_tree(slide)
 
         # Build a slide-sized rect at (0, 0).
         backdrop = _build_rect_xml(
@@ -214,8 +222,8 @@ class RemoveFullSlideSolidBackdropTests(unittest.TestCase):
         )
         # And a non-backdrop content rect on top.
         content = _build_rect_xml(off=(100, 100), ext=(500, 500), fill_hex="00FF00", shape_id=301)
-        spTree.append(etree.fromstring(backdrop))
-        spTree.append(etree.fromstring(content))
+        shape_tree.append(etree.fromstring(backdrop))
+        shape_tree.append(etree.fromstring(content))
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = Path(tmp_dir) / "demo.pptx"
@@ -225,11 +233,11 @@ class RemoveFullSlideSolidBackdropTests(unittest.TestCase):
 
             prs2 = Presentation(str(path))
             slide2 = prs2.slides[0]
-            sps = slide2.shapes._spTree.findall(qn("p:sp"))
+            sps = _shape_tree(slide2).findall(qn("p:sp"))
             self.assertEqual(len(sps), 1, "only the content rect must remain")
             # Background fill should have been lifted to slide.background.
-            bg_srgb = slide2.background._element.find(
-                ".//" + qn("a:solidFill") + "/" + qn("a:srgbClr")
+            bg_srgb = _background_element(slide2).find(
+                f".//{qn('a:solidFill')}/{qn('a:srgbClr')}"
             )
             self.assertIsNotNone(bg_srgb)
             self.assertEqual(bg_srgb.get("val").upper(), "3366FF")

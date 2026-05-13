@@ -1,6 +1,7 @@
 """SVG path parsing, normalization, and DrawingML path command generation."""
 # 以下代码源自 PPT Master (https://github.com/hugohe3/ppt-master)
 # 原始项目采用 MIT 许可证，版权所有 (c) 2025-2026 Hugo He
+# pylint: disable=too-many-arguments,huawei-too-many-arguments
 
 
 from __future__ import annotations
@@ -90,14 +91,16 @@ def svg_path_to_absolute(commands: list[PathCommand]) -> list[PathCommand]:
             sx, sy = cx, cy
             result.append(PathCommand('M', [cx, cy]))
         elif cmd.cmd == 'm':
-            cx += a[0]; cy += a[1]
+            cx += a[0]
+            cy += a[1]
             sx, sy = cx, cy
             result.append(PathCommand('M', [cx, cy]))
         elif cmd.cmd == 'L':
             cx, cy = a[0], a[1]
             result.append(PathCommand('L', [cx, cy]))
         elif cmd.cmd == 'l':
-            cx += a[0]; cy += a[1]
+            cx += a[0]
+            cy += a[1]
             result.append(PathCommand('L', [cx, cy]))
         elif cmd.cmd == 'H':
             cx = a[0]

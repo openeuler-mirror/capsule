@@ -2,7 +2,7 @@ import os
 import copy
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -24,12 +24,22 @@ from core.ppt_generator.utils.svg import (
 )
 from core.ppt_generator.utils.svg_export import svgs_to_pptx
 from core.ppt_generator.utils.svg_pipeline.finalize_svg import finalize_svg_files
-from core.ppt_generator.utils.svg_pipeline.quality_checker import check_svg_files, format_quality_issues
-from core.ppt_generator.utils.svg_pipeline.templates import select_svg_template, load_svg_template_content
+from core.ppt_generator.utils.svg_pipeline.quality_checker import (
+    check_svg_files,
+    format_quality_issues,
+)
+from core.ppt_generator.utils.svg_pipeline.templates import (
+    select_svg_template,
+    load_svg_template_content,
+)
 from core.ppt_generator.thought_to_ppt.state import PPTState, PageType, PPTPage
-from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph import generate_cover_thanks_pages_app
+from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph import (
+    generate_cover_thanks_pages_app,
+)
 from core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.graph import generate_sep_pages_app
-from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.graph import generate_content_pages_app
+from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.graph import (
+    generate_content_pages_app,
+)
 from core.ppt_generator.thought_to_ppt.svg_page_generators.toc_page_generator.graph import generate_toc_page_app
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.node import strip_unresolvable_images
 
@@ -38,9 +48,11 @@ SVG_QUALITY_REPAIR_PROMPT = "svg_quality_repair_prompt.txt"
 
 
 async def prepare_generation_context_node(state: PPTState, writer: StreamWriter):
-    """SVG-route preparation: build save_dir, pick an SVG template, download outline
-    images, set language and ppt_prompt, load template content into state."""
-    time_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
+    """
+    SVG-route preparation: build save_dir, pick an SVG template, download
+    outline images, set language and ppt_prompt, load template content into state.
+    """
+    time_prefix = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
     if not state.get("save_dir", None):
         save_dir = os.path.join(output_files_dir, f'{time_prefix}_{sanitize_filename(state["topic"])}')
     else:

@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from core.utils.logger import logger
+
 
 def find_svg_files(
     project_path: Path,
@@ -34,7 +36,7 @@ def find_svg_files(
     svg_dir = project_path / dir_name
 
     if not svg_dir.exists():
-        print(f"  Warning: {dir_name} directory does not exist, trying svg_output")
+        logger.warning(f"{dir_name} directory does not exist, trying svg_output")
         dir_name = 'svg_output'
         svg_dir = project_path / dir_name
 
@@ -98,7 +100,7 @@ def find_notes_files(
             # Filename-based matching (overrides index-based)
             if stem in svg_stems_mapping:
                 notes[stem] = content
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(f"Failed to read notes file {notes_file}: {exc}")
 
     return notes

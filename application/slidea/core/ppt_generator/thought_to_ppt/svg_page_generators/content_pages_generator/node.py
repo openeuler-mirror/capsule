@@ -11,7 +11,7 @@ from core.utils.logger import logger
 from core.utils.config import app_base_dir, settings
 from core.ppt_generator.utils.common import get_web_images_content, build_image_url
 from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_invoke
-from core.utils.tavily_search import async_search
+from core.utils.search import async_search
 from core.ppt_generator.utils.image import generate_ai_image, get_ai_images_content
 from core.ppt_generator.thought_to_ppt.state import PageType
 from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.state import (
@@ -67,9 +67,14 @@ def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
 
 # 模板使用规范（严格遵守，不是"仅供参考"）
 - 严格保留模板的标题栏、装饰元素、页眉页脚、页码格式、配色、字体与卡片骨架（如果有的话）。
-- 模板 SVG 中的 id 与 data-description 是强约束说明：id 为 background、slide-background、header、page-title-text、main-content-frame，或以 template-、top-accent、bottom-accent、content-frame、title-accent 开头的元素代表固定模板结构，内容页必须复用并保持其位置、尺寸、颜色、字体和层级关系。
-- 对于 header / page-title-text：内容页标题区必须沿用模板给定的位置、字体、字号、字重、颜色和顶部蓝条，只替换标题文字为本页标题；特别是标题不要有额外样式设计，禁止新增标题下横线、左侧竖条、图标、徽标、阴影、标题背景块、渐变或其他装饰，不要重新设计标题区。
-- 对于 main-content-safe-area / content-safe-area-guide：该虚线 rect 只说明主要内容可撰写范围，正式输出时必须删除这个辅助边界框；正文、图表、图片、卡片等实际内容应布局在它描述的安全范围内。
+- 模板 SVG 中的 id 与 data-description 是强约束说明：id 为 background、slide-background、header、
+  page-title-text、main-content-frame，或以 template-、top-accent、bottom-accent、content-frame、
+  title-accent 开头的元素代表固定模板结构，内容页必须复用并保持其位置、尺寸、颜色、字体和层级关系。
+- 对于 header / page-title-text：内容页标题区必须沿用模板给定的位置、字体、字号、字重、颜色和顶部蓝条，
+  只替换标题文字为本页标题；特别是标题不要有额外样式设计，禁止新增标题下横线、左侧竖条、图标、徽标、
+  阴影、标题背景块、渐变或其他装饰，不要重新设计标题区。
+- 对于 main-content-safe-area / content-safe-area-guide：该虚线 rect 只说明主要内容可撰写范围，
+  正式输出时必须删除这个辅助边界框；正文、图表、图片、卡片等实际内容应布局在它描述的安全范围内。
 - 对于 main-content-frame 及 content-frame-*：如果 data-description 标注为主体装饰框，正式输出时必须保留，不要当作辅助边界框删除。
 - 对于 content-placeholder 及其子元素：它们只是占位提示，正式输出时必须删除，不要保留 CONTENT_AREA、实际内容或类似占位文字。
 - 并行生成同一套 PPT 的不同内容页时，必须保持模板基础格式一致：标题区、装饰条、背景、字体层级、主色、留白节奏一致；除模板已有装饰外，不要额外发挥出新的页面装饰系统。
@@ -168,7 +173,9 @@ async def get_web_ai_images_node(state: ContentWorkerState):
     web_images_tasks = []
     if settings.USE_WEB_IMG_SEARCH:
         for image_query in web_images:
-            web_images_tasks.append(asyncio.create_task(async_search(query=image_query, search_image=True, max_results=5)))
+            web_images_tasks.append(
+                asyncio.create_task(async_search(query=image_query, search_image=True, max_results=5))
+            )
 
     if settings.is_image_generation_enabled():
         ai_images_tasks = []
@@ -182,7 +189,9 @@ async def get_web_ai_images_node(state: ContentWorkerState):
 
     if settings.USE_WEB_IMG_SEARCH:
         web_results = await asyncio.gather(*web_images_tasks) if web_images_tasks else []
-        web_content, _, web_image_descriptions = await get_web_images_content(web_images, web_results, state["save_dir"])
+        web_content, _, web_image_descriptions = await get_web_images_content(
+            web_images, web_results, state["save_dir"]
+        )
         reference_image_descriptions.update(web_image_descriptions)
     else:
         web_content = ""

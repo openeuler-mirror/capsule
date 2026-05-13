@@ -90,7 +90,11 @@ def build_reference_images_block(paths: list[str]) -> str:
 
 def _repair_rgba_attributes(svg_content: str) -> str:
     pattern = re.compile(
-        r'\b(?P<attr>fill|stroke)="rgba\(\s*(?P<r>\d{1,3})\s*,\s*(?P<g>\d{1,3})\s*,\s*(?P<b>\d{1,3})\s*,\s*(?P<a>0(?:\.\d+)?|1(?:\.0+)?)\s*\)"',
+        r'\b(?P<attr>fill|stroke)="rgba\('
+        r'\s*(?P<r>\d{1,3})\s*,'
+        r'\s*(?P<g>\d{1,3})\s*,'
+        r'\s*(?P<b>\d{1,3})\s*,'
+        r'\s*(?P<a>0(?:\.\d+)?|1(?:\.0+)?)\s*\)"',
         re.IGNORECASE,
     )
 

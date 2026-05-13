@@ -4,7 +4,9 @@ from core.utils.logger import logger
 from core.utils.config import app_base_dir
 
 from core.ppt_generator.thought_to_ppt.state import PageType
-from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.state import CoverThanksPagesState
+from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.state import (
+    CoverThanksPagesState,
+)
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.graph import generate_ppt_page_app
 
 

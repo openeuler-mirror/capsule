@@ -6,20 +6,19 @@
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-# Import project utility modules
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 try:
-    from project_utils import get_project_info
-    from config import CANVAS_FORMATS
+    from core.ppt_generator.utils.svg_pipeline.templates import CANVAS_FORMATS
 except ImportError:
     CANVAS_FORMATS = {
         'ppt169': {'name': 'PPT 16:9', 'dimensions': '1280×720', 'viewbox': '0 0 1280 720'},
     }
 
+try:
+    from core.ppt_generator.utils.svg_pipeline.templates import get_project_info
+except ImportError:
     def get_project_info(path: str) -> dict:
         return {'format': 'unknown', 'name': Path(path).name}
 
@@ -147,5 +146,5 @@ def detect_format_from_svg(svg_path: Path) -> str | None:
                 if fmt_info['viewbox'] == viewbox:
                     return fmt_key
     except Exception:
-        pass
+        return None
     return None

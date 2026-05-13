@@ -18,6 +18,8 @@ group bounding boxes never falsely match "full-slide solid fill" and so a
 backdrop rect that happens to be wrapped in a group still gets stripped.
 """
 
+from dataclasses import dataclass
+
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.oxml.ns import qn
@@ -26,6 +28,18 @@ from core.utils.logger import logger
 
 
 _DRAWABLE_TAGS = frozenset(qn(t) for t in ("p:sp", "p:cxnSp", "p:pic", "p:grpSp", "p:graphicFrame"))
+
+
+@dataclass(frozen=True)
+class GroupTransform:
+    """Coordinate transform from a group inner canvas into its parent."""
+
+    off_x: int
+    off_y: int
+    child_off_x: int
+    child_off_y: int
+    scale_x: float
+    scale_y: float
 
 
 def remove_full_slide_solid_backdrops(pptx_path) -> None:
@@ -48,7 +62,7 @@ def remove_full_slide_solid_backdrops(pptx_path) -> None:
             if rgb is None:
                 break
             last_rgb = rgb
-            sp = shape._element
+            sp = getattr(shape, "_element")
             sp.getparent().remove(sp)
             removed += 1
 
@@ -87,7 +101,8 @@ def _full_slide_solid_fill_rgb(shape, slide_w, slide_h, tol_ratio=0.1):
 
 def _extract_solid_fill_rgb(shape):
     """Return the shape's solid-fill RGB color, or None if absent/unsupported."""
-    srgb = shape._element.find(f".//{qn('a:solidFill')}/{qn('a:srgbClr')}")
+    shape_element = getattr(shape, "_element")
+    srgb = shape_element.find(f".//{qn('a:solidFill')}/{qn('a:srgbClr')}")
     if srgb is None:
         return None
     val = srgb.get("val")
@@ -115,12 +130,12 @@ def flatten_all_groups(pptx_path) -> None:
     prs = Presentation(str(pptx_path))
     total = 0
     for slide in prs.slides:
-        spTree = slide.shapes._spTree
-        # Each pass dissolves immediate-child groups in spTree. Children of a
+        shape_tree = getattr(slide.shapes, "_spTree")
+        # Each pass dissolves immediate-child groups in shape_tree. Children of a
         # dissolved group that are themselves groups become new immediate
         # children, so loop until none remain.
         while True:
-            n = _ungroup_one_pass(spTree)
+            n = _ungroup_one_pass(shape_tree)
             total += n
             if n == 0:
                 break
@@ -130,62 +145,66 @@ def flatten_all_groups(pptx_path) -> None:
 
 def _ungroup_one_pass(parent) -> int:
     """Dissolve every immediate-child ``p:grpSp`` of ``parent``. Returns count."""
-    grpSp_tag = qn("p:grpSp")
+    group_shape_tag = qn("p:grpSp")
     flattened = 0
-    for grp in [c for c in list(parent) if c.tag == grpSp_tag]:
-        if _flatten_group(grp):
+    for group in [c for c in list(parent) if c.tag == group_shape_tag]:
+        if _flatten_group(group):
             flattened += 1
     return flattened
 
 
-def _flatten_group(grp) -> bool:
-    """Replace ``grp`` with its drawable children in ``grp``'s parent.
+def _flatten_group(group) -> bool:
+    """Replace ``group`` with its drawable children in ``group``'s parent.
 
     Returns True iff the group was successfully dissolved. False if the group
     has rotation (skipped to avoid wrong child positions) or if the group has
     no parent (already detached).
     """
-    parent = grp.getparent()
+    parent = group.getparent()
     if parent is None:
         return False
 
-    grp_xfrm = grp.find(qn("p:grpSpPr") + "/" + qn("a:xfrm"))
-    rot = grp_xfrm.get("rot") if grp_xfrm is not None else None
+    group_xfrm = group.find(qn("p:grpSpPr") + "/" + qn("a:xfrm"))
+    rot = group_xfrm.get("rot") if group_xfrm is not None else None
     if rot and int(rot) != 0:
         logger.debug("Skip flattening rotated group (rot=%s)", rot)
         return False
 
-    if grp_xfrm is None:
-        ox = oy = 0
-        cox = coy = 0
-        sx = sy = 1.0
+    if group_xfrm is None:
+        transform = GroupTransform(0, 0, 0, 0, 1.0, 1.0)
     else:
-        off = grp_xfrm.find(qn("a:off"))
-        ext = grp_xfrm.find(qn("a:ext"))
-        chOff = grp_xfrm.find(qn("a:chOff"))
-        chExt = grp_xfrm.find(qn("a:chExt"))
-        ox = int(off.get("x", "0")) if off is not None else 0
-        oy = int(off.get("y", "0")) if off is not None else 0
+        off = group_xfrm.find(qn("a:off"))
+        ext = group_xfrm.find(qn("a:ext"))
+        child_off = group_xfrm.find(qn("a:chOff"))
+        child_ext = group_xfrm.find(qn("a:chExt"))
+        off_x = int(off.get("x", "0")) if off is not None else 0
+        off_y = int(off.get("y", "0")) if off is not None else 0
         ex = int(ext.get("cx", "0")) if ext is not None else 0
         ey = int(ext.get("cy", "0")) if ext is not None else 0
-        cox = int(chOff.get("x", "0")) if chOff is not None else 0
-        coy = int(chOff.get("y", "0")) if chOff is not None else 0
-        cex = int(chExt.get("cx", str(ex or 1))) if chExt is not None else (ex or 1)
-        cey = int(chExt.get("cy", str(ey or 1))) if chExt is not None else (ey or 1)
-        sx = (ex / cex) if cex else 1.0
-        sy = (ey / cey) if cey else 1.0
+        child_off_x = int(child_off.get("x", "0")) if child_off is not None else 0
+        child_off_y = int(child_off.get("y", "0")) if child_off is not None else 0
+        child_ext_x = int(child_ext.get("cx", str(ex or 1))) if child_ext is not None else (ex or 1)
+        child_ext_y = int(child_ext.get("cy", str(ey or 1))) if child_ext is not None else (ey or 1)
+        transform = GroupTransform(
+            off_x,
+            off_y,
+            child_off_x,
+            child_off_y,
+            (ex / child_ext_x) if child_ext_x else 1.0,
+            (ey / child_ext_y) if child_ext_y else 1.0,
+        )
 
-    children = [c for c in list(grp) if c.tag in _DRAWABLE_TAGS]
-    insert_idx = list(parent).index(grp)
+    children = [c for c in list(group) if c.tag in _DRAWABLE_TAGS]
+    insert_idx = list(parent).index(group)
     for child in children:
-        _apply_group_transform(child, ox, oy, cox, coy, sx, sy)
+        _apply_group_transform(child, transform)
         parent.insert(insert_idx, child)
         insert_idx += 1
-    parent.remove(grp)
+    parent.remove(group)
     return True
 
 
-def _apply_group_transform(child, ox, oy, cox, coy, sx, sy) -> None:
+def _apply_group_transform(child, transform: GroupTransform) -> None:
     """Map child's xfrm offset/extent from group's inner coords into parent coords.
 
     Formula: ``slide_x = group.off.x + (child.x - group.chOff.x) * (group.ext / group.chExt)``.
@@ -201,13 +220,13 @@ def _apply_group_transform(child, ox, oy, cox, coy, sx, sy) -> None:
     if off is not None:
         x = int(off.get("x", "0"))
         y = int(off.get("y", "0"))
-        off.set("x", str(round(ox + (x - cox) * sx)))
-        off.set("y", str(round(oy + (y - coy) * sy)))
+        off.set("x", str(round(transform.off_x + (x - transform.child_off_x) * transform.scale_x)))
+        off.set("y", str(round(transform.off_y + (y - transform.child_off_y) * transform.scale_y)))
     if ext is not None:
         cx = int(ext.get("cx", "0"))
         cy = int(ext.get("cy", "0"))
-        ext.set("cx", str(max(round(cx * sx), 1)))
-        ext.set("cy", str(max(round(cy * sy), 1)))
+        ext.set("cx", str(max(round(cx * transform.scale_x), 1)))
+        ext.set("cy", str(max(round(cy * transform.scale_y), 1)))
 
 
 def _find_xfrm(child):

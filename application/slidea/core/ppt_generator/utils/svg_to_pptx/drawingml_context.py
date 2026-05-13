@@ -1,6 +1,7 @@
 """ConvertContext — shared state passed through the SVG → DrawingML pipeline."""
 # 以下代码源自 PPT Master (https://github.com/hugohe3/ppt-master)
 # 原始项目采用 MIT 许可证，版权所有 (c) 2025-2026 Hugo He
+# pylint: disable=too-many-arguments,huawei-too-many-arguments
 
 
 from __future__ import annotations
@@ -80,8 +81,8 @@ class ConvertContext:
 
         if style_overrides:
             # Opacity is multiplicative, not a simple override
-            _OPACITY_KEYS = ('opacity', 'fill-opacity', 'stroke-opacity')
-            for op_key in _OPACITY_KEYS:
+            opacity_keys = ('opacity', 'fill-opacity', 'stroke-opacity')
+            for op_key in opacity_keys:
                 if op_key in style_overrides and op_key in merged:
                     try:
                         merged[op_key] = str(
@@ -93,7 +94,7 @@ class ConvertContext:
                     merged[op_key] = style_overrides[op_key]
 
             for k, v in style_overrides.items():
-                if k not in _OPACITY_KEYS:
+                if k not in opacity_keys:
                     merged[k] = v
 
         return ConvertContext(

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from core.utils.logger import logger
+
 # SVG to PNG library detection
 # Prefer CairoSVG (better quality), fall back to svglib
 PNG_RENDERER: str | None = None
@@ -72,7 +74,7 @@ def convert_svg_to_png(
         elif PNG_RENDERER == 'svglib':
             drawing = svg2rlg(str(svg_path))
             if drawing is None:
-                print(f"  Warning: Unable to parse SVG ({svg_path.name})")
+                logger.warning(f"Unable to parse SVG ({svg_path.name})")
                 return False
             renderPM.drawToFile(
                 drawing,
@@ -83,7 +85,7 @@ def convert_svg_to_png(
             return True
 
     except Exception as e:
-        print(f"  Warning: SVG to PNG conversion failed ({svg_path.name}): {e}")
+        logger.warning(f"SVG to PNG conversion failed ({svg_path.name}): {e}")
         return False
 
     return False

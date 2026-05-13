@@ -2,14 +2,25 @@
 import argparse
 import asyncio
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 import sys
-sys.path.insert(0, str(ROOT))
+sys.path.append(str(ROOT))
 
 from core.utils.cache import load_json, run_dir, save_json
 from scripts.utils.cli_output import emit_stage_payload
+
+
+@dataclass(frozen=True)
+class PatchRenderContext:
+    args: argparse.Namespace
+    out_dir: str
+    outline: list
+    topic: str
+    save_dir: str
+    target_indices: list[int]
 
 
 class DummyWriter:
@@ -108,12 +119,23 @@ def _svg_path_for_index(save_dir: str, index: int) -> str | None:
     return str(matches[0])
 
 
-async def _patch_render_html(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):
+async def _patch_render_html(context: PatchRenderContext):
     """HTML-route patch render."""
+    args = context.args
+    out_dir = context.out_dir
+    outline = context.outline
+    topic = context.topic
+    save_dir = context.save_dir
+    target_indices = context.target_indices
     from core.ppt_generator.thought_to_ppt.state import PageType
     from core.ppt_generator.thought_to_ppt.page_generators.node import prepare_generation_context_node
-    from core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph import generate_cover_thanks_pages_app
-    from core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.node import generate_sep_template_node, generate_sep_page_node
+    from core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph import (
+        generate_cover_thanks_pages_app,
+    )
+    from core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.node import (
+        generate_sep_template_node,
+        generate_sep_page_node,
+    )
     from core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.node import generate_toc_page_node
     from core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph import content_page_worker_app
     from core.ppt_generator.utils.common import sanitize_filename, htmls_to_pptx
@@ -228,18 +250,31 @@ async def _patch_render_html(args, out_dir: str, outline, topic: str, save_dir: 
     )
 
 
-async def _patch_render_svg(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):
+async def _patch_render_svg(context: PatchRenderContext):
     """SVG-route patch render."""
+    args = context.args
+    out_dir = context.out_dir
+    outline = context.outline
+    topic = context.topic
+    save_dir = context.save_dir
+    target_indices = context.target_indices
     from core.ppt_generator.thought_to_ppt.state import PageType
     from core.ppt_generator.thought_to_ppt.svg_page_generators.node import (
         prepare_generation_context_node,
         quality_check_node,
         finalize_node,
     )
-    from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph import generate_cover_thanks_pages_app
-    from core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.node import generate_sep_template_node, generate_sep_page_node
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph import (
+        generate_cover_thanks_pages_app,
+    )
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.node import (
+        generate_sep_template_node,
+        generate_sep_page_node,
+    )
     from core.ppt_generator.thought_to_ppt.svg_page_generators.toc_page_generator.node import generate_toc_page_node
-    from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.graph import content_page_worker_app
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.graph import (
+        content_page_worker_app,
+    )
     from core.ppt_generator.utils.common import sanitize_filename
     from core.ppt_generator.utils.svg_export import svgs_to_pptx
 
@@ -377,12 +412,12 @@ async def _patch_render_svg(args, out_dir: str, outline, topic: str, save_dir: s
     )
 
 
-async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):
-    render_mode = getattr(args, "render_mode", None) or _read_render_mode(out_dir)
+async def _patch_render(context: PatchRenderContext):
+    render_mode = getattr(context.args, "render_mode", None) or _read_render_mode(context.out_dir)
     if render_mode == "svg":
-        await _patch_render_svg(args, out_dir, outline, topic, save_dir, target_indices)
+        await _patch_render_svg(context)
     else:
-        await _patch_render_html(args, out_dir, outline, topic, save_dir, target_indices)
+        await _patch_render_html(context)
 
 
 def _read_render_mode(out_dir: str) -> str:
@@ -423,7 +458,16 @@ async def main():
         return
 
     args.render_mode = render_mode
-    await _patch_render(args, out_dir, outline, topic, save_dir, target_indices)
+    await _patch_render(
+        PatchRenderContext(
+            args=args,
+            out_dir=out_dir,
+            outline=outline,
+            topic=topic,
+            save_dir=save_dir,
+            target_indices=target_indices,
+        )
+    )
 
 
 if __name__ == "__main__":

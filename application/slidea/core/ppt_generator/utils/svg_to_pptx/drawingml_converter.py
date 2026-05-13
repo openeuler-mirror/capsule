@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from core.utils.logger import logger
+
 from .drawingml_context import ConvertContext, ShapeResult
 from .drawingml_utils import (
     SVG_NS,
@@ -230,7 +232,7 @@ def convert_element(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None
         try:
             return converter(elem, ctx)
         except Exception as e:
-            print(f'  Warning: Failed to convert <{tag}>: {e}')
+            logger.warning(f'Failed to convert <{tag}>: {e}')
             return None
 
     if tag in _NON_VISUAL_TAGS:
@@ -294,12 +296,12 @@ def convert_svg_to_slide_shapes(
     # the count is reasonable. Presenter-click animation should reveal
     # semantic blocks, not atomized drawing primitives, so fallback is
     # intentionally capped at a low count.
-    _ANIM_FALLBACK_CAP = 8
-    if not ctx.anim_targets and 0 < len(fallback_targets) <= _ANIM_FALLBACK_CAP:
+    anim_fallback_cap = 8
+    if not ctx.anim_targets and 0 < len(fallback_targets) <= anim_fallback_cap:
         ctx.anim_targets = fallback_targets
 
     if verbose:
-        print(f'  Converted {converted} elements, skipped {skipped}')
+        logger.info(f'Converted {converted} elements, skipped {skipped}')
 
     shapes_xml = '\n'.join(shapes)
 

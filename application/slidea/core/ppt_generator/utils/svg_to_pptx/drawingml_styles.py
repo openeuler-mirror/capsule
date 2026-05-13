@@ -9,6 +9,8 @@ import math
 import re
 from xml.etree import ElementTree as ET
 
+from core.utils.logger import logger
+
 from .drawingml_context import ConvertContext
 from .drawingml_utils import (
     SVG_NS, ANGLE_UNIT, DASH_PRESETS,
@@ -243,7 +245,7 @@ def _emit_line_end(
 
     cls = _classify_marker(marker_elem)
     if cls is None:
-        print(
+        logger.warning(
             f'  Warning: marker "{marker_id}" shape cannot be classified; '
             f'skipping (supported: triangle, diamond, oval)'
         )

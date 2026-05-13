@@ -42,7 +42,10 @@ async def screenshot_html(html_path: str, output_path: str) -> str:
     """渲染 HTML 并截图到 output_path，返回截图绝对路径。"""
     absolute_html_path = os.path.abspath(html_path)
     async with BrowserManager.get_browser_context() as browser:
-        context = await browser.new_context(viewport={"width": SLIDE_WIDTH, "height": SLIDE_HEIGHT}, ignore_https_errors=True)
+        context = await browser.new_context(
+            viewport={"width": SLIDE_WIDTH, "height": SLIDE_HEIGHT},
+            ignore_https_errors=True,
+        )
         await context.route("**/*", build_remote_asset_request_router())
         page = await context.new_page()
         try:
@@ -147,6 +150,11 @@ def _add_cjk_font_fallbacks(svg_bytes: bytes) -> bytes:
     return ET.tostring(root, encoding="utf-8")
 
 
+def add_cjk_font_fallbacks(svg_bytes: bytes) -> bytes:
+    """Public wrapper for adding CJK font fallbacks to SVG bytes."""
+    return _add_cjk_font_fallbacks(svg_bytes)
+
+
 def _prepend_cjk_font_stack(font_family: str) -> str:
     normalized = font_family.lower()
     if _has_available_cjk_font(normalized, _prefers_serif(normalized)):
@@ -161,7 +169,7 @@ def _prefers_serif(normalized_font_family: str) -> bool:
 
 
 def _has_available_cjk_font(normalized_font_family: str, serif: bool) -> bool:
-    detected = _detect_system_cjk_fonts(serif)
+    detected = detect_system_cjk_fonts(serif)
     if detected:
         return any(name.lower() in normalized_font_family for name in detected)
     fallbacks = CJK_SERIF_FONT_FALLBACKS if serif else CJK_SANS_FONT_FALLBACKS
@@ -176,7 +184,7 @@ def _get_cjk_font_stack(serif: bool) -> str:
 @lru_cache(maxsize=2)
 def _get_cjk_font_names(serif: bool) -> tuple[str, ...]:
     fallbacks = CJK_SERIF_FONT_FALLBACKS if serif else CJK_SANS_FONT_FALLBACKS
-    detected = _detect_system_cjk_fonts(serif)
+    detected = detect_system_cjk_fonts(serif)
 
     names = []
     seen = set()
@@ -198,12 +206,13 @@ def _detect_system_cjk_fonts(serif: bool) -> tuple[str, ...]:
     cover the Chinese character "中". This is more accurate than matching a
     generic ``:lang=zh`` family, which can return a Latin-only alias.
     """
-    if shutil.which("fc-list") is None:
+    fc_list_path = shutil.which("fc-list")
+    if fc_list_path is None:
         return ()
 
     try:
         result = subprocess.run(
-            ["fc-list", ":charset=4e2d", "family"],
+            [fc_list_path, ":charset=4e2d", "family"],
             check=False,
             capture_output=True,
             text=True,
@@ -224,6 +233,11 @@ def _detect_system_cjk_fonts(serif: bool) -> tuple[str, ...]:
                 candidates.add(cleaned)
 
     return tuple(sorted(candidates, key=lambda name: _cjk_font_score(name, serif))[:4])
+
+
+def detect_system_cjk_fonts(serif: bool) -> tuple[str, ...]:
+    """Public wrapper for detected CJK font families."""
+    return _detect_system_cjk_fonts(serif)
 
 
 def _is_probably_cjk_font(font_name: str) -> bool:

@@ -25,7 +25,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.append(str(ROOT))
+
+from core.utils.logger import logger
 
 
 HTML_SUFFIXES = {".html", ".htm"}
@@ -55,19 +57,19 @@ def _resolve_inputs(inputs: list[Path]) -> tuple[list[str], Path]:
         input_dir = inputs[0]
         html_paths = _collect_html_files_from_dir(input_dir)
         if not html_paths:
-            raise SystemExit(f"在目录中未找到 HTML 文件: {input_dir}")
+            raise ValueError(f"在目录中未找到 HTML 文件: {input_dir}")
         return html_paths, input_dir
 
     html_paths: list[str] = []
     for path in inputs:
         if not path.exists():
-            raise SystemExit(f"输入路径不存在: {path}")
+            raise ValueError(f"输入路径不存在: {path}")
         if path.is_dir():
-            raise SystemExit(
+            raise ValueError(
                 f"混合输入不支持：当提供多个路径时每个都必须是 HTML 文件，但 {path} 是目录"
             )
         if path.suffix.lower() not in HTML_SUFFIXES:
-            raise SystemExit(f"不是 HTML 文件: {path}")
+            raise ValueError(f"不是 HTML 文件: {path}")
         html_paths.append(str(path))
     return html_paths, inputs[0].parent
 
@@ -77,20 +79,19 @@ async def _convert(html_paths: list[str], output_dir: Path, filename: str) -> No
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f">>> 共 {len(html_paths)} 个 HTML 文件，按以下顺序合成：")
+    logger.info(f">>> 共 {len(html_paths)} 个 HTML 文件，按以下顺序合成：")
     for idx, path in enumerate(html_paths):
-        print(f"    [{idx + 1:02d}] {path}")
-    print(f">>> 输出目录: {output_dir}")
-    print(f">>> 输出文件名: {filename}")
+        logger.info(f"    [{idx + 1:02d}] {path}")
+    logger.info(f">>> 输出目录: {output_dir}")
+    logger.info(f">>> 输出文件名: {filename}")
 
     pdf_path, pptx_path = await htmls_to_pptx(html_paths, str(output_dir), filename)
 
-    print(f"\n>>> 合并 PDF: {pdf_path}")
+    logger.info(f">>> 合并 PDF: {pdf_path}")
     if pptx_path:
-        print(f">>> 生成 PPTX: {pptx_path}")
+        logger.info(f">>> 生成 PPTX: {pptx_path}")
     else:
-        print(">>> PDF 转 PPTX 失败，请检查日志中的 LibreOffice 报错信息。")
-        raise SystemExit(1)
+        raise RuntimeError("PDF 转 PPTX 失败，请检查日志中的 LibreOffice 报错信息。")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -131,4 +132,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        logger.error(str(exc))
+        raise

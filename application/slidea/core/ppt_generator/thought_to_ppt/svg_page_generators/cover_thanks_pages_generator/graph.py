@@ -1,6 +1,8 @@
 from langgraph.graph import StateGraph, START, END
 
-from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.state import CoverThanksPagesState
+from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.state import (
+    CoverThanksPagesState,
+)
 from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.node import (
     get_cover_thanks_pages_node,
     generate_thanks_node,
