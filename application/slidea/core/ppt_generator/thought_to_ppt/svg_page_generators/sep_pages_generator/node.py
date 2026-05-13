@@ -35,7 +35,7 @@ def _build_sep_template_prompt(*, ppt_prompt, template, language, outline, page)
 # 语言
 生成页面文字必须使用：{language}
 
-# 模板示意 SVG（仅供视觉参考）
+# 模板 SVG
 {template}
 """
 
@@ -54,12 +54,11 @@ def _build_sep_page_prompt(*, ppt_prompt, sep_template, language, outline, page)
 - 不要复制原 SVG 的具体文字，但视觉骨架应一致。
 - 这是章节分割页，不是内容页；内容页模板中关于标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
 - 后续分割页应跟随第一张分割页的版式体系，并保留同套 PPT 的主要视觉装饰与识别特征，包括主要装饰、主色、背景和字体气质。
-- 不要为了遵守内容页模板而强行使用内容页标题栏布局。
 
 # 语言
 生成页面文字必须使用：{language}
 
-# 已生成的同套分割页 SVG（仅供视觉参考）
+# 已生成的同套分割页 SVG
 {sep_template}
 """
 

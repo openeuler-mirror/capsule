@@ -1,6 +1,10 @@
 from core.utils.logger import logger
 
 from core.ppt_generator.utils.markdown import get_markdown_images
+from core.ppt_generator.thought_to_ppt.outline_generator.node import (
+    SIMPLE_CONTENT_PAGE_MAX_COUNT,
+    SIMPLE_REFERENCE_DOC_CHAR_LIMIT,
+)
 from core.ppt_generator.thought_to_ppt.state import PPTState, PageType, PPTPage
 from core.ppt_generator.thought_to_ppt.outline_generator.graph import generate_outline_app
 
@@ -82,14 +86,21 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
     logger.info(f"generate outline: \n{outline_list}")
 
     chapters = outline_results["chapters"]
+    use_simple_reference_doc = outline_results["target_page_count"] <= SIMPLE_CONTENT_PAGE_MAX_COUNT
+    simple_reference_doc = state["ori_doc"][:SIMPLE_REFERENCE_DOC_CHAR_LIMIT]
     outline = []
     for idx, ppt in enumerate(outline_list):
         chapter_idx = ppt["source"]
-        if chapter_idx == -1:
+        if use_simple_reference_doc and ppt["type"] == PageType.CONTENT:
+            reference_doc = simple_reference_doc
+            reference_doc_is_full_context = True
+        elif chapter_idx == -1:
             reference_doc = outline_results["summary_text"]
+            reference_doc_is_full_context = False
         else:
             chapter = chapters[chapter_idx]
             reference_doc = f"{chapter.header}\n\n{chapter.content}"
+            reference_doc_is_full_context = False
 
         images = get_markdown_images(reference_doc)
 
@@ -98,7 +109,8 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
                            type=ppt["type"],
                            index=idx,
                            reference_doc=reference_doc,
-                           reference_images=images)
+                           reference_images=images,
+                           reference_doc_is_full_context=reference_doc_is_full_context)
         outline.append(ppt_page)
 
     result = {

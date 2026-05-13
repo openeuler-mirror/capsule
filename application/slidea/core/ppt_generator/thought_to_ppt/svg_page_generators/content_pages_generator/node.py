@@ -34,22 +34,28 @@ def _svg_prompt_header() -> str:
 
 def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
                           relevant_material, page) -> str:
+    material_title = (
+        "# 可参考的完整参考资料如下，根据用户的原始请求判断应该用怎样的信息密度将相关内容呈现到最终的PPT中："
+        if page.reference_doc_is_full_context
+        else "# 可参考的相关资料（含本页文档要点 + 已检索/评分排序后的图片素材）如下："
+    )
     return f"""
 {_svg_prompt_header()}
 
 # 当前任务
 撰写一张 PPT 内容页 SVG。
-完整 PPT 大纲：
+
+# 用户原始请求（决定内容密度、详略与表达深度）
+{query}
+
+# 完整 PPT 大纲：
 {outline}
 
 当前正在撰写第 {page.index + 1} / {len(outline)} 页：
 - 标题："{page.title}"
 - 摘要：{page.abstract}
 
-# 用户原始请求（决定内容密度、详略与表达深度）
-{query}
-
-# 可参考的相关资料（含本页文档要点 + 已检索/评分排序后的图片素材）
+{material_title}
 {relevant_material}
 
 # 图片使用要求
@@ -67,15 +73,12 @@ def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
 - 对于 main-content-frame 及 content-frame-*：如果 data-description 标注为主体装饰框，正式输出时必须保留，不要当作辅助边界框删除。
 - 对于 content-placeholder 及其子元素：它们只是占位提示，正式输出时必须删除，不要保留 CONTENT_AREA、实际内容或类似占位文字。
 - 并行生成同一套 PPT 的不同内容页时，必须保持模板基础格式一致：标题区、装饰条、背景、字体层级、主色、留白节奏一致；除模板已有装饰外，不要额外发挥出新的页面装饰系统。
-- 如果当前页是封面、目录、分割页、致谢页等特殊页，可以不遵守内容页标题位置和主体安全区要求；但当前任务是内容页时必须遵守。
-- 模板中的示例文字仅作风格参考；本页正文以上方"摘要"和"相关资料"为准，禁止照搬模板原文。
-- 本页内容密度、详略由用户原始请求与本页摘要/相关资料共同决定，不要硬性"克制"或额外堆叠。
 - 其他内容可以尽情发挥，撰写一页能满足用户内容要求的PPT！
 
 # 语言
 生成页面文字必须使用：{language}
 
-# 模板示意 SVG
+# 模板 SVG
 {template}
 """
 
@@ -93,6 +96,10 @@ async def get_content_pages_node(state: ContentPagesState):
 async def extract_relevant_doc_node(state: ContentWorkerState):
     """extract related materials for each page"""
     page = state["content_page"]
+    if page.reference_doc_is_full_context:
+        logger.info(f"skip relevant doc extraction for simple content page {page.index}")
+        return {"relevant_material": page.reference_doc}
+
     prompt = f"""
 你是一个素材整理和过滤专家，正在整理用于撰写某页PPT的材料。
 

@@ -25,16 +25,34 @@ from core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph
 
 def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
                           relevant_material, page) -> str:
+    material_title = (
+        "# 可以参考的完整参考资料如下，根据用户的原始请求判断应该用怎样的信息密度将相关内容呈现到最终的PPT中："
+        if page.reference_doc_is_full_context
+        else "# 可以参考的相关资料如下："
+    )
     return f"""
-想要撰写一页PPT，用户的原始请求为：{query}。
-可以参考的完整PPT的目录结构如下：{str(outline)}。
-当前正在撰写{page.index + 1}/{len(outline)}页，该页PPT题目为"{page.title}"，该页的主要内容为：{page.abstract}
-如果参考模板中没有页码，不要添加页码！！
-可以参考的相关资料如下：
+# 当前任务
+撰写一张 PPT 内容页 HTML。
+
+# 用户原始请求（决定内容密度、详略与表达深度）
+{query}
+
+# 可以参考的完整PPT的目录结构如下
+{str(outline)}。
+
+当前正在撰写{page.index + 1}/{len(outline)}页：
+- 标题："{page.title}"
+- 该页的主要内容为：
+{page.abstract}
+
+{material_title}
 {relevant_material}
+
 有相关的图片要积极使用。
+如果参考模板中没有页码，不要添加页码！！
 生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！
-请参考下方生成好的其中一页PPT的html代码中各内容模块的设计风格（如文字样式、色彩搭配、组件质感、元素交互逻辑等），生成一页完整的PPT的HTML代码。
+
+# 请参考下方生成好的其中一页PPT的html代码中各内容模块的设计风格（如文字样式、色彩搭配、组件质感、元素交互逻辑等），生成一页完整的PPT的HTML代码。
 {ppt_prompt}
 {template}
 """
@@ -53,6 +71,10 @@ async def get_content_pages_node(state: ContentPagesState):
 async def extract_relevant_doc_node(state: ContentWorkerState):
     """extract related materials for each page"""
     page = state["content_page"]
+    if page.reference_doc_is_full_context:
+        logger.info(f"skip relevant doc extraction for simple content page {page.index}")
+        return {"relevant_material": page.reference_doc}
+
     prompt = f"""
 你是一个素材整理和过滤专家，正在整理用于撰写某页PPT的材料。
 

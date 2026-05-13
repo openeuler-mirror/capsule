@@ -33,7 +33,7 @@ def _build_toc_prompt(*, ppt_prompt, template, language, page) -> str:
 # 语言
 生成页面文字必须使用：{language}
 
-# 模板示意 SVG（仅供视觉参考）
+# 模板 SVG
 {template}
 """
 

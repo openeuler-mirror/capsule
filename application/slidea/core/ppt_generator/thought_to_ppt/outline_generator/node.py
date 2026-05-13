@@ -23,6 +23,8 @@ from core.ppt_generator.thought_to_ppt.outline_generator.state import (
 SPLIT_LEN = 81920
 SPLIT_PAGE = 15
 MAX_PAGE = 100
+SIMPLE_CONTENT_PAGE_MAX_COUNT = 5
+SIMPLE_REFERENCE_DOC_CHAR_LIMIT = 5000
 OUTLINE_GENERATION_MAX_ATTEMPTS = 3
 
 
@@ -313,7 +315,7 @@ async def simple_generate_node(state: OutlineState, writer: StreamWriter):
     target = state["target_page_count"]
     logger.info(f"一次性生成大纲 {target} 页")
 
-    if target > 5:
+    if target > SIMPLE_CONTENT_PAGE_MAX_COUNT:
         prompt = f"""
 你是一位顶级的PPT制作专家。你的核心任务是将文章内容提炼成一个清晰、结构化的PPT大纲。
 **用户需求**
@@ -334,7 +336,7 @@ async def simple_generate_node(state: OutlineState, writer: StreamWriter):
     * `type`: int类型。如果该页为普通内容页，值为1；如果该页为目录页，值为2；如果该页为章节分割页，值为3；如果该页为封面，值为4。
 3.  **转换逻辑：**
     * 忽略输入中的过程性描述（如“这里需要引用xx报告”、“需要用户补充数据”等），只提炼最终应呈现在PPT上的核心内容。
-    * 如果要求的PPT总页数小于等于**5**页，不需要考虑封面、目录和分割页，直接总结文章，输出PPT内容页(type=1)即可。
+    * 如果要求的PPT总页数小于等于**{SIMPLE_CONTENT_PAGE_MAX_COUNT}**页，不需要考虑封面、目录和分割页，直接总结文章，输出PPT内容页(type=1)即可。
     * 否则
         * 必须包含封面页、目录页，计算在总页数之内。 
         * 你需要理解输入文本的层次结构，将每个相对独立的核心观点或议题，转换成一页PPT（即一个字典）。

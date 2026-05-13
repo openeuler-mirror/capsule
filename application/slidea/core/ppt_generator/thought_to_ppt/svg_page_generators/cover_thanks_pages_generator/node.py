@@ -35,7 +35,7 @@ def _build_cover_prompt(*, query, outline, save_dir, ppt_prompt, template, langu
 # 语言
 生成页面文字必须使用：{language}
 
-# 模板示意 SVG（仅供视觉参考）
+# 模板 SVG
 {template}
 """
 
@@ -62,7 +62,7 @@ PPT 整体大纲如下：
 # 语言
 生成页面文字必须使用：{language}
 
-# 模板示意 SVG（仅供视觉参考）
+# 模板 SVG
 {template}
 """
 

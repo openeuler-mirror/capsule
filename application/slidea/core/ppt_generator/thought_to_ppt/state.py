@@ -43,6 +43,7 @@ class PPTPage(BaseModel):
     index: int = 0  # 页码
     reference_doc: str = ""  # 该页PPT内容所对应的原始文档内容
     reference_images: list = []  # 该页PPT内容所对应的图片列表
+    reference_doc_is_full_context: bool = False  # reference_doc 已是完整可用上下文，跳过二次抽取
 
     def __str__(self) -> str:
         page_dict = self.model_dump(include={'index', 'title', 'abstract', 'type'})
