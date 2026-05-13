@@ -14,10 +14,11 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT_DIR / "skill" / "manifest.json"
 
 
-def _load_manifest() -> dict:
-    if not MANIFEST_PATH.exists():
-        raise FileNotFoundError(f"missing skill manifest: {MANIFEST_PATH}")
-    return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+def _load_manifest(manifest_path: Path | None = None) -> dict:
+    path = manifest_path or MANIFEST_PATH
+    if not path.exists():
+        raise FileNotFoundError(f"missing skill manifest: {path}")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _matches_any_pattern(path: Path, patterns: list[str]) -> bool:
@@ -62,13 +63,16 @@ def _copy_entry(source: Path, destination: Path, exclude_patterns: list[str]) ->
     shutil.copy2(source, destination)
 
 
-def export_skill(target_dir: Path, *, force: bool = False, update: bool = False) -> Path:
-    manifest = _load_manifest()
+def export_skill(
+    target_dir: Path, *, force: bool = False, update: bool = False,
+    manifest_path: Path | None = None
+) -> Path:
+    manifest = _load_manifest(manifest_path)
     exclude_patterns = manifest.get("exclude", [])
     include_entries = manifest.get("include", [])
 
     if not include_entries:
-        raise ValueError(f"skill manifest has no include entries: {MANIFEST_PATH}")
+        raise ValueError(f"skill manifest has no include entries: {manifest_path or MANIFEST_PATH}")
 
     if target_dir.exists() and not update:
         if not force:
@@ -113,6 +117,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="After export, run the exported scripts/install/install.py inside the target directory.",
     )
+    parser.add_argument(
+        "--manifest",
+        default="skill/manifest.json",
+        help="Path to skill manifest JSON relative to project root (default: skill/manifest.json).",
+    )
     return parser
 
 
@@ -120,8 +129,13 @@ def main() -> int:
     parser = build_argument_parser()
     args = parser.parse_args()
 
+    manifest_path = ROOT_DIR / args.manifest
+    if not manifest_path.exists():
+        print(f"Error: manifest file not found: {manifest_path}", file=sys.stderr)
+        return 1
+
     target_dir = Path(args.target).expanduser().resolve()
-    exported_dir = export_skill(target_dir, force=args.force, update=args.update)
+    exported_dir = export_skill(target_dir, force=args.force, update=args.update, manifest_path=manifest_path)
     print(f"Exported skill package to: {exported_dir}")
     if args.bootstrap:
         print(f"Bootstrapping exported skill package in: {exported_dir}")

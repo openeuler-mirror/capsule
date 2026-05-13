@@ -81,6 +81,44 @@ The exact syntax depends on the host agent, but the expected experience is the s
 | Windows | x86_64 / ARM64 | ✅ |
 | macOS | Apple Silicon | ✅ |
 
+## Deep Research Skill
+
+In addition to the main Slidea PPT generation skill, the repository also includes a standalone **Deep Research** skill that can be installed and used independently. It performs multi-source investigation on a given topic, automatically searching the web, extracting content from relevant pages, and synthesizing findings into a structured research report.
+
+### Install the Deep Research Skill
+
+To install the Deep Research skill, send the following instruction to your agent:
+
+```text
+Please fetch and follow the installation instructions for the Deep Research skill here: https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/deep_research/INSTALL.md
+```
+
+After installation, configure `.env` in the installed skill directory with at least `DEFAULT_LLM_MODEL`, `DEFAULT_LLM_API_KEY`, and `DEFAULT_LLM_API_BASE_URL`. Optionally configure `TAVILY_API_KEYS` for web search capability.
+
+### Upgrade the Deep Research Skill
+
+To upgrade an existing Deep Research installation, send the following instruction to your agent:
+
+```text
+Please fetch and follow the update instructions for the Deep Research skill here: https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/deep_research/UPDATE.md
+```
+
+### Use the Deep Research Skill
+
+In an agent environment, invoke the Deep Research skill with a research topic:
+
+```text
+Use the deep_research skill to research <topic>
+```
+
+Or in slash-command style:
+
+```text
+/deep_research <research topic>
+```
+
+The skill will automatically search the web, extract and synthesize information, and produce a structured research report in markdown format. A typical research run takes 10-30 minutes.
+
 ### Use from source
 
 If you want to contribute to Slidea itself, or you need to debug the repository locally, you can use Slidea directly from source.

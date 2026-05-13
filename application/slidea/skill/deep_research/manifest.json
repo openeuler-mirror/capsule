@@ -1,0 +1,55 @@
+{
+  "include": [
+    {
+      "from": "core/deep_research",
+      "to": "core/deep_research"
+    },
+    {
+      "from": "core/utils",
+      "to": "core/utils"
+    },
+    {
+      "from": "core/__init__.py",
+      "to": "core/__init__.py"
+    },
+    {
+      "from": "requirements.txt",
+      "to": "requirements.txt"
+    },
+    {
+      "from": ".env.example",
+      "to": ".env.example"
+    },
+    {
+      "from": "skill/deep_research/SKILL.md",
+      "to": "SKILL.md"
+    },
+    {
+      "from": "skill/deep_research/INSTALL.md",
+      "to": "INSTALL.md"
+    },
+    {
+      "from": "skill/deep_research/UPDATE.md",
+      "to": "UPDATE.md"
+    },
+    {
+      "from": "scripts/install",
+      "to": "scripts/install"
+    },
+    {
+      "from": "scripts/run_deep_research.py",
+      "to": "scripts/run_deep_research.py"
+    },
+    {
+      "from": "scripts/utils",
+      "to": "scripts/utils"
+    }
+  ],
+  "exclude": [
+    "scripts/export_skill.py",
+    "__pycache__",
+    ".DS_Store",
+    "*.pyc",
+    "*.pyo"
+  ]
+}

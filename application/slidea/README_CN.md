@@ -78,6 +78,44 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 | Windows | x86_64 / ARM64 | ✅ |
 | macOS | Apple Silicon | ✅ |
 
+## Deep Research Skill
+
+除了主要的 Slidea PPT 生成 skill 之外，本仓库还包含一个可独立安装和使用的 **Deep Research**（深度研究）skill。它可以对给定主题进行多源调查，自动搜索网络、提取相关页面内容，并将发现综合为结构化的研究报告。
+
+### 安装 Deep Research Skill
+
+要安装 Deep Research skill，请将以下指令发送给你的 Agent：
+
+```text
+请直接获取并遵循这里的说明安装 Deep Research skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/deep_research/INSTALL.md
+```
+
+安装完成后，在已安装的 skill 目录中配置 `.env`，至少需要填写 `DEFAULT_LLM_MODEL`、`DEFAULT_LLM_API_KEY` 和 `DEFAULT_LLM_API_BASE_URL`。可选配置 `TAVILY_API_KEYS` 以启用网络搜索能力。
+
+### 升级 Deep Research Skill
+
+要升级已有的 Deep Research 安装，请将以下指令发送给你的 Agent：
+
+```text
+请直接获取并遵循这里的说明更新 Deep Research skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/deep_research/UPDATE.md
+```
+
+### 使用 Deep Research Skill
+
+在 Agent 环境中，通过研究主题调用 Deep Research skill：
+
+```text
+使用 deep_research skill 研究 <主题>
+```
+
+或使用斜杠命令风格：
+
+```text
+/deep_research <研究主题>
+```
+
+该 skill 将自动搜索网络、提取并综合信息，最终生成一份结构化的 Markdown 格式研究报告。一次典型的研究运行需要 10-30 分钟。
+
 ## 从源码使用
 
 如果你是为了贡献 Slidea 本身，或需要在本地调试仓库代码，可以直接从源码使用 Slidea。
