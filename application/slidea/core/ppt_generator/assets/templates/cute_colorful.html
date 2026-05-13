@@ -33,7 +33,7 @@
             font-family: 'Noto Sans SC', sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #ffffff;
+            background-color: #FFF8FC;
         }
 
         #ppt-container {
@@ -41,7 +41,7 @@
             height: 720px;
             display: flex;
             flex-direction: column;
-            background-color: #f4e4f4;
+            background-color: #FFF8FC;
             position: relative;
             overflow: hidden;
         }
@@ -68,8 +68,8 @@
 
         /* 卡片样式 */
         .glass-card {
-            background-color: #ffffff;
-            border: 1px solid #e5e7eb;
+            background-color: #FFFFFF;
+            border: 1px solid #C4B5FD;
             border-radius: 1.5rem; /* rounded-2xl */
             padding: 2rem;
             text-align: center;
@@ -83,15 +83,41 @@
     </style>
 </head>
 <body>
+<!--
+颜色说明：
+1. 背景色：#FFF8FC
+   使用要求：页面背景，仅用于整体底色或柔和留白区域。
+
+2. 主色：#FF8FB1
+   使用要求：用于核心视觉元素、重点模块、按钮和一级强调。
+
+3. 强调色：#A78BFA
+   使用要求：用于标题强调线、重点高亮、局部强调和二级视觉焦点，不应大面积使用。
+
+4. 正文文字色：#5B556D
+   使用要求：用于主要正文、表格主文字、说明文字。
+
+5. 辅助文字色：#7B8794
+   使用要求：用于注释、说明、次级标签、弱化信息。
+
+6. 边框/分割线色：#C4B5FD
+   使用要求：用于边框、辅助线、分割线、浅色容器描边。
+
+7. 可选警示色：#FB7185
+   使用要求：仅在表达风险、问题、下降时使用。
+
+8. 可选成功色：#6EE7B7
+   使用要求：仅在表达增长、完成、正向结果时使用。
+-->
 <div id="ppt-container">
     <!-- 头部区域 (Header) -->
     <!-- 由于没有特定高度限制，这里给一点 padding 让它自然撑开，或者作为 flex item -->
     <div class="h-32 flex flex-col justify-center items-center z-10 shrink-0">
-        <h1 class="text-5xl font-black text-slate-700 tracking-wider mb-2">
-            <i class="fa-solid fa-wand-magic-sparkles text-yellow-400 mr-4"></i>
+        <h1 class="text-5xl font-black text-[#5B556D] tracking-wider mb-2">
+            <i class="fa-solid fa-wand-magic-sparkles text-[#FF8FB1] mr-4"></i>
             开启元气满满一天的小秘诀
         </h1>
-        <p class="text-2xl text-slate-500 font-medium">A little guide to a happy day!</p>
+        <p class="text-2xl text-[#7B8794] font-medium">A little guide to a happy day!</p>
     </div>
 
     <div class="section-container">
@@ -108,9 +134,9 @@
                     <!-- 卡片 1: 清晨 -->
                     <div class="glass-card">
                         <div class="flex-1 flex flex-col justify-center items-center py-4">
-                            <i class="fa-solid fa-sun text-7xl text-orange-400 mb-4"></i>
-                            <h2 class="text-3xl font-bold text-slate-700 mb-2">清晨阳光</h2>
-                            <p class="text-slate-500 text-lg leading-relaxed">
+                            <i class="fa-solid fa-sun text-7xl text-[#FF8FB1] mb-4"></i>
+                            <h2 class="text-3xl font-bold text-[#5B556D] mb-2">清晨阳光</h2>
+                            <p class="text-[#7B8794] text-lg leading-relaxed">
                                 用微笑迎接第一缕阳光<br>做点简单的伸展运动
                             </p>
                         </div>
@@ -119,9 +145,9 @@
                     <!-- 卡片 2: 午后 -->
                     <div class="glass-card">
                         <div class="flex-1 flex flex-col justify-center items-center py-4">
-                            <i class="fa-solid fa-mug-hot text-7xl text-rose-400 mb-4"></i>
-                            <h2 class="text-3xl font-bold text-slate-700 mb-2">午后小憩</h2>
-                            <p class="text-slate-500 text-lg leading-relaxed">
+                            <i class="fa-solid fa-mug-hot text-7xl text-[#A78BFA] mb-4"></i>
+                            <h2 class="text-3xl font-bold text-[#5B556D] mb-2">午后小憩</h2>
+                            <p class="text-[#7B8794] text-lg leading-relaxed">
                                 一杯热茶或咖啡<br>搭配一本好书放松心情
                             </p>
                         </div>
@@ -130,9 +156,9 @@
                     <!-- 卡片 3: 夜晚 -->
                     <div class="glass-card">
                         <div class="flex-1 flex flex-col justify-center items-center py-4">
-                            <i class="fa-solid fa-star text-7xl text-indigo-400 mb-4"></i>
-                            <h2 class="text-3xl font-bold text-slate-700 mb-2">静谧夜晚</h2>
-                            <p class="text-slate-500 text-lg leading-relaxed">
+                            <i class="fa-solid fa-star text-7xl text-[#6EE7B7] mb-4"></i>
+                            <h2 class="text-3xl font-bold text-[#5B556D] mb-2">静谧夜晚</h2>
+                            <p class="text-[#7B8794] text-lg leading-relaxed">
                                 写下今天的美好瞬间<br>带着感恩的心进入梦乡
                             </p>
                         </div>
@@ -144,7 +170,7 @@
     </div>
 
     <!-- 底部 -->
-    <footer class="h-12 flex justify-center items-center z-10 text-slate-600 font-medium">
+    <footer class="h-12 flex justify-center items-center z-10 text-[#7B8794] font-medium">
         <p>Have a wonderful day! ✨</p>
     </footer>
 </div>

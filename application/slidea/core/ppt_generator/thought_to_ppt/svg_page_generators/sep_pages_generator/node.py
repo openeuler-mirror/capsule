@@ -28,6 +28,9 @@ def _build_sep_template_prompt(*, ppt_prompt, template, language, outline, page)
 # 设计要求
 - 配色必须与下方模板示意 SVG 中的配色保持一致!
 - 分割页通常较空旷，留白充足，呼吸感强。
+- 这是章节分割页，不是内容页；模板中关于内容页标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
+- 需要保留同套 PPT 的主要视觉装饰与识别特征，包括主色、背景和字体气质；除此之外可以发挥创造力，设计符合章节过渡感的分割页版式。
+- 不要为了遵守内容页模板而强行使用内容页标题栏布局。
 
 # 语言
 生成页面文字必须使用：{language}
@@ -49,6 +52,9 @@ def _build_sep_page_prompt(*, ppt_prompt, sep_template, language, outline, page)
 # 设计要求
 - 必须与下方"已生成的同套分割页 SVG"在配色、字体、版式上保持一致，仅替换文字内容。
 - 不要复制原 SVG 的具体文字，但视觉骨架应一致。
+- 这是章节分割页，不是内容页；内容页模板中关于标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
+- 后续分割页应跟随第一张分割页的版式体系，并保留同套 PPT 的主要视觉装饰与识别特征，包括主要装饰、主色、背景和字体气质。
+- 不要为了遵守内容页模板而强行使用内容页标题栏布局。
 
 # 语言
 生成页面文字必须使用：{language}
