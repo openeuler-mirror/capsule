@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -26,8 +27,9 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.s
 
 PROMPT_DIR = Path(app_base_dir) / "core" / "ppt_generator" / "assets" / "prompts"
 SEVERITY_RANK = {"none": 0, "minor": 1, "critical": 2, None: 3}
-VLM_VISUAL_REVIEW_MAX_ITERATIONS = 3
+VLM_VISUAL_REVIEW_MAX_ITERATIONS = 1
 VLM_SCREENSHOT_DIR_NAME = "vlm_screenshots"
+GENERATE_PROMPT_LOG_DIR_NAME = "prompts"
 SVG_JUDGE_PROMPT = "svg_vlm_judge_prompt.txt"
 SVG_FIX_PROMPT = "svg_vlm_fix_prompt.txt"
 SVG_QUALITY_REPAIR_PROMPT = "svg_quality_repair_prompt.txt"
@@ -48,6 +50,29 @@ def _load_prompt(name: str) -> str:
     path = PROMPT_DIR / name
     with open(path, "r", encoding="utf-8") as fh:
         return fh.read()
+
+
+def _save_generate_prompt(state: SVGWorkerState) -> None:
+    """Persist the per-page generation prompt to ``<save_dir>/prompts/`` for inspection.
+
+    Best-effort: filesystem failures are logged but don't interrupt generation.
+    """
+    save_dir = state.get("save_dir")
+    prompt = state.get("generate_ppt_prompt")
+    if not save_dir or not prompt:
+        return
+    index = state.get("index", 0)
+    page = state.get("page")
+    title = getattr(page, "title", None)
+    cleaned = re.sub(r'[\\/*?:"<>|]', "_", title or "slide")
+    cleaned = re.sub(r"\s+", "_", cleaned).strip("_")[:40] or "slide"
+    filename = f"{index + 1:02d}_{cleaned}.txt"
+    prompt_dir = Path(save_dir) / GENERATE_PROMPT_LOG_DIR_NAME
+    try:
+        prompt_dir.mkdir(parents=True, exist_ok=True)
+        (prompt_dir / filename).write_text(prompt, encoding="utf-8")
+    except OSError as error:
+        logger.warning(f"save generate prompt failed: {error}")
 
 
 async def _svg_process_llm_response(raw: str, *, page_index: int = 0) -> str:
@@ -132,6 +157,7 @@ async def _svg_screenshot_with_embedded_images(source_path: str, output_path: st
 
 async def generate_ppt_page_node(state: SVGWorkerState):
     """generate svg ppt page"""
+    _save_generate_prompt(state)
     response = await llm_invoke(
         ModelRoute.PREMIUM,
         [HumanMessage(content=state["generate_ppt_prompt"])],

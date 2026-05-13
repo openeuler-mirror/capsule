@@ -23,9 +23,10 @@ from core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.state
 
 PROMPT_DIR = Path(app_base_dir) / "core" / "ppt_generator" / "assets" / "prompts"
 SEVERITY_RANK = {"none": 0, "minor": 1, "critical": 2, None: 3}
-VLM_VISUAL_REVIEW_MAX_ITERATIONS = 3
+VLM_VISUAL_REVIEW_MAX_ITERATIONS = 1
 VLM_SCREENSHOT_DIR_NAME = "vlm_screenshots"
 VLM_HTML_CANDIDATE_DIR_NAME = "vlm_html_candidates"
+GENERATE_PROMPT_LOG_DIR_NAME = "prompts"
 HTML_JUDGE_PROMPT = "vlm_judge_prompt.txt"
 HTML_FIX_PROMPT = "vlm_fix_prompt.txt"
 
@@ -37,6 +38,34 @@ class VLMCandidateInput:
     screenshot_path: str
     content: str
     judge_result: Dict[str, Any]
+    
+
+def _save_generate_prompt(state: PPTWorkerState) -> None:
+    """Persist the per-page generation prompt to ``<save_dir>/prompts/`` for inspection.
+
+    Best-effort: filesystem failures are logged but don't interrupt generation.
+    """
+    save_dir = state.get("save_dir")
+    prompt = state.get("generate_ppt_prompt")
+    if not save_dir or not prompt:
+        return
+    index = state.get("index", 0)
+    page = _resolve_page(state)
+    title = getattr(page, "title", None)
+    cleaned = re.sub(r'[\\/*?:"<>|]', "_", title or "slide")
+    cleaned = re.sub(r"\s+", "_", cleaned).strip("_")[:40] or "slide"
+    filename = f"{index + 1:02d}_{cleaned}.txt"
+    prompt_dir = Path(save_dir) / GENERATE_PROMPT_LOG_DIR_NAME
+    try:
+        prompt_dir.mkdir(parents=True, exist_ok=True)
+        (prompt_dir / filename).write_text(prompt, encoding="utf-8")
+    except OSError as error:
+        logger.warning(f"save generate prompt failed: {error}")
+
+
+def _resolve_page(state: PPTWorkerState):
+    """Pull the active PPTPage from state (added in Stage 2). Returns None if absent."""
+    return state.get("page") if isinstance(state, dict) else None
 
 
 def _load_prompt(name: str) -> str:
@@ -47,6 +76,7 @@ def _load_prompt(name: str) -> str:
 
 async def generate_ppt_page_node(state: PPTWorkerState):
     """generate ppt page"""
+    _save_generate_prompt(state)
     response = await llm_invoke(
         ModelRoute.PREMIUM,
         [HumanMessage(content=state["generate_ppt_prompt"])],
