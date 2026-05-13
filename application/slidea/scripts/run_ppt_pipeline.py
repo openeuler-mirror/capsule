@@ -17,7 +17,7 @@ logging.getLogger("langgraph.checkpoint.serde.jsonplus").addFilter(NoUnregistere
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
 
-from core.utils.cache import new_run_id, run_dir, save_json
+from core.utils.cache import new_run_id, run_dir, save_json, load_json
 from scripts.utils.cli_output import emit_stage_payload
 from core.utils.config import settings
 from core.utils.logger import logger
@@ -153,6 +153,31 @@ def _build_run_metadata(args, run_id: str):
         "use_cache": args.use_cache,
         "image_search": args.image_search,
     }
+
+
+def _cached_run_metadata(out_dir: str) -> dict:
+    cached = load_json(Path(out_dir) / "run.json")
+    return cached if isinstance(cached, dict) else {}
+
+
+def _resolve_render_mode(args, cached_run: dict) -> str:
+    cached_mode = cached_run.get("render_mode")
+    if cached_mode not in {"html", "svg"}:
+        cached_mode = ""
+
+    if cached_mode:
+        if args.render_mode and args.render_mode != cached_mode:
+            print(
+                f"[WARNING] ignoring --render-mode {args.render_mode}; "
+                f"cached run uses {cached_mode}",
+                file=sys.stderr,
+            )
+        return cached_mode
+
+    if args.render_mode:
+        return args.render_mode
+
+    return "html"
 
 
 async def _run_all_stages(args, run_id: str, out_dir: str):
@@ -320,7 +345,7 @@ async def main():
     parser.add_argument("--research-mode", type=str, default="")
     parser.add_argument("--use-cache", type=str, default="true")
     parser.add_argument("--image-search", type=str, default="on")
-    parser.add_argument("--render-mode", type=str, choices=["html", "svg"], default="html")
+    parser.add_argument("--render-mode", type=str, choices=["html", "svg"], default=None)
     parser.add_argument("--run-id", type=str, default="")
     parser.add_argument("--recursion-limit", type=int, default=500)
     parser.add_argument("--dry-run", action="store_true")
@@ -360,6 +385,8 @@ async def main():
 
     run_id = args.run_id or new_run_id("ppt")
     out_dir = run_dir(str(root), run_id)
+    cached_run = _cached_run_metadata(out_dir)
+    args.render_mode = _resolve_render_mode(args, cached_run)
     save_json(Path(out_dir) / "run.json", _build_run_metadata(args, run_id))
 
     if stages == ["all"]:

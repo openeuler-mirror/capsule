@@ -49,6 +49,23 @@ class CliStageSmokeTests(unittest.TestCase):
         module.generate_pages_node = generate_pages_node
         return module
 
+    def _make_render_mode_probe_module(self):
+        module = types.ModuleType("core.ppt_generator.thought_to_ppt.node")
+
+        async def generate_outline_node(state, config=None):
+            return {}
+
+        async def generate_pages_node(state):
+            mode = state.get("render_mode", "missing")
+            return {
+                "final_pdf_path": f"/tmp/{mode}.pdf",
+                "final_pptx_path": f"/tmp/{mode}.pptx",
+            }
+
+        module.generate_outline_node = generate_outline_node
+        module.generate_pages_node = generate_pages_node
+        return module
+
     def _make_state_module(self):
         module = types.ModuleType("core.ppt_generator.thought_to_ppt.state")
 
@@ -268,6 +285,235 @@ class CliStageSmokeTests(unittest.TestCase):
         self.assertTrue(payload["output"]["used_cache"])
         self.assertEqual(ppt_payload["render_mode"], "svg")
         self.assertTrue(ppt_payload["pptx_path"].endswith(".pptx"))
+
+    def test_render_stage_inherits_svg_render_mode_from_run_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "render-inherit-svg"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            outline_dir = out_dir / "outline"
+            outline_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "session_id": "local",
+                        "stages": "outline",
+                        "render_mode": "svg",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (outline_dir / "outline.json").write_text(
+                json.dumps(
+                    {
+                        "topic": "SVG Inherit",
+                        "outline": [
+                            {
+                                "title": "Cover",
+                                "abstract": "Intro",
+                                "type": 4,
+                                "index": 0,
+                                "reference_doc": "",
+                                "reference_images": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = self._run_main(
+                ["--text", "demo", "--stages", "render", "--run-id", run_id],
+                extra_modules={
+                    "core.ppt_generator.thought_to_ppt.node": self._make_render_mode_probe_module(),
+                },
+                cwd=tmp_dir,
+            )
+            run_payload = json.loads((out_dir / "run.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["stage"], "completed")
+        self.assertEqual(payload["output"]["files"], ["/tmp/svg.pdf", "/tmp/svg.pptx"])
+        self.assertEqual(run_payload["render_mode"], "svg")
+
+    def test_resume_preserves_svg_render_mode_from_run_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "resume-svg"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "session_id": "local",
+                        "stages": "all",
+                        "render_mode": "svg",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            pipeline_module = types.ModuleType("scripts.utils.pipeline")
+            pipeline_module.extract_resume_input = lambda payload: payload.get("text")
+
+            async def run_thinkflow_app(_app, graph_input, _config, *, emit_ctx):
+                return {"stage": "input_required"}
+
+            pipeline_module.run_thinkflow_app = run_thinkflow_app
+
+            graph_module = types.ModuleType("core.ppt_generator.graph")
+            graph_module.ppt_workflow = types.SimpleNamespace(
+                compile=lambda checkpointer=None: object()
+            )
+
+            sqlite_module = types.ModuleType("langgraph.checkpoint.sqlite.aio")
+
+            class FakeSaver:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+                @classmethod
+                def from_conn_string(cls, _db_name):
+                    return cls()
+
+            sqlite_module.AsyncSqliteSaver = FakeSaver
+
+            payload = self._run_main(
+                ["--resume", "continue", "--run-id", run_id],
+                extra_modules={
+                    "scripts.utils.pipeline": pipeline_module,
+                    "core.ppt_generator.graph": graph_module,
+                    "langgraph.checkpoint.sqlite.aio": sqlite_module,
+                },
+                cwd=tmp_dir,
+            )
+            run_payload = json.loads((out_dir / "run.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["stage"], "input_required")
+        self.assertEqual(run_payload["render_mode"], "svg")
+        self.assertTrue(run_payload["resume"])
+
+    def test_resume_allows_matching_explicit_render_mode(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "resume-svg-explicit"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "session_id": "local",
+                        "stages": "all",
+                        "render_mode": "svg",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            pipeline_module = types.ModuleType("scripts.utils.pipeline")
+            pipeline_module.extract_resume_input = lambda payload: payload.get("text")
+
+            async def run_thinkflow_app(_app, graph_input, _config, *, emit_ctx):
+                return {"stage": "input_required"}
+
+            pipeline_module.run_thinkflow_app = run_thinkflow_app
+
+            graph_module = types.ModuleType("core.ppt_generator.graph")
+            graph_module.ppt_workflow = types.SimpleNamespace(
+                compile=lambda checkpointer=None: object()
+            )
+
+            sqlite_module = types.ModuleType("langgraph.checkpoint.sqlite.aio")
+
+            class FakeSaver:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+                @classmethod
+                def from_conn_string(cls, _db_name):
+                    return cls()
+
+            sqlite_module.AsyncSqliteSaver = FakeSaver
+
+            payload = self._run_main(
+                ["--resume", "continue", "--run-id", run_id, "--render-mode", "svg"],
+                extra_modules={
+                    "scripts.utils.pipeline": pipeline_module,
+                    "core.ppt_generator.graph": graph_module,
+                    "langgraph.checkpoint.sqlite.aio": sqlite_module,
+                },
+                cwd=tmp_dir,
+            )
+            run_payload = json.loads((out_dir / "run.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["stage"], "input_required")
+        self.assertEqual(run_payload["render_mode"], "svg")
+        self.assertTrue(run_payload["resume"])
+
+    def test_resume_ignores_conflicting_render_mode(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "resume-svg-conflict"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "session_id": "local",
+                        "stages": "all",
+                        "render_mode": "svg",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            pipeline_module = types.ModuleType("scripts.utils.pipeline")
+            pipeline_module.extract_resume_input = lambda payload: payload.get("text")
+
+            async def run_thinkflow_app(_app, graph_input, _config, *, emit_ctx):
+                return {"stage": "input_required"}
+
+            pipeline_module.run_thinkflow_app = run_thinkflow_app
+
+            graph_module = types.ModuleType("core.ppt_generator.graph")
+            graph_module.ppt_workflow = types.SimpleNamespace(
+                compile=lambda checkpointer=None: object()
+            )
+
+            sqlite_module = types.ModuleType("langgraph.checkpoint.sqlite.aio")
+
+            class FakeSaver:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+                @classmethod
+                def from_conn_string(cls, _db_name):
+                    return cls()
+
+            sqlite_module.AsyncSqliteSaver = FakeSaver
+
+            payload = self._run_main(
+                ["--resume", "continue", "--run-id", run_id, "--render-mode", "html"],
+                extra_modules={
+                    "scripts.utils.pipeline": pipeline_module,
+                    "core.ppt_generator.graph": graph_module,
+                    "langgraph.checkpoint.sqlite.aio": sqlite_module,
+                },
+                cwd=tmp_dir,
+            )
+            run_payload = json.loads((out_dir / "run.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["stage"], "input_required")
+        self.assertEqual(run_payload["render_mode"], "svg")
+        self.assertTrue(run_payload["resume"])
 
     def test_render_stage_without_outline_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
