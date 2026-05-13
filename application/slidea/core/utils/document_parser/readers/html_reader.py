@@ -18,7 +18,7 @@ class HtmlReader:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def parse(self, file_path: str, base_url: str = "") -> ParseResult:
-        logger.info("HtmlReader 开始解析: {}", file_path)
+        logger.debug("HtmlReader 开始解析: {}", file_path)
         if not os.path.exists(file_path):
             logger.warning("HtmlReader 文件不存在: {}", file_path)
             return ParseResult(text="", images=[], markdown_file="")
@@ -37,7 +37,7 @@ class HtmlReader:
             f.write(md_text)
 
         images = image_list if self.extract_images else []
-        logger.info(
+        logger.debug(
             "HtmlReader 解析完成，文本长度: {} 字符，图片数量: {}",
             len(md_text),
             len(images),

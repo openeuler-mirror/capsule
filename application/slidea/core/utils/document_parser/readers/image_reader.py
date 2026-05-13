@@ -28,7 +28,7 @@ class ImageReader:
         return ext in _IMAGE_EXTENSIONS
 
     async def parse(self, file_path: str) -> ParseResult:
-        logger.info("ImageReader 开始解析: {}", file_path)
+        logger.debug("ImageReader 开始解析: {}", file_path)
 
         if not os.path.exists(file_path):
             logger.warning("ImageReader 文件不存在: {}", file_path)
@@ -37,9 +37,9 @@ class ImageReader:
         description = ""
         if can_vlm_invoke_route(ModelRoute.PREMIUM):
             description = await self._describe_image_via_vlm(file_path)
-            logger.info("ImageReader VLM 描述: {}", description)
+            logger.debug("ImageReader VLM 描述: {}", description)
         else:
-            logger.info("ImageReader VLM 不可用，跳过图片内容识别")
+            logger.debug("ImageReader VLM 不可用，跳过图片内容识别")
 
         name = Path(file_path).stem
         md_lines = []
@@ -63,7 +63,7 @@ class ImageReader:
 
         img_info = ImageInfo(path=copied_img_path, description=description)
 
-        logger.info(
+        logger.debug(
             "ImageReader 解析完成，文本长度: {} 字符",
             len(md_text),
         )
@@ -80,7 +80,7 @@ class ImageReader:
                 base64_image = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
             prompt = "请详细描述这张图片的内容。"
-            logger.info("ImageReader VLM 描述图片: {}", img_path)
+            logger.debug("ImageReader VLM 描述图片: {}", img_path)
             response = await vlm_raw_invoke(ModelRoute.PREMIUM,
                 [
                     HumanMessage(

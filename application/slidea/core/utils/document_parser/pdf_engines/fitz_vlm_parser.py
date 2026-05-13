@@ -61,7 +61,7 @@ class FitzVLMPDFParser(FitzPDFParser):
         all_images = self._deduplicate_images(pages)
         await self._describe_images(all_images)
         vector_images = await self._process_vector_charts(pages)
-        logger.info("共 {} 张矢量图表", len(vector_images))
+        logger.debug("共 {} 张矢量图表", len(vector_images))
         all_images.extend(vector_images)
         return all_images
 
@@ -71,7 +71,7 @@ class FitzVLMPDFParser(FitzPDFParser):
         async def describe(img: ImageInfo):
             async with semaphore:
                 img.description = await self._describe_image_via_vlm(img.path)
-                logger.info("Fitz-VLM 引擎描述图片 {}: {}", img.path, img.description)
+                logger.debug("Fitz-VLM 引擎描述图片 {}: {}", img.path, img.description)
 
         await asyncio.gather(*[describe(img) for img in images])
 
@@ -84,7 +84,7 @@ class FitzVLMPDFParser(FitzPDFParser):
                     rtype, description = await self._classify_vector_image(
                         vector_image, page.page_num
                     )
-                    logger.info(
+                    logger.debug(
                         "页面 {} 矢量图 {} 分类结果: {}", page.page_num, vi, description
                     )
                     if rtype in ["NO", "no"]:
@@ -181,7 +181,7 @@ class FitzVLMPDFParser(FitzPDFParser):
                 ]
             )
             content = response.content
-            logger.info("Fitz-VLM 引擎分类矢量图 {}: {}", page_num, content)
+            logger.debug("Fitz-VLM 引擎分类矢量图 {}: {}", page_num, content)
             result = repair_json(content, ensure_ascii=False, return_objects=True)
             return result.get("type", "NO"), result.get("description", "")
         except Exception as e:
