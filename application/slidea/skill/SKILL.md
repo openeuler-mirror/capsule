@@ -15,6 +15,19 @@ Use the directory containing this SKILL.md as the Slidea skill directory (referr
 - Unix-like example: `.venv/bin/python`
 - Windows example: `.venv/Scripts/python.exe`
 
+## Render Route Selection
+
+Slidea supports two render routes:
+
+- HTML route: default route for generated HTML/PDF/PPTX artifacts.
+- SVG route: optional route for SVG-generated PPTX output.
+
+Use the HTML route by default. Do not add `--render-mode` unless the user explicitly asks for the SVG route.
+
+Only use `--render-mode svg` when the user clearly requests SVG-generated PPTX output.
+
+Do not proactively mention the SVG route, recommend it, or ask the user whether they want to use it. If the user only asks for a PPT, deck, slide deck, presentation, PDF, PPTX, or normal generation, keep the default HTML route.
+
 ## Workflow Overview
 
 **Important**: Before starting, you **must ask user** whether they want to review and refine the PPT speech script at first. Based on their answer:
@@ -120,6 +133,8 @@ If you want to set `--research-mode` to `simple` or `deep`, you must explicitly 
 - `--text "<PPT request> 参考文件路径: <SPEECH_SCRIPT_MD_PATH>"`: new PPT request text; `--text` or `--resume` must be provided; Preserve user original input as much as possible; The speech script markdown file path from Phase 1 must be appended as `参考文件路径: <SPEECH_SCRIPT_MD_PATH>` after the request text.
 - `--resume "<user reply>"`: continue an interrupted LangGraph run using the user's answer, selection, or edited text
 - `--session-id <id>`: session / thread id, default `local`
+- `--stages <comma-separated>`: stage selection, default `all`; supported values are `all`, `parse`, `research`, `outline`, `render`
+- `--render-mode {html|svg}`: render route, default is `html`; omit this unless the user explicitly requested the SVG route
 - `--research-mode {skip|simple|deep}`: force research mode, skip means no research, simple means shallow research, deep means deep research, default is ''
 - `--image-search {on|off}`: toggle web image search
 - `--run-id <run_id>`: reuse or pin a run id

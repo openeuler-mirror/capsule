@@ -190,10 +190,20 @@ It turns source material into:
 
 - a writing direction for the presentation,
 - a slide outline,
-- page-level HTML renders,
+- page-level renders,
 - and final PDF / PPTX artifacts.
 
 This subsystem is split out to separate "how to think about the deck" from "how to render the deck".
+
+Slidea supports two render routes: HTML and SVG. The HTML route is the default route for normal PPT generation, and the SVG route is optional.
+
+Example:
+
+```bash
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --text "Generate a 10-page PPT about AI Agent for technical audiences, without deep research, covering Agent technology trends" \
+  --render-mode svg
+```
 
 During PPT rendering, Slidea uses a few-shot approach to keep generated layouts visually consistent.
 
