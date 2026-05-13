@@ -109,15 +109,15 @@
 8. 可选成功色：#6EE7B7
    使用要求：仅在表达增长、完成、正向结果时使用。
 -->
-<div id="ppt-container">
+<div id="ppt-container" data-description="固定页面容器；保留可爱彩色模板背景、页脚和整体尺寸。">
     <!-- 头部区域 (Header) -->
     <!-- 由于没有特定高度限制，这里给一点 padding 让它自然撑开，或者作为 flex item -->
-    <div class="h-32 flex flex-col justify-center items-center z-10 shrink-0">
-        <h1 class="text-5xl font-black text-[#5B556D] tracking-wider mb-2">
+    <div id="header" data-description="内容页固定标题栏；只替换标题文字，不加额外标题装饰。" class="h-32 flex flex-col justify-center items-center z-10 shrink-0">
+        <h1 id="page-title-text" data-description="标题固定样式：text-5xl font-black text-[#5B556D] tracking-wider mb-2，含魔法棒图标。" class="text-5xl font-black text-[#5B556D] tracking-wider mb-2">
             <i class="fa-solid fa-wand-magic-sparkles text-[#FF8FB1] mr-4"></i>
-            开启元气满满一天的小秘诀
+            {{PAGE_TITLE}}
         </h1>
-        <p class="text-2xl text-[#7B8794] font-medium">A little guide to a happy day!</p>
+        <p id="template-subtitle" data-description="固定副标题风格，可替换为简短副标题，也可删除。" class="text-2xl text-[#7B8794] font-medium">A little guide to a happy day!</p>
     </div>
 
     <div class="section-container">
@@ -126,10 +126,10 @@
             <!-- 这里因为标题已经在外部（Header），我们主要处理内容区的分布 -->
             <!-- 为了符合"Title and Content together"的规则，如果视为一个整体Section，结构如下： -->
 
-            <div class="w-full h-full flex flex-col">
+            <div id="main-content-safe-area" data-description="主体内容范围；正式内容应在此区域内布局。" class="w-full h-full flex flex-col">
                 <!-- 内容区域：必须用 justify-around 包裹 -->
                 <!-- 方向为横向 (flex-row) 以排列三个卡片 -->
-                <div class="flex-1 flex flex-row justify-around items-center">
+                <div id="content-placeholder" data-description="示例占位内容，正式输出删除并替换为真实内容模块。" class="flex-1 flex flex-row justify-around items-center">
 
                     <!-- 卡片 1: 清晨 -->
                     <div class="glass-card">

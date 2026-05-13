@@ -13,6 +13,8 @@ def _build_sep_template_prompt(*, ppt_prompt, template, language, outline, page)
 生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！
 请参考下方模板PPT的html代码中各内容模块的设计风格（如文字样式、色彩搭配、组件质感、元素交互逻辑等，不要参考文本内容！），生成一页完整的PPT分割页的HTML代码。分割页可以没有示例中的header部分。
 分割页保持简洁、大方即可，不需要过多信息。
+这是章节分割页，不是内容页；模板中关于内容页标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
+需要保留同套 PPT 的主要视觉装饰与识别特征，包括主色、背景和字体气质；除此之外可以发挥创造力，设计符合章节过渡感的分割页版式。
 {ppt_prompt}
 {template}
 """
@@ -25,6 +27,8 @@ def _build_sep_page_prompt(*, ppt_prompt, sep_template, language, outline, page)
 如果主要内容中没有明确说明后续部分为"第x部分"，不要在分割页中体现第几部分！不要编造内容！
 生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！
 请参考下方生成好的其中一页PPT分割页的html代码的设计风格（如文字样式、色彩搭配、组件质感、元素交互逻辑等，不要参考文本内容！），与其保持样式一致，生成一页完整的PPT分割页的HTML代码。
+这是章节分割页，不是内容页；内容页模板中关于标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
+后续分割页应跟随第一张分割页的版式体系，并保留同套 PPT 的主要视觉装饰与识别特征，包括主要装饰、主色、背景和字体气质。
 {ppt_prompt}
 {sep_template}
 """

@@ -142,22 +142,22 @@
 -->
 
     <!-- 主容器 -->
-    <div id="ppt-container" class="flex flex-col box-border">
+    <div id="ppt-container" data-description="固定页面容器；保留英文艺术模板背景、角标和整体尺寸。" class="flex flex-col box-border">
         
         <!-- Header - 占据空间调小 (pt-6 pb-2) -->
-        <header class="flex-none px-16 pt-6 pb-2 text-center">
-            <h1 class="text-5xl font-stylized text-[#2C2C2C]">{{PAGE_TITLE}}</h1>
+        <header id="header" data-description="内容页固定标题栏；只替换标题文字，不加额外标题装饰。" class="flex-none px-16 pt-6 pb-2 text-center">
+            <h1 id="page-title-text" data-description="标题固定样式：text-5xl font-stylized text-[#2C2C2C] 居中。" class="text-5xl font-stylized text-[#2C2C2C]">{{PAGE_TITLE}}</h1>
         </header>
 
         <!-- Main Content 区域 -->
         <div class="section-container flex-1 px-8 py-4">
             <div class="scalable-content">
-                <div class="flex-1 flex flex-col w-full h-full border border-[#D1D5DB] p-4 min-h-0">
+                <div id="main-content-safe-area" data-description="主体内容范围；正式内容应在此区域内布局，保留艺术边框和角标。" class="flex-1 flex flex-col w-full h-full border border-[#D1D5DB] p-4 min-h-0">
                     <div class="corner-row">
                         <div class="paper-corner paper-corner-top"></div>
                     </div>
                     <div class="flex-1 flex flex-col justify-center items-center min-h-0 px-6 py-4">
-                        <div class="text-center min-h-0">
+                        <div id="content-placeholder" data-description="占位提示，正式输出删除。" class="text-center min-h-0">
                             <!-- 内容区域标题及描述全部改为 italic -->
                             <p class="text-4xl font-stylized text-[#2C2C2C] mb-6 italic">{{CONTENT_AREA}}</p>
                             

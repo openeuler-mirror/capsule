@@ -36,6 +36,10 @@
 - desc：具体可见问题，用一两句话说明。
 - repair_instruction：直接可执行的修复方向，例如“重构右侧列布局，移除固定高度或 overflow hidden，增加卡片高度和 gap”。
 
+# 内容页模板保护要求
+- 如果截图对应的页面明显使用了内容页模板标题区或主体装饰框（常见 id 可能为 header / page-title-text / top-accent-bar / bottom-accent-bar / main-content-safe-area / content-frame-*），修复线索不得建议移动、缩放、重绘或重新设计标题区、背景、固定装饰、主体装饰框和页脚装饰。
+- 对内容页的修复建议应优先限定在主体内容区域：调整正文、卡片、图表、图片、流程图、示意图等主要内容的位置、尺寸、行距、字号和层级。
+
 # 输出要求
 仅返回如下 JSON，不要输出任何其他文字，不要使用 Markdown 代码块包裹：
 {

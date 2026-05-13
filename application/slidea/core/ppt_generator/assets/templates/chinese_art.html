@@ -104,14 +104,14 @@
    使用要求：仅在表达增长、完成、正向结果时使用。
 -->
 
-    <!-- 主容器 (去除了上下粗蓝边框) -->
-    <div id="ppt-container" class="flex flex-col box-border">
+    <!-- 主容器 -->
+    <div id="ppt-container" data-description="固定页面容器；保留国风宣纸背景、整体尺寸和视觉基底。" class="flex flex-col box-border">
         
         <!-- Header -->
-        <header class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
+        <header id="header" data-description="内容页固定标题栏；只替换标题文字，不加额外标题装饰。" class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
             <div class="flex items-center">
                 <!-- 标题采用水墨深色，字体加大以展现书法气韵 -->
-                <h1 class="text-4xl font-bold text-[#3F3933] tracking-wide">{{标题}}</h1>
+                <h1 id="page-title-text" data-description="标题固定样式：text-4xl font-bold text-[#3F3933] tracking-wide。" class="text-4xl font-bold text-[#3F3933] tracking-wide">{{PAGE_TITLE}}</h1>
             </div>
         </header>
 
@@ -119,11 +119,11 @@
         <div class="section-container flex-1 px-10 py-2">
             <div class="scalable-content">
                 <!-- 顶级容器架构：边框改为古典的双实线和浅褐色，模拟古籍版式 -->
-                <div class="flex-1 flex flex-col w-full h-full border-double border-[4px] border-[#C6B6A5] p-8 min-h-0">
+                <div id="main-content-safe-area" data-description="主体内容范围；正式内容应在此区域内布局，保留国风双线框。" class="flex-1 flex flex-col w-full h-full border-double border-[4px] border-[#C6B6A5] p-8 min-h-0">
                     
                     <!-- 内容区布局: flex-1 flex flex-col justify-around (后续在此处放入真实内容模块) -->
                     <div class="flex-1 flex flex-col justify-around items-center min-h-0">
-                        <div class="text-center min-h-0">
+                        <div id="content-placeholder" data-description="占位提示，正式输出删除。" class="text-center min-h-0">
                             <!-- 占位文字同样使用国风配色 -->
                             <p class="text-3xl font-bold mb-4 text-[#3F3933] tracking-widest">{{CONTENT_AREA}}</p>
                             <p class="text-lg text-[#8C8070]">(根据实际内容自由布局)</p>

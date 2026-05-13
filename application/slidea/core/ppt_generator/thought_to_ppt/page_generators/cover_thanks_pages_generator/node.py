@@ -11,6 +11,8 @@ def _build_cover_prompt(*, query, outline, save_dir, ppt_prompt, template, langu
 {page.abstract}
 生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！
 撰写封面页时只需要撰写包含标题的简单封面即可，不需要包含过多内容，且所有配色必须和以下给定的模板的配色保持一致。
+这是封面，不是内容页；模板中关于内容页标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
+需要保留同套 PPT 的主要视觉装饰与识别特征，包括主要装饰、主色、背景和字体气质；除此之外可以发挥创造力，设计符合用户要求的封面版式。
 {ppt_prompt}
 {template}
 """
@@ -24,6 +26,8 @@ PPT的大致内容如下：
 {str(outline)}
 请根据以上内容生成合适的PPT最后的致谢页。
 撰写简单精简的致谢页即可，内容不要过多，且所有配色必须和以下给定的模板的配色保持一致。
+这是致谢页，不是内容页；模板中关于内容页标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
+需要保留同套 PPT 的主要视觉装饰与识别特征，包括主色、背景和字体气质；除此之外可以发挥创造力，设计符合用户要求的致谢/收束页版式。
 生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！
 {ppt_prompt}
 {template}

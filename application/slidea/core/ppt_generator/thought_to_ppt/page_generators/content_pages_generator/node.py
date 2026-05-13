@@ -346,6 +346,7 @@ async def generate_content_page_node(state: ContentWorkerState):
         "generate_ppt_prompt": prompt,
         "ppt_prompt": state["ppt_prompt"],
         "save_dir": state["save_dir"],
+        "page": page,
         "iteration": 0,
         "action": "generate",
         "content": None,

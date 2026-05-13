@@ -9,6 +9,8 @@ def _build_toc_prompt(*, ppt_prompt, template, language, page) -> str:
 撰写一个ppt的目录网页，该页PPT题目为{page.title}，PPT的目录如下：
 {page.abstract}
 只需要撰写简单的目录即可。
+这是目录页，不是内容页；模板中关于内容页标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
+需要保留同套 PPT 的主要视觉装饰与识别特征，包括主要装饰、主色、背景和字体气质；除此之外可以发挥创造力，设计清晰、有节奏的目录页版式。
 生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！
 {ppt_prompt}
 {template}
