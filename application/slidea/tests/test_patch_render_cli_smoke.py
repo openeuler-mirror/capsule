@@ -102,7 +102,7 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         module.htmls_to_pptx = htmls_to_pptx
         return module
 
-    def _run_main(self, argv, cwd):
+    def _run_main(self, argv, cwd, extra_modules=None):
         cover_module, content_module = self._make_graph_modules()
         fake_modules = {
             "core.ppt_generator.thought_to_ppt.state": self._make_state_module(),
@@ -113,6 +113,8 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
             "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph": content_module,
             "core.ppt_generator.utils.common": self._make_common_module(),
         }
+        if extra_modules:
+            fake_modules.update(extra_modules)
         stdout = io.StringIO()
 
         def local_run_dir(_base_dir, run_id):
@@ -190,6 +192,111 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         self.assertTrue(payload["output"]["pdf_path"].endswith(".pdf"))
         self.assertEqual(ppt_payload["run_id"], run_id)
         self.assertEqual(ppt_payload["render_dir"], str(render_dir))
+
+    def test_svg_success_returns_structured_completed_payload(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "svg-success"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            outline_dir = out_dir / "outline"
+            render_dir = Path(tmp_dir) / "rendered"
+            outline_dir.mkdir(parents=True, exist_ok=True)
+            render_dir.mkdir(parents=True, exist_ok=True)
+            (outline_dir / "outline.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "topic": "SVG Demo",
+                        "outline": [
+                            {
+                                "title": "Cover",
+                                "abstract": "Intro",
+                                "type": 1,
+                                "index": 0,
+                                "reference_doc": "",
+                                "reference_images": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "ppt.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "topic": "SVG Demo",
+                        "render_mode": "svg",
+                        "render_dir": str(render_dir),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            svg_node_module = types.ModuleType("core.ppt_generator.thought_to_ppt.page_generators.svg_node")
+
+            async def prepare_svg_generation_context_node(state, _writer):
+                return {
+                    "save_dir": state["save_dir"],
+                    "language": "中文",
+                    "svg_prompt": "prompt",
+                    "svg_spec_lock": "lock",
+                    "svg_template_name": "general_modern",
+                    "svg_template": "template",
+                    "outline": state["outline"],
+                }
+
+            svg_node_module.prepare_svg_generation_context_node = prepare_svg_generation_context_node
+
+            svg_graph_module = types.ModuleType(
+                "core.ppt_generator.thought_to_ppt.page_generators.svg_page_generator.graph"
+            )
+
+            async def generate_svg_pages(payload):
+                svg_output = Path(payload["save_dir"]) / "svg_output"
+                svg_output.mkdir(parents=True, exist_ok=True)
+                (svg_output / "01_Cover.svg").write_text(
+                    '<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg"></svg>',
+                    encoding="utf-8",
+                )
+                return {}
+
+            svg_graph_module.generate_svg_pages_app = types.SimpleNamespace(ainvoke=generate_svg_pages)
+
+            quality_module = types.ModuleType("core.ppt_generator.svg_pipeline.quality_checker")
+            quality_module.check_svg_files = lambda paths: [
+                {"file": Path(path).name, "path": path, "passed": True, "errors": [], "warnings": []}
+                for path in paths
+            ]
+            quality_module.format_quality_issues = lambda _results: ""
+
+            finalize_module = types.ModuleType("core.ppt_generator.svg_pipeline.finalize_svg")
+            finalize_module.finalize_svg_files = lambda paths, _save_dir: paths
+
+            export_module = types.ModuleType("core.ppt_generator.utils.svg_export")
+
+            async def svgs_to_pptx(_svgs, save_dir, filename):
+                return "", str(Path(save_dir) / f"{filename}.pptx")
+
+            export_module.svgs_to_pptx = svgs_to_pptx
+
+            payload = self._run_main(
+                ["--run-id", run_id, "--indices", "0"],
+                cwd=tmp_dir,
+                extra_modules={
+                    "core.ppt_generator.thought_to_ppt.page_generators.svg_node": svg_node_module,
+                    "core.ppt_generator.thought_to_ppt.page_generators.svg_page_generator.graph": svg_graph_module,
+                    "core.ppt_generator.svg_pipeline.quality_checker": quality_module,
+                    "core.ppt_generator.svg_pipeline.finalize_svg": finalize_module,
+                    "core.ppt_generator.utils.svg_export": export_module,
+                },
+            )
+            ppt_payload = json.loads((out_dir / "ppt.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["stage"], "completed")
+        self.assertEqual(payload["output"]["stage"], "completed")
+        self.assertEqual(payload["output"]["target_indices"], [0])
+        self.assertEqual(ppt_payload["render_mode"], "svg")
+        self.assertTrue(ppt_payload["pptx_path"].endswith(".pptx"))
 
 
 if __name__ == "__main__":

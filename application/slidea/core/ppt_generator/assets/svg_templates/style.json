@@ -1,0 +1,94 @@
+{
+  "templates": [
+    {
+      "name": "general_modern",
+      "label": "General Modern",
+      "description": "A balanced modern SVG deck style for general business, technology sharing, and narrative reports.",
+      "keywords": ["general", "business", "technology", "report", "presentation", "通用", "商务", "科技", "汇报"],
+      "colors": {
+        "background": "#FFFFFF",
+        "text": "#111827",
+        "muted_text": "#4B5563",
+        "primary": "#2563EB",
+        "secondary": "#14B8A6",
+        "accent": "#F59E0B",
+        "surface": "#F8FAFC",
+        "line": "#CBD5E1"
+      },
+      "font_family": "Microsoft YaHei, Arial, sans-serif",
+      "layout_guidance": "Use clear title hierarchy, restrained cards, generous margins, and varied layouts across pages."
+    },
+    {
+      "name": "mckinsey",
+      "label": "McKinsey Style",
+      "description": "A restrained consulting style for strategy, investment analysis, executive briefings, and data-driven recommendations.",
+      "keywords": ["mckinsey", "consulting", "strategy", "executive", "investment", "analysis", "咨询", "战略", "高管", "投资", "分析"],
+      "colors": {
+        "background": "#FFFFFF",
+        "text": "#2C3E50",
+        "muted_text": "#5D6D7E",
+        "primary": "#005587",
+        "secondary": "#0076A8",
+        "accent": "#F5A623",
+        "surface": "#ECF0F1",
+        "line": "#D9E2E7"
+      },
+      "font_family": "Arial, Microsoft YaHei, sans-serif",
+      "layout_guidance": "Use a thin top blue rule, left-aligned titles, strong grids, whitespace, concise takeaway statements, and editable charts or matrices where relevant."
+    },
+    {
+      "name": "ai_ops",
+      "label": "Enterprise Digital Intelligence",
+      "description": "A dense enterprise architecture style for AI operations, telecom, system overviews, and digital transformation plans.",
+      "keywords": ["ai ops", "architecture", "telecom", "system", "digital transformation", "platform", "AI运维", "架构", "电信", "系统", "数字化", "平台"],
+      "colors": {
+        "background": "#FFFFFF",
+        "text": "#000000",
+        "muted_text": "#666666",
+        "primary": "#C00000",
+        "secondary": "#2E75B6",
+        "accent": "#5B9BD5",
+        "surface": "#FDF3EB",
+        "line": "#F8CBAD"
+      },
+      "font_family": "Microsoft YaHei, SimHei, Arial, sans-serif",
+      "layout_guidance": "Use compact modular zones, red title anchors, blue label bars, warm gray panels, KPI cards, and dense but aligned information blocks."
+    },
+    {
+      "name": "academic_blue",
+      "label": "Academic Blue",
+      "description": "A structured academic style for research reports, defense decks, papers, and project proposals.",
+      "keywords": ["academic", "research", "defense", "paper", "university", "proposal", "学术", "研究", "答辩", "论文", "高校", "课题"],
+      "colors": {
+        "background": "#FFFFFF",
+        "text": "#1F2937",
+        "muted_text": "#52616B",
+        "primary": "#1D4ED8",
+        "secondary": "#0F766E",
+        "accent": "#9333EA",
+        "surface": "#EFF6FF",
+        "line": "#BFDBFE"
+      },
+      "font_family": "Microsoft YaHei, Times New Roman, Arial, sans-serif",
+      "layout_guidance": "Use explicit section hierarchy, evidence-first layouts, diagrams, figure captions, and restrained academic blue accents."
+    },
+    {
+      "name": "government_blue",
+      "label": "Government Blue",
+      "description": "A stable official-report style for smart governance, public-sector reports, and policy briefings.",
+      "keywords": ["government", "policy", "governance", "public sector", "smart city", "政务", "政府", "政策", "治理", "智慧城市"],
+      "colors": {
+        "background": "#FFFFFF",
+        "text": "#0F172A",
+        "muted_text": "#475569",
+        "primary": "#1E40AF",
+        "secondary": "#0369A1",
+        "accent": "#DC2626",
+        "surface": "#EFF6FF",
+        "line": "#BFDBFE"
+      },
+      "font_family": "Microsoft YaHei, SimSun, Arial, sans-serif",
+      "layout_guidance": "Use formal title bands, clear policy modules, stable blue accents, concise bullet groups, and official report spacing."
+    }
+  ]
+}

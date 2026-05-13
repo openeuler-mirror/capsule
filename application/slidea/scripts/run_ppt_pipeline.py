@@ -51,6 +51,69 @@ async def _maybe_require_missing(parsed):
         return missing
     return ""
 
+
+def _cached_svg_paths_for_outline(save_dir: str, outline) -> list[str]:
+    svg_output_dir = Path(save_dir) / "svg_output"
+    if not svg_output_dir.exists():
+        return []
+    paths = []
+    for page in sorted(outline, key=lambda item: item.index):
+        matches = sorted(svg_output_dir.glob(f"{page.index + 1:02d}_*.svg"))
+        if not matches:
+            return []
+        paths.append(str(matches[0]))
+    return paths
+
+
+async def _try_export_cached_svg(state, out_dir: str, run_id: str) -> bool:
+    if state.get("render_mode") != "svg":
+        return False
+    svg_paths = _cached_svg_paths_for_outline(state.get("save_dir", ""), state.get("outline", []))
+    if not svg_paths:
+        return False
+
+    from core.ppt_generator.svg_pipeline.quality_checker import check_svg_files, format_quality_issues
+    from core.ppt_generator.svg_pipeline.finalize_svg import finalize_svg_files
+    from core.ppt_generator.utils.common import sanitize_filename
+    from core.ppt_generator.utils.svg_export import svgs_to_pptx
+
+    results = check_svg_files(svg_paths)
+    failed = [item for item in results if not item.get("passed")]
+    if failed:
+        emit_stage_payload(
+            "svg_quality_failed",
+            {
+                "stage": "svg_quality_failed",
+                "message": format_quality_issues(results),
+            },
+            run_id=run_id,
+            output_dir=out_dir,
+        )
+        return True
+
+    final_svgs = finalize_svg_files(svg_paths, state["save_dir"])
+    pdf_path, pptx_path = await svgs_to_pptx(final_svgs, state["save_dir"], sanitize_filename(state["topic"]))
+    save_json(Path(out_dir) / "ppt.json", {
+        "run_id": run_id,
+        "topic": state["topic"],
+        "render_mode": "svg",
+        "render_dir": state["save_dir"],
+        "svg_output_dir": str(Path(state["save_dir"]) / "svg_output"),
+        "svg_final_dir": str(Path(state["save_dir"]) / "svg_final"),
+        "pdf_path": pdf_path,
+        "pptx_path": pptx_path,
+    })
+    state["final_pdf_path"] = pdf_path
+    state["final_pptx_path"] = pptx_path
+    emit_stage_payload(
+        "completed",
+        {"stage": "completed", "files": [pdf_path, pptx_path], "used_cache": True},
+        run_id=run_id,
+        output_dir=out_dir,
+    )
+    return True
+
+
 class EmitCtx:
     def __init__(self, session_id: str | None = None):
         self.session_id = session_id or "local"
@@ -85,6 +148,7 @@ def _build_run_metadata(args, run_id: str):
         "text": args.text,
         "resume": bool(args.resume),
         "stages": args.stages,
+        "render_mode": args.render_mode,
         "research_mode": args.research_mode,
         "use_cache": args.use_cache,
         "image_search": args.image_search,
@@ -98,7 +162,7 @@ async def _run_all_stages(args, run_id: str, out_dir: str):
     from scripts.utils.pipeline import extract_resume_input, run_thinkflow_app
 
     if args.text:
-        graph_input = {"request": args.text}
+        graph_input = {"request": args.text, "render_mode": args.render_mode}
     else:
         resume_value = extract_resume_input({"text": args.resume})
         graph_input = Command(resume=resume_value)
@@ -193,7 +257,7 @@ async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: st
                 tstate.update(await simple_search_node(tstate, writer, config=config))
             tstate.update(await generate_thought_node(tstate, config=config, writer=writer))
 
-    state: PPTState = {"query": args.text or "", "ori_doc": "", "is_markdown_doc": False, "outline": [], "save_dir": "", "topic": "", "html_template_name": None, "html_template": "", "ppt_prompt": "", "language": "", "generated_pages": [], "htmls": [], "final_pdf_path": None, "final_pptx_path": None}
+    state: PPTState = {"query": args.text or "", "render_mode": args.render_mode, "ori_doc": "", "is_markdown_doc": False, "outline": [], "save_dir": "", "topic": "", "html_template_name": None, "html_template": "", "svg_template_name": "", "svg_template": "", "ppt_prompt": "", "svg_prompt": "", "language": "", "generated_pages": [], "htmls": [], "svgs": [], "final_pdf_path": None, "final_pptx_path": None}
 
     if "outline" in stages:
         deep_report = await _load_cached_text(out_dir, 'research/deep_report.md')
@@ -225,12 +289,16 @@ async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: st
             return
         ppt_cached = load_json(f"{out_dir}/ppt.json")
         if ppt_cached:
+            if ppt_cached.get("render_mode"):
+                state["render_mode"] = ppt_cached["render_mode"]
             render_dir = ppt_cached.get("render_dir")
             pdf_path = ppt_cached.get("pdf_path")
             if render_dir:
                 state["save_dir"] = render_dir
             elif pdf_path:
                 state["save_dir"] = str(Path(pdf_path).parent)
+        if await _try_export_cached_svg(state, out_dir, run_id):
+            return
         state.update(await generate_pages_node(state))
         emit_stage_payload(
             "completed",
@@ -252,6 +320,7 @@ async def main():
     parser.add_argument("--research-mode", type=str, default="")
     parser.add_argument("--use-cache", type=str, default="true")
     parser.add_argument("--image-search", type=str, default="on")
+    parser.add_argument("--render-mode", type=str, choices=["html", "svg"], default="html")
     parser.add_argument("--run-id", type=str, default="")
     parser.add_argument("--recursion-limit", type=int, default=500)
     parser.add_argument("--dry-run", action="store_true")

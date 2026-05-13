@@ -81,6 +81,12 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
 
 async def generate_pages_node(state: PPTState):
     """generate ppt pages"""
+    if state.get("render_mode", "html") == "svg":
+        from core.ppt_generator.thought_to_ppt.page_generators.svg_graph import generate_svg_slides_app
+
+        pages_results = await generate_svg_slides_app.ainvoke(state)
+        return pages_results
+
     from core.ppt_generator.thought_to_ppt.page_generators.graph import generate_pages_app
 
     pages_results = await generate_pages_app.ainvoke(state)

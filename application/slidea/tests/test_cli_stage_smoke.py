@@ -143,8 +143,23 @@ class CliStageSmokeTests(unittest.TestCase):
         self.assertEqual(run_payload["run_id"], run_id)
         self.assertEqual(run_payload["session_id"], "local")
         self.assertEqual(run_payload["stages"], "outline")
+        self.assertEqual(run_payload["render_mode"], "html")
         self.assertEqual(run_payload["text"], "demo")
         self.assertFalse(run_payload["resume"])
+
+    def test_outline_stage_persists_svg_render_mode(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "outline-svg"
+            payload = self._run_main(
+                ["--text", "demo", "--stages", "outline", "--render-mode", "svg", "--run-id", run_id],
+                cwd=tmp_dir,
+            )
+            run_payload = json.loads(
+                (Path(tmp_dir) / "output" / run_id / "run.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(payload["stage"], "completed")
+        self.assertEqual(run_payload["render_mode"], "svg")
 
     def test_render_stage_returns_files_from_cached_outline(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -177,6 +192,82 @@ class CliStageSmokeTests(unittest.TestCase):
 
         self.assertEqual(payload["stage"], "completed")
         self.assertEqual(payload["output"]["files"], ["/tmp/demo.pdf", "/tmp/demo.pptx"])
+
+    def test_svg_render_stage_can_export_cached_svg_without_regeneration(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "svg-cache"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            outline_dir = out_dir / "outline"
+            render_dir = Path(tmp_dir) / "rendered"
+            svg_output = render_dir / "svg_output"
+            outline_dir.mkdir(parents=True, exist_ok=True)
+            svg_output.mkdir(parents=True, exist_ok=True)
+            (outline_dir / "outline.json").write_text(
+                json.dumps(
+                    {
+                        "topic": "SVG Cache",
+                        "outline": [
+                            {
+                                "title": "Cover",
+                                "abstract": "Intro",
+                                "type": 4,
+                                "index": 0,
+                                "reference_doc": "",
+                                "reference_images": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "ppt.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "topic": "SVG Cache",
+                        "render_mode": "svg",
+                        "render_dir": str(render_dir),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (svg_output / "01_Cover.svg").write_text(
+                '<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg"></svg>',
+                encoding="utf-8",
+            )
+
+            quality_module = types.ModuleType("core.ppt_generator.svg_pipeline.quality_checker")
+            quality_module.check_svg_files = lambda paths: [
+                {"file": Path(path).name, "path": path, "passed": True, "errors": [], "warnings": []}
+                for path in paths
+            ]
+            quality_module.format_quality_issues = lambda _results: ""
+
+            finalize_module = types.ModuleType("core.ppt_generator.svg_pipeline.finalize_svg")
+            finalize_module.finalize_svg_files = lambda paths, _save_dir: paths
+
+            export_module = types.ModuleType("core.ppt_generator.utils.svg_export")
+
+            async def svgs_to_pptx(_svgs, save_dir, filename):
+                return "", str(Path(save_dir) / f"{filename}.pptx")
+
+            export_module.svgs_to_pptx = svgs_to_pptx
+
+            payload = self._run_main(
+                ["--text", "demo", "--stages", "render", "--run-id", run_id],
+                extra_modules={
+                    "core.ppt_generator.svg_pipeline.quality_checker": quality_module,
+                    "core.ppt_generator.svg_pipeline.finalize_svg": finalize_module,
+                    "core.ppt_generator.utils.svg_export": export_module,
+                },
+                cwd=tmp_dir,
+            )
+            ppt_payload = json.loads((out_dir / "ppt.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["stage"], "completed")
+        self.assertTrue(payload["output"]["used_cache"])
+        self.assertEqual(ppt_payload["render_mode"], "svg")
+        self.assertTrue(ppt_payload["pptx_path"].endswith(".pptx"))
 
     def test_render_stage_without_outline_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -24,3 +24,21 @@ async def screenshot_html(html_path: str, output_path: str) -> str:
         finally:
             await page.close()
             await context.close()
+
+
+async def screenshot_svg(svg_path: str, output_path: str) -> str:
+    """渲染 SVG 并截图到 output_path，返回截图绝对路径。"""
+    absolute_svg_path = os.path.abspath(svg_path)
+    async with BrowserManager.get_browser_context() as browser:
+        context = await browser.new_context(viewport={"width": 1280, "height": 720}, ignore_https_errors=True)
+        await context.route("**/*", build_remote_asset_request_router())
+        page = await context.new_page()
+        try:
+            await page.goto(f"file://{absolute_svg_path}", wait_until="domcontentloaded", timeout=120000)
+            await wait_for_page_assets_ready(page, absolute_svg_path)
+            await page.screenshot(path=output_path)
+            logger.info(f"SVG 截图已保存到: {output_path}")
+            return output_path
+        finally:
+            await page.close()
+            await context.close()

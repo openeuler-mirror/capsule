@@ -472,6 +472,7 @@ async def htmls2pptx_node(state: PPTState, writer: StreamWriter, config: Runnabl
         save_json(f"{run_dir}/ppt.json", {
             "run_id": run_id,
             "topic": state["topic"],
+            "render_mode": "html",
             "render_dir": save_dir,
             "pdf_path": pdf_path,
             "pptx_path": pptx_path,

@@ -74,12 +74,38 @@ def _resolve_save_dir(out_dir: str, topic: str):
 
 
 def _resolve_target_indices(args, save_dir: str, outline):
+    return _resolve_target_indices_for_mode(args, save_dir, outline, "html")
+
+
+def _resolve_target_indices_for_mode(args, save_dir: str, outline, render_mode: str = "html"):
     target_indices = parse_indices(args.indices)
     if not target_indices:
-        existing = set(int(p.stem) for p in Path(save_dir).glob("*.html") if p.stem.isdigit())
+        if render_mode == "svg":
+            svg_output_dir = Path(save_dir) / "svg_output"
+            existing = _existing_svg_indices(svg_output_dir)
+        else:
+            existing = set(int(p.stem) for p in Path(save_dir).glob("*.html") if p.stem.isdigit())
         outline_indices = [p.index for p in outline]
         target_indices = [i for i in outline_indices if i not in existing]
     return target_indices
+
+
+def _existing_svg_indices(svg_output_dir: Path) -> set[int]:
+    indices = set()
+    if not svg_output_dir.exists():
+        return indices
+    for path in svg_output_dir.glob("*.svg"):
+        prefix = path.stem.split("_", 1)[0]
+        if prefix.isdigit():
+            indices.add(int(prefix) - 1)
+    return indices
+
+
+def _svg_path_for_index(save_dir: str, index: int) -> str | None:
+    matches = sorted((Path(save_dir) / "svg_output").glob(f"{index + 1:02d}_*.svg"))
+    if not matches:
+        return None
+    return str(matches[0])
 
 
 async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):
@@ -206,6 +232,98 @@ async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, 
     )
 
 
+async def _patch_render_svg(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):
+    from core.ppt_generator.thought_to_ppt.page_generators.svg_node import prepare_svg_generation_context_node
+    from core.ppt_generator.thought_to_ppt.page_generators.svg_page_generator.graph import generate_svg_pages_app
+    from core.ppt_generator.svg_pipeline.quality_checker import check_svg_files, format_quality_issues
+    from core.ppt_generator.svg_pipeline.finalize_svg import finalize_svg_files
+    from core.ppt_generator.utils.common import sanitize_filename
+    from core.ppt_generator.utils.svg_export import svgs_to_pptx
+
+    state = {
+        "query": args.text or "",
+        "render_mode": "svg",
+        "outline": outline,
+        "topic": topic,
+        "save_dir": save_dir,
+        "language": "",
+        "svg_prompt": "",
+        "svg_spec_lock": "",
+        "svg_template_name": "",
+        "svg_template": "",
+        "generated_pages": [],
+        "htmls": [],
+        "svgs": [],
+        "final_pdf_path": None,
+        "final_pptx_path": None,
+    }
+    writer = DummyWriter()
+    ctx = await prepare_svg_generation_context_node(state, writer)
+    state.update(ctx)
+
+    target_pages = [p for p in outline if p.index in set(target_indices)]
+    if target_pages:
+        await generate_svg_pages_app.ainvoke({
+            "query": state["query"],
+            "outline": target_pages,
+            "save_dir": state["save_dir"],
+            "svg_prompt": state["svg_prompt"],
+            "svg_spec_lock": state["svg_spec_lock"],
+            "svg_template": state["svg_template"],
+            "language": state["language"],
+        })
+
+    svgs = []
+    for page in sorted(outline, key=lambda item: item.index):
+        svg_path = _svg_path_for_index(save_dir, page.index)
+        if svg_path:
+            svgs.append(svg_path)
+
+    results = check_svg_files(svgs)
+    failed = [item for item in results if not item.get("passed")]
+    if failed:
+        emit_stage_payload(
+            "svg_quality_failed",
+            {
+                "stage": "svg_quality_failed",
+                "message": format_quality_issues(results),
+                "target_indices": target_indices,
+            },
+            run_id=args.run_id,
+            output_dir=out_dir,
+        )
+        return
+
+    final_svgs = finalize_svg_files(svgs, save_dir)
+    pdf_path, pptx_path = await svgs_to_pptx(final_svgs, save_dir, sanitize_filename(topic))
+
+    save_json(
+        Path(out_dir) / "ppt.json",
+        {
+            "run_id": args.run_id,
+            "topic": topic,
+            "render_mode": "svg",
+            "render_dir": save_dir,
+            "svg_output_dir": str(Path(save_dir) / "svg_output"),
+            "svg_final_dir": str(Path(save_dir) / "svg_final"),
+            "pdf_path": pdf_path,
+            "pptx_path": pptx_path,
+        },
+    )
+
+    emit_stage_payload(
+        "completed",
+        {
+            "stage": "completed",
+            "target_indices": target_indices,
+            "pdf_path": pdf_path,
+            "pptx_path": pptx_path,
+        },
+        run_id=args.run_id,
+        output_dir=out_dir,
+    )
+
+
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-id", required=True)
@@ -219,7 +337,9 @@ async def main():
         return
 
     save_dir = _resolve_save_dir(out_dir, topic)
-    target_indices = _resolve_target_indices(args, save_dir, outline)
+    ppt_json = load_json(str(Path(out_dir) / "ppt.json")) or {}
+    render_mode = ppt_json.get("render_mode") or "html"
+    target_indices = _resolve_target_indices_for_mode(args, save_dir, outline, render_mode)
     if not target_indices:
         emit_stage_payload(
             "completed",
@@ -233,7 +353,10 @@ async def main():
         )
         return
 
-    await _patch_render(args, out_dir, outline, topic, save_dir, target_indices)
+    if render_mode == "svg":
+        await _patch_render_svg(args, out_dir, outline, topic, save_dir, target_indices)
+    else:
+        await _patch_render(args, out_dir, outline, topic, save_dir, target_indices)
 
 
 if __name__ == "__main__":

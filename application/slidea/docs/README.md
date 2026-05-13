@@ -7,6 +7,7 @@ This directory contains public-facing documentation for the Slidea skill. The co
 - [Quickstart](quickstart.md): environment setup, required configuration, and the shortest path to a successful local run
 - [CLI Reference](cli.md): command entrypoints, stage model, arguments, and output contracts
 - [Architecture Overview](architecture.md): end-to-end system design, runtime flow, cache model, and major modules
+- [SVG Render Route](svg-route.md): optional SVG-to-native-PPTX backend, quality gates, patch render, and manual QA checklist
 - [App Overview](core/README.md): index of the `core/` package and how its subgraphs fit together
 - [Deep Research App](core/deep-research.md): recursive research/writing graph used for deep insight mode
 - [PPT Generator App](core/ppt-generator.md): thought generation, outline generation, and page rendering internals
@@ -34,6 +35,6 @@ The project is built around one primary workflow:
 2. Collect references from user-provided URLs and optional search/deep research.
 3. Generate a PPT writing thought process.
 4. Convert that thought plus source material into a slide outline.
-5. Render each slide as HTML, then synthesize PDF and optional PPTX artifacts.
+5. Render each slide as HTML by default, or as SVG when `--render-mode svg` is requested, then synthesize final artifacts.
 
 The docs below mirror that runtime model, so reading them in order is the fastest way to understand the system.
