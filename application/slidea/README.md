@@ -273,3 +273,7 @@ Contributions are most valuable in the following areas:
 - public-facing documentation
 
 If you change behavior, update the corresponding docs under `docs/` in the same change.
+
+## Third-party Notices
+
+This project contains code from [PPT Master](https://github.com/hugohe3/ppt-master), licensed under the MIT License. See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) for details.

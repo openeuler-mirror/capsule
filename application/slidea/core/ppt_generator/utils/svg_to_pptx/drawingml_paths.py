@@ -1,4 +1,7 @@
 """SVG path parsing, normalization, and DrawingML path command generation."""
+# 以下代码源自 PPT Master (https://github.com/hugohe3/ppt-master)
+# 原始项目采用 MIT 许可证，版权所有 (c) 2025-2026 Hugo He
+
 
 from __future__ import annotations
 

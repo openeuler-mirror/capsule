@@ -263,3 +263,7 @@ Slidea 主要暴露三个脚本入口：
 - 对外公开文档
 
 如果你修改了行为，请在同一个改动中同步更新 `docs/` 下对应文档。
+
+## 第三方声明
+
+本项目包含 [PPT Master](https://github.com/hugohe3/ppt-master) 的代码，采用 MIT 许可证，详见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)。
