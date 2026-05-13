@@ -20,13 +20,11 @@ except ImportError:  # pragma: no cover - fallback for minimal environments
         def random(self):
             return "Mozilla/5.0"
 from PyPDF2 import PdfWriter
-from pptx import Presentation
-from pptx.dml.color import RGBColor
-from pptx.oxml.ns import qn
 from PIL import Image
 
 from core.utils.logger import logger
 from core.utils.config import app_base_dir
+from core.ppt_generator.utils.pptx_postprocess import remove_full_slide_solid_backdrops
 from core.utils.image_payload import build_image_url
 from core.utils.libreoffice import get_available_libreoffice_executable
 from core.ppt_generator.utils.browser import BrowserManager
@@ -815,7 +813,7 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
             logger.error("Local LibreOffice conversion finished but no PPTX output was generated.")
             return ""
 
-        _remove_bottom_layers(pptx_path)
+        remove_full_slide_solid_backdrops(pptx_path)
 
         logger.info(f"Client: Successfully converted and saved to '{pptx_path}'")
         return pptx_path
@@ -823,81 +821,6 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
     except Exception as e:
         logger.info(f"An error occurred while converting PDF to PPTX: {str(e)}")
         return ""
-
-
-def _remove_bottom_layers(pptx_path):
-    """
-    PDF→PPTX conversion stacks a variable number of full-page solid-color
-    shapes at the bottom of every slide. Walk the Z-order from the bottom up,
-    drop every shape that is a full-slide solid fill, and lift the last
-    removed color onto the slide background so the page keeps its backdrop.
-    python-pptx shapes[0] is the bottom-most layer.
-    """
-    logger.info(f"Client: Stripping full-slide solid backdrops in {pptx_path}")
-    prs = Presentation(pptx_path)
-    slide_w, slide_h = prs.slide_width, prs.slide_height
-
-    for slide in prs.slides:
-        last_rgb = None
-        removed = 0
-        while len(slide.shapes) > 0:
-            shape = slide.shapes[0]
-            rgb = _full_slide_solid_fill_rgb(shape, slide_w, slide_h)
-            if rgb is None:
-                break
-            last_rgb = rgb
-            sp = shape._element
-            sp.getparent().remove(sp)
-            removed += 1
-
-        if last_rgb is not None:
-            fill = slide.background.fill
-            fill.solid()
-            fill.fore_color.rgb = last_rgb
-        logger.debug(f"Client: removed {removed} backdrop shape(s) from slide")
-
-    prs.save(pptx_path)
-    logger.info(f"Client: Successfully cleaned bottom shapes in '{pptx_path}'")
-
-
-def _full_slide_solid_fill_rgb(shape, slide_w, slide_h, tol_ratio=0.1):
-    """
-    Return the shape's solid-fill RGB color iff it has one AND its bounding
-    box covers the whole slide within `tol_ratio` of slide dimensions.
-    Otherwise return None.
-    """
-    rgb = _extract_solid_fill_rgb(shape)
-    if rgb is None:
-        return None
-    try:
-        left, top, width, height = shape.left, shape.top, shape.width, shape.height
-    except AttributeError:
-        return None
-    if None in (left, top, width, height):
-        return None
-    w_tol = slide_w * tol_ratio
-    h_tol = slide_h * tol_ratio
-    covers_slide = (
-        left <= w_tol
-        and top <= h_tol
-        and left + width >= slide_w - w_tol
-        and top + height >= slide_h - h_tol
-    )
-    return rgb if covers_slide else None
-
-
-def _extract_solid_fill_rgb(shape):
-    """Return the shape's solid-fill RGB color, or None if absent/unsupported."""
-    srgb = shape._element.find(f".//{qn('a:solidFill')}/{qn('a:srgbClr')}")
-    if srgb is None:
-        return None
-    val = srgb.get("val")
-    if not val:
-        return None
-    try:
-        return RGBColor.from_string(val)
-    except ValueError:
-        return None
 
 
 def _extract_web_image_description(image: dict, image_query: str) -> str:
