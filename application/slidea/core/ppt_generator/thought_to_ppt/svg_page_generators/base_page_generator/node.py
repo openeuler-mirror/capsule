@@ -1,6 +1,5 @@
 import os
 import re
-import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +13,7 @@ from core.utils.logger import logger
 from core.utils.config import settings, app_base_dir
 from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
 from core.ppt_generator.utils.common import build_image_url
-from core.ppt_generator.utils.screenshot import screenshot_svg
+from core.ppt_generator.utils.screenshot import screenshot_svg, screenshot_svg_bytes
 from core.ppt_generator.utils.svg import (
     extract_svg_content,
     repair_svg_content,
@@ -123,36 +122,21 @@ def _svg_page_filename(page) -> str:
 
 
 async def _svg_screenshot_with_embedded_images(source_path: str, output_path: str) -> str:
-    """Screenshot an SVG for VLM review, embedding local images first.
+    """Rasterize an SVG to PNG via CairoSVG for VLM review.
 
-    SVGs in svg_output/ reference images via relative paths like ``images/xxx.jpg``,
-    which resolve to ``svg_output/images/...`` in Chromium and break. Embed local
-    images as data URIs into a sibling temp file before calling Playwright so VLM
-    sees the real images.
+    SVGs in svg_output/ reference images via relative paths like ``images/xxx.jpg``.
+    We embed those as data URIs in memory and feed the resulting bytes straight
+    to CairoSVG so referenced images render correctly without a tempfile.
     """
     src = Path(source_path)
     try:
         content = src.read_text(encoding="utf-8")
-    except Exception as error:
+    except OSError as error:
         logger.warning(f"screenshot read svg failed for {source_path}: {error}")
         return await screenshot_svg(source_path, output_path)
 
     embedded = embed_local_images_in_content(content, src.parent)
-    if embedded == content:
-        return await screenshot_svg(source_path, output_path)
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".svg", dir=str(src.parent), delete=False, encoding="utf-8"
-    ) as fh:
-        tmp_path = fh.name
-        fh.write(embedded)
-    try:
-        return await screenshot_svg(tmp_path, output_path)
-    finally:
-        try:
-            Path(tmp_path).unlink()
-        except OSError:
-            pass
+    return await screenshot_svg_bytes(embedded.encode("utf-8"), output_path)
 
 
 async def generate_ppt_page_node(state: SVGWorkerState):

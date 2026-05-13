@@ -20,5 +20,6 @@ PyMuPDF
 python-pptx
 python-docx
 playwright
+cairosvg
 llvmlite==0.45.0
 beautifulsoup4
