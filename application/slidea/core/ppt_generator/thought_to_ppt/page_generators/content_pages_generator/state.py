@@ -40,46 +40,46 @@ class ImageScoreResult(BaseModel):
 
 
 class ContentPagesState(TypedDict):
-    query: str  # 用户的原始输入
-    outline: List[PPTPage]  # PPT的整体大纲
-    save_dir: str  # 保存目录
-    ppt_prompt: str  # 生成PPT的提示词
-    language: str  # 生成PPT的语言
-    html_template: str  # 生成PPT的模板
+    query: str
+    outline: List[PPTPage]
+    save_dir: str
+    ppt_prompt: str
+    language: str
+    template: str  # HTML 模板内容
 
-    content_pages: Optional[List[PPTPage]]  # PPT中需要生成的内容页列表
-    generated_pages: Annotated[List[GeneratedPageResult], operator.add]  # 生成的PPT页面结果列表
+    content_pages: Optional[List[PPTPage]]
+    generated_pages: Annotated[List[GeneratedPageResult], operator.add]
 
 
 class ImageScore(TypedDict):
-    img_description: str  # 图片描述
-    score: float  # 图片适合度评分
-    size: str  # 图片尺寸
-    image_path: str  # 图片路径
+    img_description: str
+    score: float
+    size: str
+    image_path: str
 
 
 class ContentWorkerState(TypedDict):
-    query: str  # 用户的原始输入
-    outline: List[PPTPage]  # PPT的整体大纲
-    save_dir: str  # 保存目录
-    ppt_prompt: str  # 生成PPT的提示词
-    language: str  # 生成PPT的语言
-    html_template: str  # 生成PPT的模板
+    query: str
+    outline: List[PPTPage]
+    save_dir: str
+    ppt_prompt: str
+    language: str
+    template: str  # HTML 模板内容
 
-    relevant_material: Optional[str]  # 生成PPT页相关的背景材料
-    reference_images: Optional[List[str]]  # 生成PPT页相关的原始素材中的图片列表
-    reference_image_descriptions: Optional[dict[str, str]]  # 图片路径到描述的映射
-    need_search_image: Optional[List[str]]  # 生成PPT页相关的网络图片列表
-    need_ai_image: Optional[List[str]]  # 生成PPT页相关的网络图片列表
-    img_content: Optional[str]  # 生成PPT页相关的图片地址以及描述内容
-    img_scores: Annotated[List[Optional[ImageScore]], operator.add]  # 生成的PPT页面结果列表
+    relevant_material: Optional[str]
+    reference_images: Optional[List[str]]
+    reference_image_descriptions: Optional[dict[str, str]]
+    need_search_image: Optional[List[str]]
+    need_ai_image: Optional[List[str]]
+    img_content: Optional[str]
+    img_scores: Annotated[List[Optional[ImageScore]], operator.add]
 
-    content_page: PPTPage  # 正在生成的PPT页
-    generated_pages: Annotated[List[GeneratedPageResult], operator.add]  # 生成的PPT页面结果列表
+    content_page: PPTPage
+    generated_pages: Annotated[List[GeneratedPageResult], operator.add]
 
 
 class ImgScoreWorkerState(TypedDict):
-    relevant_material: Optional[str]  # 生成PPT页相关的背景材料
-    image_path: str  # 评分的图片路径
-    image_description: Optional[str]  # 图片已有描述
-    img_scores: Annotated[List[Optional[ImageScore]], operator.add]  # 图片评分列表
+    relevant_material: Optional[str]
+    image_path: str
+    image_description: Optional[str]
+    img_scores: Annotated[List[Optional[ImageScore]], operator.add]

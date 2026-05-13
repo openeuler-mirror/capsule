@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 
 from core.utils.logger import logger
-from core.ppt_generator.svg_to_pptx import create_pptx_with_native_svg
+from core.ppt_generator.utils.svg_to_pptx import create_pptx_with_native_svg
 
 
 async def svgs_to_pptx(svg_paths: list[str], save_dir: str, filename: str = "output") -> tuple[str, str]:

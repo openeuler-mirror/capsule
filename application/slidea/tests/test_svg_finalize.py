@@ -4,7 +4,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from core.ppt_generator.svg_pipeline.finalize_svg import finalize_svg_files
+from core.ppt_generator.utils.svg_pipeline.finalize_svg import finalize_svg_files
 
 
 SVG_NS = "http://www.w3.org/2000/svg"

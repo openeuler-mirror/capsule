@@ -1,0 +1,11 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>
+
+  <text x="28" y="57" font-family="Microsoft YaHei, Arial, sans-serif" font-size="38" font-weight="700" fill="#2563D9">{{PAGE_TITLE}}</text>
+  <line x1="28" y1="78" x2="303" y2="78" stroke="#2563D9" stroke-width="4"/>
+
+  <rect x="28" y="105" width="1224" height="581" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2" stroke-dasharray="4 4"/>
+
+  <text x="640" y="388" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="30" font-weight="700" fill="#9CA3AF">{{CONTENT_AREA}}</text>
+  <text x="640" y="430" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="18" font-weight="400" fill="#9CA3AF">(由 Executor 根据实际内容自由布局)</text>
+</svg>

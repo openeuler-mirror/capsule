@@ -1,0 +1,43 @@
+from langgraph.graph import StateGraph, START, END
+
+from core.ppt_generator.thought_to_ppt.state import PPTState
+from core.ppt_generator.thought_to_ppt.svg_page_generators.node import (
+    prepare_generation_context_node,
+    generate_cover_thanks_pages_node,
+    generate_sep_pages_node,
+    generate_toc_page_node,
+    generate_content_pages_node,
+    ppt_synthesizer_node,
+    quality_check_node,
+    finalize_node,
+    export_node,
+)
+
+
+workflow = StateGraph(state_schema=PPTState)
+workflow.add_node("prepare_generation_context", prepare_generation_context_node)
+workflow.add_node("generate_cover_thanks_pages", generate_cover_thanks_pages_node)
+workflow.add_node("generate_sep_pages", generate_sep_pages_node)
+workflow.add_node("generate_toc_page", generate_toc_page_node)
+workflow.add_node("generate_content_pages", generate_content_pages_node)
+workflow.add_node("ppt_synthesizer", ppt_synthesizer_node)
+workflow.add_node("quality_check", quality_check_node)
+workflow.add_node("finalize", finalize_node)
+workflow.add_node("export", export_node)
+
+workflow.add_edge(START, "prepare_generation_context")
+workflow.add_edge("prepare_generation_context", "generate_cover_thanks_pages")
+workflow.add_edge("prepare_generation_context", "generate_sep_pages")
+workflow.add_edge("prepare_generation_context", "generate_toc_page")
+workflow.add_edge("prepare_generation_context", "generate_content_pages")
+workflow.add_edge("generate_cover_thanks_pages", "ppt_synthesizer")
+workflow.add_edge("generate_sep_pages", "ppt_synthesizer")
+workflow.add_edge("generate_toc_page", "ppt_synthesizer")
+workflow.add_edge("generate_content_pages", "ppt_synthesizer")
+
+workflow.add_edge("ppt_synthesizer", "quality_check")
+workflow.add_edge("quality_check", "finalize")
+workflow.add_edge("finalize", "export")
+workflow.add_edge("export", END)
+
+generate_svg_pages_app = workflow.compile()

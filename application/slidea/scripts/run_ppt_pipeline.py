@@ -72,8 +72,8 @@ async def _try_export_cached_svg(state, out_dir: str, run_id: str) -> bool:
     if not svg_paths:
         return False
 
-    from core.ppt_generator.svg_pipeline.quality_checker import check_svg_files, format_quality_issues
-    from core.ppt_generator.svg_pipeline.finalize_svg import finalize_svg_files
+    from core.ppt_generator.utils.svg_pipeline.quality_checker import check_svg_files, format_quality_issues
+    from core.ppt_generator.utils.svg_pipeline.finalize_svg import finalize_svg_files
     from core.ppt_generator.utils.common import sanitize_filename
     from core.ppt_generator.utils.svg_export import svgs_to_pptx
 
@@ -257,7 +257,7 @@ async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: st
                 tstate.update(await simple_search_node(tstate, writer, config=config))
             tstate.update(await generate_thought_node(tstate, config=config, writer=writer))
 
-    state: PPTState = {"query": args.text or "", "render_mode": args.render_mode, "ori_doc": "", "is_markdown_doc": False, "outline": [], "save_dir": "", "topic": "", "html_template_name": None, "html_template": "", "svg_template_name": "", "svg_template": "", "ppt_prompt": "", "svg_prompt": "", "language": "", "generated_pages": [], "htmls": [], "svgs": [], "final_pdf_path": None, "final_pptx_path": None}
+    state: PPTState = {"query": args.text or "", "render_mode": args.render_mode, "ori_doc": "", "is_markdown_doc": False, "outline": [], "save_dir": "", "topic": "", "template_name": "", "template": "", "ppt_prompt": "", "language": "", "generated_pages": [], "page_files": [], "final_pdf_path": None, "final_pptx_path": None}
 
     if "outline" in stages:
         deep_report = await _load_cached_text(out_dir, 'research/deep_report.md')

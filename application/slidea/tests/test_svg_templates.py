@@ -1,36 +1,52 @@
 import unittest
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
-from core.ppt_generator.svg_pipeline.templates import (
-    format_svg_template_for_prompt,
+from core.ppt_generator.utils.svg_pipeline.templates import (
+    load_svg_template_content,
     load_svg_templates,
     select_svg_template,
 )
 
 
-class SVGTemplateTests(unittest.TestCase):
-    def test_load_svg_templates_contains_general_default(self):
+class SVGTemplateTests(unittest.IsolatedAsyncioTestCase):
+    def test_load_svg_templates_returns_name_description_pairs(self):
         templates = load_svg_templates()
+        self.assertGreater(len(templates), 0)
+        for item in templates:
+            self.assertIn("name", item)
+            self.assertIn("description", item)
         names = {item["name"] for item in templates}
+        self.assertIn("common_light", names)
 
-        self.assertIn("general_modern", names)
+    def test_load_svg_template_content_returns_full_svg(self):
+        content = load_svg_template_content("common_light")
+        self.assertIn("<svg", content)
+        self.assertIn("viewBox=\"0 0 1280 720\"", content)
 
-    def test_select_svg_template_by_keyword(self):
-        template = select_svg_template("为 AI 运维平台架构做一份汇报", [])
+    def test_load_svg_template_content_raises_when_missing(self):
+        with self.assertRaises(FileNotFoundError):
+            load_svg_template_content("nonexistent_template")
 
-        self.assertEqual(template["name"], "ai_ops")
+    async def test_select_svg_template_uses_llm_response(self):
+        fake_response = SimpleNamespace(name="academic_blue", reason="academic")
+        with patch(
+            "core.ppt_generator.utils.svg_pipeline.templates.llm_invoke",
+            new=AsyncMock(return_value=fake_response),
+        ):
+            chosen = await select_svg_template("学术报告", "outline placeholder")
+        self.assertEqual(chosen, "academic_blue")
 
-    def test_select_svg_template_accepts_explicit_name(self):
-        template = select_svg_template("普通汇报", [], "mckinsey")
+    async def test_select_svg_template_falls_back_when_llm_returns_unknown(self):
+        fake_response = SimpleNamespace(name="not_a_real_template", reason="oops")
+        with patch(
+            "core.ppt_generator.utils.svg_pipeline.templates.llm_invoke",
+            new=AsyncMock(return_value=fake_response),
+        ):
+            chosen = await select_svg_template("任意请求", "outline placeholder")
 
-        self.assertEqual(template["name"], "mckinsey")
-
-    def test_format_svg_template_for_prompt_includes_colors_and_guidance(self):
-        template = select_svg_template("战略咨询分析", [])
-        formatted = format_svg_template_for_prompt(template)
-
-        self.assertIn("SVG Template", formatted)
-        self.assertIn("Template Colors", formatted)
-        self.assertIn("Layout Guidance", formatted)
+        valid_names = {item["name"] for item in load_svg_templates()}
+        self.assertIn(chosen, valid_names)
 
 
 if __name__ == "__main__":

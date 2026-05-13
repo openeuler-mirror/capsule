@@ -236,14 +236,14 @@ class CliStageSmokeTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            quality_module = types.ModuleType("core.ppt_generator.svg_pipeline.quality_checker")
+            quality_module = types.ModuleType("core.ppt_generator.utils.svg_pipeline.quality_checker")
             quality_module.check_svg_files = lambda paths: [
                 {"file": Path(path).name, "path": path, "passed": True, "errors": [], "warnings": []}
                 for path in paths
             ]
             quality_module.format_quality_issues = lambda _results: ""
 
-            finalize_module = types.ModuleType("core.ppt_generator.svg_pipeline.finalize_svg")
+            finalize_module = types.ModuleType("core.ppt_generator.utils.svg_pipeline.finalize_svg")
             finalize_module.finalize_svg_files = lambda paths, _save_dir: paths
 
             export_module = types.ModuleType("core.ppt_generator.utils.svg_export")
@@ -256,8 +256,8 @@ class CliStageSmokeTests(unittest.TestCase):
             payload = self._run_main(
                 ["--text", "demo", "--stages", "render", "--run-id", run_id],
                 extra_modules={
-                    "core.ppt_generator.svg_pipeline.quality_checker": quality_module,
-                    "core.ppt_generator.svg_pipeline.finalize_svg": finalize_module,
+                    "core.ppt_generator.utils.svg_pipeline.quality_checker": quality_module,
+                    "core.ppt_generator.utils.svg_pipeline.finalize_svg": finalize_module,
                     "core.ppt_generator.utils.svg_export": export_module,
                 },
                 cwd=tmp_dir,

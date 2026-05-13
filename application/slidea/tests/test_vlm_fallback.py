@@ -171,7 +171,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             state = {
                 "final_file_path": "/tmp/demo.html",
                 "iteration": 1,
-                "html_content": "<html>existing</html>",
+                "content": "<html>existing</html>",
             }
 
             with patch.object(base_node, "can_vlm_invoke_route", return_value=False), patch.object(
@@ -181,7 +181,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             ):
                 result = await base_node.modify_ppt_page_node(state)
 
-        self.assertEqual(result["html_content"], "<html>existing</html>")
+        self.assertEqual(result["content"], "<html>existing</html>")
 
     async def test_distribute_images_via_vlm_keeps_outline_unchanged_without_vlm(self):
         outline = [
@@ -295,7 +295,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             state = {
                 "final_file_path": "/tmp/demo.html",
                 "iteration": 1,
-                "html_content": "<html>existing</html>",
+                "content": "<html>existing</html>",
                 "ppt_prompt": "demo prompt",
             }
 
@@ -310,7 +310,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
                  patch.object(base_node.BrowserManager, "get_browser_context", return_value=FakeBrowserContext()):
                 result = await base_node.modify_ppt_page_node(state)
 
-        self.assertEqual(result["html_content"], "<html>premium</html>")
+        self.assertEqual(result["content"], "<html>premium</html>")
         self.assertEqual(vlm_mock.await_args.args[0], base_node.ModelRoute.PREMIUM)
 
     async def test_distribute_images_via_vlm_runs_when_premium_route_is_available(self):

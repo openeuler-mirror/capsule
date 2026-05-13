@@ -108,7 +108,8 @@ def _svg_path_for_index(save_dir: str, index: int) -> str | None:
     return str(matches[0])
 
 
-async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):
+async def _patch_render_html(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):
+    """HTML-route patch render."""
     from core.ppt_generator.thought_to_ppt.state import PageType
     from core.ppt_generator.thought_to_ppt.page_generators.node import prepare_generation_context_node
     from core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph import generate_cover_thanks_pages_app
@@ -122,60 +123,57 @@ async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, 
         "outline": outline,
         "topic": topic,
         "save_dir": save_dir,
-        "html_template_name": None,
-        "html_template": "",
         "ppt_prompt": "",
         "language": "",
+        "generated_pages": [],
+        "page_files": [],
+        "final_pdf_path": None,
+        "final_pptx_path": None,
     }
     writer = DummyWriter()
     ctx = await prepare_generation_context_node(state, writer)
     state.update(ctx)
+    template_content = state.get("template", "")
 
     target_pages = [p for p in outline if p.index in set(target_indices)]
     target_types = {p.type for p in target_pages}
 
-    # cover/thanks (regenerates both if either is requested)
     if PageType.COVER_THANKS in target_types:
-        cover_state = {
+        await generate_cover_thanks_pages_app.ainvoke({
             "query": state["query"],
             "save_dir": state["save_dir"],
             "ppt_prompt": state["ppt_prompt"],
             "language": state["language"],
-            "html_template": state["html_template"],
+            "template": template_content,
             "outline": outline,
             "cover_page": None,
             "thanks_page": None,
             "generated_pages": [],
-        }
-        await generate_cover_thanks_pages_app.ainvoke(cover_state)
+        })
 
-    # toc
     if PageType.TOC in target_types:
-        toc_state = {
+        await generate_toc_page_node({
             "query": state["query"],
             "outline": outline,
             "save_dir": state["save_dir"],
             "ppt_prompt": state["ppt_prompt"],
             "language": state["language"],
-            "html_template": state["html_template"],
-        }
-        await generate_toc_page_node(toc_state)
+            "template": template_content,
+        })
 
-    # separator pages (only selected indices)
     sep_targets = [p for p in target_pages if p.type == PageType.SEPARATOR]
     if sep_targets:
-        sep_state = {
+        sep_out = await generate_sep_template_node({
             "save_dir": state["save_dir"],
             "ppt_prompt": state["ppt_prompt"],
             "language": state["language"],
-            "html_template": state["html_template"],
+            "template": template_content,
             "outline": outline,
             "sep_pages": sep_targets,
             "sep_template": None,
             "generated_pages": [],
-        }
-        out = await generate_sep_template_node(sep_state)
-        sep_template = out.get("sep_template")
+        })
+        sep_template_content = sep_out.get("sep_template", "")
         for page in sep_targets[1:]:
             await generate_sep_page_node({
                 "save_dir": state["save_dir"],
@@ -183,11 +181,10 @@ async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, 
                 "language": state["language"],
                 "outline": outline,
                 "sep_page": page,
-                "sep_template": sep_template,
+                "sep_template": sep_template_content,
                 "generated_pages": [],
             })
 
-    # content pages (only selected indices)
     content_targets = [p for p in target_pages if p.type == PageType.CONTENT]
     for page in content_targets:
         await content_page_worker_app.ainvoke({
@@ -196,28 +193,27 @@ async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, 
             "save_dir": state["save_dir"],
             "ppt_prompt": state["ppt_prompt"],
             "language": state["language"],
-            "html_template": state["html_template"],
+            "template": template_content,
             "content_page": page,
             "img_scores": [],
-            "generated_pages": []
+            "generated_pages": [],
         })
 
-    # rebuild pptx/pdf to include newly generated pages
-    outline_indices = [p.index for p in outline]
-    htmls = [str(Path(save_dir) / f"{idx}.html") for idx in sorted(outline_indices)]
-    htmls = [p for p in htmls if Path(p).exists()]
-    pdf_path, pptx_path = await htmls_to_pptx(htmls, save_dir, sanitize_filename(topic))
+    outline_indices = sorted({p.index for p in outline})
+    files = [str(Path(save_dir) / f"{idx}.html") for idx in outline_indices]
+    files = [p for p in files if Path(p).exists()]
 
-    save_json(
-        Path(out_dir) / "ppt.json",
-        {
-            "run_id": args.run_id,
-            "topic": topic,
-            "render_dir": save_dir,
-            "pdf_path": pdf_path,
-            "pptx_path": pptx_path,
-        },
-    )
+    pdf_path, pptx_path = await htmls_to_pptx(files, save_dir, sanitize_filename(topic))
+
+    record = {
+        "run_id": args.run_id,
+        "topic": topic,
+        "render_mode": "html",
+        "render_dir": save_dir,
+        "pdf_path": pdf_path,
+        "pptx_path": pptx_path,
+    }
+    save_json(Path(out_dir) / "ppt.json", record)
 
     emit_stage_payload(
         "completed",
@@ -233,10 +229,17 @@ async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, 
 
 
 async def _patch_render_svg(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):
-    from core.ppt_generator.thought_to_ppt.page_generators.svg_node import prepare_svg_generation_context_node
-    from core.ppt_generator.thought_to_ppt.page_generators.svg_page_generator.graph import generate_svg_pages_app
-    from core.ppt_generator.svg_pipeline.quality_checker import check_svg_files, format_quality_issues
-    from core.ppt_generator.svg_pipeline.finalize_svg import finalize_svg_files
+    """SVG-route patch render."""
+    from core.ppt_generator.thought_to_ppt.state import PageType
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.node import (
+        prepare_generation_context_node,
+        quality_check_node,
+        finalize_node,
+    )
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph import generate_cover_thanks_pages_app
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.node import generate_sep_template_node, generate_sep_page_node
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.toc_page_generator.node import generate_toc_page_node
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.graph import content_page_worker_app
     from core.ppt_generator.utils.common import sanitize_filename
     from core.ppt_generator.utils.svg_export import svgs_to_pptx
 
@@ -246,47 +249,97 @@ async def _patch_render_svg(args, out_dir: str, outline, topic: str, save_dir: s
         "outline": outline,
         "topic": topic,
         "save_dir": save_dir,
+        "ppt_prompt": "",
         "language": "",
-        "svg_prompt": "",
-        "svg_spec_lock": "",
-        "svg_template_name": "",
-        "svg_template": "",
         "generated_pages": [],
-        "htmls": [],
-        "svgs": [],
+        "page_files": [],
         "final_pdf_path": None,
         "final_pptx_path": None,
     }
     writer = DummyWriter()
-    ctx = await prepare_svg_generation_context_node(state, writer)
+    ctx = await prepare_generation_context_node(state, writer)
     state.update(ctx)
+    template_content = state.get("template", "")
 
     target_pages = [p for p in outline if p.index in set(target_indices)]
-    if target_pages:
-        await generate_svg_pages_app.ainvoke({
+    target_types = {p.type for p in target_pages}
+
+    if PageType.COVER_THANKS in target_types:
+        await generate_cover_thanks_pages_app.ainvoke({
             "query": state["query"],
-            "outline": target_pages,
             "save_dir": state["save_dir"],
-            "svg_prompt": state["svg_prompt"],
-            "svg_spec_lock": state["svg_spec_lock"],
-            "svg_template": state["svg_template"],
+            "ppt_prompt": state["ppt_prompt"],
             "language": state["language"],
+            "template": template_content,
+            "outline": outline,
+            "cover_page": None,
+            "thanks_page": None,
+            "generated_pages": [],
         })
 
-    svgs = []
-    for page in sorted(outline, key=lambda item: item.index):
-        svg_path = _svg_path_for_index(save_dir, page.index)
-        if svg_path:
-            svgs.append(svg_path)
+    if PageType.TOC in target_types:
+        await generate_toc_page_node({
+            "query": state["query"],
+            "outline": outline,
+            "save_dir": state["save_dir"],
+            "ppt_prompt": state["ppt_prompt"],
+            "language": state["language"],
+            "template": template_content,
+        })
 
-    results = check_svg_files(svgs)
-    failed = [item for item in results if not item.get("passed")]
-    if failed:
+    sep_targets = [p for p in target_pages if p.type == PageType.SEPARATOR]
+    if sep_targets:
+        sep_out = await generate_sep_template_node({
+            "save_dir": state["save_dir"],
+            "ppt_prompt": state["ppt_prompt"],
+            "language": state["language"],
+            "template": template_content,
+            "outline": outline,
+            "sep_pages": sep_targets,
+            "sep_template": None,
+            "generated_pages": [],
+        })
+        sep_template_content = sep_out.get("sep_template", "")
+        for page in sep_targets[1:]:
+            await generate_sep_page_node({
+                "save_dir": state["save_dir"],
+                "ppt_prompt": state["ppt_prompt"],
+                "language": state["language"],
+                "outline": outline,
+                "sep_page": page,
+                "sep_template": sep_template_content,
+                "generated_pages": [],
+            })
+
+    content_targets = [p for p in target_pages if p.type == PageType.CONTENT]
+    for page in content_targets:
+        await content_page_worker_app.ainvoke({
+            "query": state["query"],
+            "outline": outline,
+            "save_dir": state["save_dir"],
+            "ppt_prompt": state["ppt_prompt"],
+            "language": state["language"],
+            "template": template_content,
+            "content_page": page,
+            "img_scores": [],
+            "generated_pages": [],
+        })
+
+    outline_indices = sorted({p.index for p in outline})
+    files = []
+    for idx in outline_indices:
+        path = _svg_path_for_index(save_dir, idx)
+        if path:
+            files.append(path)
+
+    try:
+        await quality_check_node({"page_files": files}, writer)
+    except ValueError as error:
         emit_stage_payload(
             "svg_quality_failed",
             {
                 "stage": "svg_quality_failed",
-                "message": format_quality_issues(results),
+                "message": str(error),
                 "target_indices": target_indices,
             },
             run_id=args.run_id,
@@ -294,22 +347,22 @@ async def _patch_render_svg(args, out_dir: str, outline, topic: str, save_dir: s
         )
         return
 
-    final_svgs = finalize_svg_files(svgs, save_dir)
-    pdf_path, pptx_path = await svgs_to_pptx(final_svgs, save_dir, sanitize_filename(topic))
+    finalize_update = await finalize_node({"save_dir": save_dir, "page_files": files}, writer)
+    files = finalize_update.get("page_files", files)
 
-    save_json(
-        Path(out_dir) / "ppt.json",
-        {
-            "run_id": args.run_id,
-            "topic": topic,
-            "render_mode": "svg",
-            "render_dir": save_dir,
-            "svg_output_dir": str(Path(save_dir) / "svg_output"),
-            "svg_final_dir": str(Path(save_dir) / "svg_final"),
-            "pdf_path": pdf_path,
-            "pptx_path": pptx_path,
-        },
-    )
+    pdf_path, pptx_path = await svgs_to_pptx(files, save_dir, sanitize_filename(topic))
+
+    record = {
+        "run_id": args.run_id,
+        "topic": topic,
+        "render_mode": "svg",
+        "render_dir": save_dir,
+        "pdf_path": pdf_path,
+        "pptx_path": pptx_path,
+        "svg_output_dir": str(Path(save_dir) / "svg_output"),
+        "svg_final_dir": str(Path(save_dir) / "svg_final"),
+    }
+    save_json(Path(out_dir) / "ppt.json", record)
 
     emit_stage_payload(
         "completed",
@@ -322,6 +375,22 @@ async def _patch_render_svg(args, out_dir: str, outline, topic: str, save_dir: s
         run_id=args.run_id,
         output_dir=out_dir,
     )
+
+
+async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):
+    render_mode = getattr(args, "render_mode", None) or _read_render_mode(out_dir)
+    if render_mode == "svg":
+        await _patch_render_svg(args, out_dir, outline, topic, save_dir, target_indices)
+    else:
+        await _patch_render_html(args, out_dir, outline, topic, save_dir, target_indices)
+
+
+def _read_render_mode(out_dir: str) -> str:
+    try:
+        ppt_record = load_json(str(Path(out_dir) / "ppt.json")) or {}
+        return ppt_record.get("render_mode", "html")
+    except Exception:
+        return "html"
 
 
 async def main():
@@ -353,10 +422,8 @@ async def main():
         )
         return
 
-    if render_mode == "svg":
-        await _patch_render_svg(args, out_dir, outline, topic, save_dir, target_indices)
-    else:
-        await _patch_render(args, out_dir, outline, topic, save_dir, target_indices)
+    args.render_mode = render_mode
+    await _patch_render(args, out_dir, outline, topic, save_dir, target_indices)
 
 
 if __name__ == "__main__":

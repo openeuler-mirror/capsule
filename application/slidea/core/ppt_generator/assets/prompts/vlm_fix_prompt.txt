@@ -23,7 +23,7 @@
 
 # 当前完整 HTML
 ```html
-{html_content}
+{content}
 ```
 
 # 强制修复流程

@@ -38,6 +38,30 @@ def _embed_local_images(svg_path: Path, source_dir: Path) -> None:
         return
 
     root = tree.getroot()
+    if _embed_images_in_root(root, svg_path.parent, source_dir):
+        tree.write(svg_path, encoding="unicode", xml_declaration=False)
+
+
+def embed_local_images_in_content(svg_content: str, source_dir: Path | str) -> str:
+    """Return ``svg_content`` with all <image> hrefs resolved to base64 data URIs.
+
+    Used by VLM review's screenshot step so Chromium doesn't render broken images
+    when an SVG references local files via relative paths that wouldn't resolve
+    from the SVG's own directory.
+    """
+    try:
+        root = ET.fromstring(svg_content)
+    except ET.ParseError:
+        return svg_content
+
+    source_dir = Path(source_dir)
+    changed = _embed_images_in_root(root, source_dir, source_dir)
+    if not changed:
+        return svg_content
+    return ET.tostring(root, encoding="unicode")
+
+
+def _embed_images_in_root(root: ET.Element, search_dir: Path, source_dir: Path) -> bool:
     changed = False
     for elem in root.iter():
         if _local_name(elem.tag) != "image":
@@ -49,16 +73,14 @@ def _embed_local_images(svg_path: Path, source_dir: Path) -> None:
         if urlparse(href).scheme in {"http", "https"}:
             continue
 
-        image_path = _resolve_image_path(href, svg_path.parent, source_dir)
+        image_path = _resolve_image_path(href, search_dir, source_dir)
         if image_path is None:
             continue
         mime_type = mimetypes.guess_type(image_path.name)[0] or "image/png"
         encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
         elem.set(attr_name, f"data:{mime_type};base64,{encoded}")
         changed = True
-
-    if changed:
-        tree.write(svg_path, encoding="unicode", xml_declaration=False)
+    return changed
 
 
 def _resolve_image_path(href: str, final_dir: Path, source_dir: Path) -> Path | None:

@@ -1,0 +1,16 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="1280" height="720" fill="#FAFAF9"/>
+
+  <text x="640" y="68" text-anchor="middle" font-family="Georgia, Times New Roman, Microsoft YaHei, serif" font-size="42" font-style="italic" font-weight="700" fill="#2C2C2C">{{PAGE_TITLE}}</text>
+
+  <rect x="34" y="96" width="1212" height="585" fill="none" stroke="#D1D5DB" stroke-width="1"/>
+
+  <line x1="50" y1="114" x2="74" y2="114" stroke="#9CA3AF" stroke-width="1"/>
+  <line x1="50" y1="114" x2="50" y2="137" stroke="#9CA3AF" stroke-width="1"/>
+  <line x1="1230" y1="664" x2="1230" y2="641" stroke="#9CA3AF" stroke-width="1"/>
+  <line x1="1230" y1="664" x2="1207" y2="664" stroke="#9CA3AF" stroke-width="1"/>
+
+  <text x="640" y="369" text-anchor="middle" font-family="Georgia, Times New Roman, Microsoft YaHei, serif" font-size="32" font-style="italic" font-weight="400" fill="#4A4A4A">{{CONTENT_AREA}}</text>
+  <line x1="520" y1="399" x2="760" y2="399" stroke="#4A4A4A" stroke-width="1"/>
+  <text x="640" y="439" text-anchor="middle" font-family="Georgia, Times New Roman, Arial, sans-serif" font-size="15" font-style="italic" font-weight="400" letter-spacing="3" fill="#6B7280">MINIMALIST AESTHETICS &amp; STRUCTURAL DESIGN</text>
+</svg>

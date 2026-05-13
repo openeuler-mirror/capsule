@@ -18,9 +18,26 @@ from core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.s
     ContentWorkerState,
     ImgScoreWorkerState,
     ImageQueries,
-    ImageScoreResult
+    ImageScoreResult,
 )
 from core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph import generate_ppt_page_app
+
+
+def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
+                          relevant_material, page) -> str:
+    return f"""
+想要撰写一页PPT，用户的原始请求为：{query}。
+可以参考的完整PPT的目录结构如下：{str(outline)}。
+当前正在撰写{page.index + 1}/{len(outline)}页，该页PPT题目为"{page.title}"，该页的主要内容为：{page.abstract}
+如果参考模板中没有页码，不要添加页码！！
+可以参考的相关资料如下：
+{relevant_material}
+有相关的图片要积极使用。
+生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！生成的PPT中使用的语言必须为{language}！
+请参考下方生成好的其中一页PPT的html代码中各内容模块的设计风格（如文字样式、色彩搭配、组件质感、元素交互逻辑等），生成一页完整的PPT的HTML代码。
+{ppt_prompt}
+{template}
+"""
 
 
 async def get_content_pages_node(state: ContentPagesState):
@@ -80,7 +97,7 @@ async def generate_image_queries_node(state: ContentWorkerState):
     "need_search_image": [],
     "need_ai_image": []
 }}
-决定需要为此内容补充什么样的图片素材。你需要根据内容将图片需求分为两类：“网络搜索图片”和“AI生成图片”。
+决定需要为此内容补充什么样的图片素材。你需要根据内容将图片需求分为两类："网络搜索图片"和"AI生成图片"。
 
 # 核心规则
 你认为大概率能在网络上搜到的图片（例如人物照片、产品照片等），优先使用网络搜索；
@@ -101,13 +118,11 @@ async def get_web_ai_images_node(state: ContentWorkerState):
     web_images = state["need_search_image"]
     ai_images = state["need_ai_image"]
     reference_image_descriptions = {}
-    # web images
     web_images_tasks = []
     if settings.USE_WEB_IMG_SEARCH:
         for image_query in web_images:
             web_images_tasks.append(asyncio.create_task(async_search(query=image_query, search_image=True, max_results=5)))
 
-    # ai images
     if settings.is_image_generation_enabled():
         ai_images_tasks = []
         for image_prompt in ai_images:
@@ -187,13 +202,12 @@ async def get_img_score_node(state: ImgScoreWorkerState):
         ".jpeg": "image/jpeg",
         ".png": "image/png",
         ".webp": "image/webp",
-        ".avif": "image/avif"
+        ".avif": "image/avif",
     }
     mime_type = mime_types.get(ext)
     if not mime_type:
         logger.debug(f"Error in get_img_score: Not support img type: {image_path}")
         return {"img_scores": [None]}
-    # 转换不支持的格式（avif/webp -> jpg）
     if ext in [".avif", ".webp"]:
         try:
             jpg_path = os.path.splitext(image_path)[0] + ".jpg"
@@ -225,7 +239,7 @@ async def get_img_score_node(state: ImgScoreWorkerState):
                 "img_description": image_description or "参考图片，未进行 VLM 内容分析。",
                 "score": 5.0,
                 "size": size,
-                "image_path": image_path
+                "image_path": image_path,
             }
         ]}
 
@@ -242,16 +256,8 @@ async def get_img_score_node(state: ImgScoreWorkerState):
 
     messages = [HumanMessage(
         content=[
-            {
-                "type": "text",
-                "text": prompt
-            },
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": build_image_url(image_path),
-                },
-            }
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": build_image_url(image_path)}},
         ]
     )]
 
@@ -268,7 +274,7 @@ async def get_img_score_node(state: ImgScoreWorkerState):
                 "img_description": response_data.img_description,
                 "score": response_data.score,
                 "size": size,
-                "image_path": image_path
+                "image_path": image_path,
             }
         ]}
     except Exception as e:
@@ -290,7 +296,7 @@ async def extend_relevant_material_node(state: ContentWorkerState):
         size_info = item["size"]
 
         formatted_str = (
-            f'图片地址，可以直接相对引用：\"images/{os.path.basename(img_path)}\"\n'
+            f'图片地址，可以直接相对引用："images/{os.path.basename(img_path)}"\n'
             f'图片描述为：{description}\n'
             f'图片大小为{size_info}\n'
         )
@@ -304,19 +310,15 @@ async def generate_content_page_node(state: ContentWorkerState):
     page = state["content_page"]
     relevant_material = state["relevant_material"]
     logger.info(f'start generate page {page.index}...')
-    prompt = f"""
-想要撰写一页PPT，用户的原始请求为：{state["query"]}。
-可以参考的完整PPT的目录结构如下：{str(state["outline"])}。
-当前正在撰写{page.index + 1}/{len(state["outline"])}页，该页PPT题目为"{page.title}"，该页的主要内容为：{page.abstract}
-如果参考模板中没有页码，不要添加页码！！
-可以参考的相关资料如下：
-{relevant_material}
-有相关的图片要积极使用。
-生成的PPT中使用的语言必须为{state["language"]}！生成的PPT中使用的语言必须为{state["language"]}！生成的PPT中使用的语言必须为{state["language"]}！
-请参考下方生成好的其中一页PPT的html代码中各内容模块的设计风格（如文字样式、色彩搭配、组件质感、元素交互逻辑等），生成一页完整的PPT的HTML代码。
-{state["ppt_prompt"]}
-{state["html_template"]}
-"""
+    prompt = _build_content_prompt(
+        query=state["query"],
+        outline=state["outline"],
+        ppt_prompt=state["ppt_prompt"],
+        template=state["template"],
+        language=state["language"],
+        relevant_material=relevant_material,
+        page=page,
+    )
     task_payload = {
         "index": page.index,
         "generate_ppt_prompt": prompt,
@@ -324,7 +326,7 @@ async def generate_content_page_node(state: ContentWorkerState):
         "save_dir": state["save_dir"],
         "iteration": 0,
         "action": "generate",
-        "html_content": None
+        "content": None,
     }
     output = await generate_ppt_page_app.ainvoke(task_payload)
     return {"generated_pages": output["generated_pages"]}

@@ -82,7 +82,6 @@ PYTHONPATH=application/slidea application/slidea/.venv/bin/python -m unittest \
   application.slidea.tests.test_svg_vlm_review \
   application.slidea.tests.test_svg_quality_repair \
   application.slidea.tests.test_svg_templates \
-  application.slidea.tests.test_svg_spec_lock \
   application.slidea.tests.test_svg_export \
   application.slidea.tests.test_patch_render_cli_smoke \
   application.slidea.tests.test_svg_utils \

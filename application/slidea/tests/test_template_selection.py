@@ -213,7 +213,7 @@ class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):
                 "topic": "Template Demo",
                 "outline": [],
                 "save_dir": str(Path(tmp_dir) / "output"),
-                "html_template_name": "cute",
+                "template_name": "cute",
             }
             writer_calls = []
 
@@ -224,9 +224,9 @@ class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):
             ):
                 result = await page_node.prepare_generation_context_node(state, writer_calls.append)
 
-        self.assertEqual(result["html_template_name"], "cute")
-        self.assertIn("<!DOCTYPE html>", result["html_template"])
-        self.assertIn("可爱风格PPT", result["html_template"])
+        self.assertEqual(result["template_name"], "cute")
+        self.assertIn("<!DOCTYPE html>", result["template"])
+        self.assertIn("可爱风格PPT", result["template"])
         self.assertEqual(result["outline"], [])
         self.assertEqual(len(writer_calls), 1)
 

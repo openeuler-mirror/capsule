@@ -1,3 +1,4 @@
+import os
 import re
 import xml.etree.ElementTree as ET
 
@@ -71,6 +72,20 @@ def safe_svg_filename(index: int, title: str) -> str:
     cleaned = re.sub(r"\s+", "_", cleaned).strip("_")
     cleaned = cleaned[:40] or "slide"
     return f"{index + 1:02d}_{cleaned}.svg"
+
+
+def build_reference_images_block(paths: list[str]) -> str:
+    """Format a list of local image absolute paths for inclusion in a prompt.
+
+    Returns "无" when no usable paths are present.
+    """
+    if not paths:
+        return "无"
+    lines = []
+    for path in paths:
+        if os.path.exists(path):
+            lines.append(f"- {path}")
+    return "\n".join(lines) if lines else "无"
 
 
 def _repair_rgba_attributes(svg_content: str) -> str:

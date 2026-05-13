@@ -1,0 +1,12 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="1280" height="720" fill="#FBF7ED"/>
+  <rect x="1" y="1" width="1278" height="718" fill="none" stroke="#D6C8B8" stroke-width="1"/>
+
+  <text x="42" y="64" font-family="Microsoft YaHei, SimSun, KaiTi, serif" font-size="34" font-weight="700" fill="#3F3933">{{PAGE_TITLE}}</text>
+
+  <rect x="42" y="118" width="1196" height="574" fill="none" stroke="#C6B6A5" stroke-width="1"/>
+  <rect x="45" y="121" width="1190" height="568" fill="none" stroke="#C6B6A5" stroke-width="1"/>
+
+  <text x="640" y="398" text-anchor="middle" font-family="Times New Roman, Microsoft YaHei, SimSun, serif" font-size="30" font-weight="700" letter-spacing="3" fill="#5D5144">{{CONTENT_AREA}}</text>
+  <text x="640" y="440" text-anchor="middle" font-family="Microsoft YaHei, SimSun, KaiTi, serif" font-size="18" font-weight="400" fill="#8C8070">(根据实际内容自由布局)</text>
+</svg>

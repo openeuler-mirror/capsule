@@ -23,5 +23,5 @@
 
 # 当前 SVG
 ```svg
-{svg_content}
+{content}
 ```

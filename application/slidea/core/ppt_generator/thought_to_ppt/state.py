@@ -67,25 +67,20 @@ class GeneratedPageResult(TypedDict):
 class PPTState(TypedDict):
     """全局状态"""
     query: str  # 用户输入的原始要求
-    render_mode: NotRequired[Literal["html", "svg"]]  # 渲染路线
+    render_mode: NotRequired[Literal["html", "svg"]]  # 渲染路线（节点用它构造 backend，避免把不可序列化的实例放进 state）
     ori_doc: str  # 用于生成PPT的原始文档
     images: list  # 用于生成PPT的图片列表
     is_markdown_doc: bool  # 原始文档是否为Markdown格式
     outline: List[PPTPage]  # PPT大纲
     save_dir: str  # PPT保存目录
     topic: str  # PPT主题
-    html_template_name: str  # 模板名称
-    html_template: str  # HTML 模板内容
-    svg_template_name: NotRequired[str]  # SVG模板名称
-    svg_template: NotRequired[str]  # SVG模板内容
+    template_name: NotRequired[str]  # 选中的模板名称（HTML/SVG 共用）
+    template: NotRequired[str]  # 模板内容（HTML/SVG 共用）
     ppt_prompt: str  # 生成PPT的提示词
-    svg_prompt: NotRequired[str]  # 生成SVG PPT的提示词
-    svg_spec_lock: NotRequired[str]  # SVG全局设计锁
     language: str  # 生成PPT的语言
 
     generated_pages: Annotated[List[GeneratedPageResult], operator.add]  # 生成的PPT页面结果列表
-    htmls: list  # 生成PPT的HTML文件路径列表
-    svgs: NotRequired[list]  # 生成PPT的SVG文件路径列表
+    page_files: NotRequired[list]  # 生成的页面文件路径列表（按 index 排序）
     svg_final_dir: NotRequired[str]  # SVG后处理目录
     svg_quality_report: NotRequired[list]  # SVG质量检查结果
     final_pdf_path: Optional[str]  # 生成PPT的PDF文件路径
@@ -97,5 +92,6 @@ class InputSchema(TypedDict):
     render_mode: NotRequired[Literal["html", "svg"]]  # 渲染路线
     ori_doc: str  # 用于生成PPT的原始文档
     is_markdown_doc: bool  # 原始文档是否为Markdown格式
-    html_template_name: Optional[str]  # 模板名称
-    images: list  # 用于生成PPT的图片列表
+    template_name: Optional[str]  # 模板名称
+    html_template_name: NotRequired[Optional[str]]  # 兼容旧的 HTML 模板参数
+    images: NotRequired[list]  # 用于生成PPT的图片列表

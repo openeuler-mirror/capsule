@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core.ppt_generator.svg_pipeline.quality_checker import (
+from core.ppt_generator.utils.svg_pipeline.quality_checker import (
     check_svg_file,
     format_quality_issues,
     raise_for_svg_quality,

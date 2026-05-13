@@ -23,6 +23,92 @@ from core.ppt_generator.thought_to_ppt.outline_generator.state import (
 SPLIT_LEN = 81920
 SPLIT_PAGE = 15
 MAX_PAGE = 100
+OUTLINE_GENERATION_MAX_ATTEMPTS = 3
+
+
+def _is_valid_slide(item, *, require_type: bool = True) -> bool:
+    if not isinstance(item, dict):
+        return False
+    title = item.get("title")
+    if not isinstance(title, str) or not title.strip():
+        return False
+    if not isinstance(item.get("abstract"), str):
+        return False
+    if require_type:
+        type_val = item.get("type")
+        if type_val is None:
+            return False
+        try:
+            int(type_val)
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
+def _partition_slides(slides, *, require_type: bool = True):
+    valid, invalid = [], []
+    for item in slides or []:
+        (valid if _is_valid_slide(item, require_type=require_type) else invalid).append(item)
+    return valid, invalid
+
+
+async def _llm_invoke_slides_with_retry(
+    prompt: str,
+    schema,
+    label: str,
+    *,
+    max_attempts: int = OUTLINE_GENERATION_MAX_ATTEMPTS,
+    require_type: bool = True,
+) -> list:
+    """Call llm_invoke for slide generation, retrying when the response is malformed.
+
+    LLMs occasionally drop the ``type`` key or merge JSON values (e.g. inserting
+    ``"神经传输网络": "type"``). Validate every slide; retry with a corrective hint
+    if any slide is malformed; return the best valid slice we managed to obtain.
+    """
+    correction = ""
+    best_valid: list = []
+    for attempt in range(max_attempts):
+        attempt_prompt = prompt + correction
+        try:
+            slides = await llm_invoke(
+                ModelRoute.PREMIUM,
+                [HumanMessage(content=attempt_prompt)],
+                json_schema=schema,
+            )
+        except Exception as error:
+            logger.warning(
+                f"{label} attempt {attempt + 1}/{max_attempts} call failed: {error}"
+            )
+            correction = (
+                "\n\n# 上一次调用失败，请严格按照规定的字段（title: string, abstract: string, type: int）"
+                "输出一个 JSON list，禁止额外或拼错的键。"
+            )
+            continue
+
+        slides = slides or []
+        valid, invalid = _partition_slides(slides, require_type=require_type)
+        if invalid:
+            logger.warning(
+                f"{label} attempt {attempt + 1}/{max_attempts} produced {len(invalid)} invalid slide(s); "
+                f"sample: {invalid[:1]}"
+            )
+        if valid and len(valid) > len(best_valid):
+            best_valid = valid
+        if valid and not invalid:
+            return valid
+        correction = (
+            "\n\n# 上一次返回包含不符合规范的元素。每个元素必须是仅包含 title (string)、abstract (string)、"
+            "type (int) 三个键的 JSON 对象。请重新输出一个完整、合法的 JSON list，禁止任何额外的键或拼写错误。"
+        )
+
+    if best_valid:
+        logger.warning(
+            f"{label}: returning {len(best_valid)} valid slides after exhausting {max_attempts} attempts"
+        )
+    else:
+        logger.error(f"{label}: failed to obtain any valid slide after {max_attempts} attempts")
+    return best_valid
 
 
 async def analyze_input_node(state: OutlineState):
@@ -288,9 +374,7 @@ async def simple_generate_node(state: OutlineState, writer: StreamWriter):
 """
 
     schema = TypeAdapter(List[SlideDetail]).json_schema()
-    slides_data = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)], json_schema=schema)
-    if not slides_data:
-        slides_data = []
+    slides_data = await _llm_invoke_slides_with_retry(prompt, schema, label="simple_generate")
 
     for s in slides_data:
         s["source"] = -1
@@ -394,9 +478,12 @@ async def generate_chapter_slides_node(state: SectionState):
 """
 
     schema = TypeAdapter(List[SlideDetail]).json_schema()
-    slides = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)], json_schema=schema)
-    if not slides:
-        slides = []
+    slides = await _llm_invoke_slides_with_retry(
+        prompt,
+        schema,
+        label=f"chapter[{chapter.idx}]_slides",
+        require_type=False,
+    )
 
     for s in slides:
         s["type"] = 1

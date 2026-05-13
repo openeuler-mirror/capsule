@@ -12,6 +12,40 @@ from json_repair import repair_json
 from langchain_core.runnables import RunnableConfig
 import json
 
+def _normalize_outline_list(outline_list: list) -> list:
+    """Drop malformed slides and fill missing optional fields.
+
+    Even after retry, very rarely the model returns a slide that's missing fields.
+    Filter those out here so downstream PPTPage construction never KeyErrors.
+    """
+    cleaned = []
+    for item in outline_list or []:
+        if not isinstance(item, dict):
+            logger.warning(f"outline: dropping non-dict item: {item!r}")
+            continue
+        title = item.get("title")
+        abstract = item.get("abstract")
+        if not isinstance(title, str) or not title.strip():
+            logger.warning(f"outline: dropping item with missing/invalid title: {item!r}")
+            continue
+        if not isinstance(abstract, str):
+            logger.warning(f"outline: dropping item with missing/invalid abstract: {item!r}")
+            continue
+        if "type" not in item or item["type"] is None:
+            logger.warning(f"outline: defaulting missing type to CONTENT(1) for: {item!r}")
+            item = {**item, "type": 1}
+        else:
+            try:
+                item = {**item, "type": int(item["type"])}
+            except (TypeError, ValueError):
+                logger.warning(f"outline: defaulting non-int type to CONTENT(1) for: {item!r}")
+                item = {**item, "type": 1}
+        if "source" not in item:
+            item["source"] = -1
+        cleaned.append(item)
+    return cleaned
+
+
 async def generate_outline_node(state: PPTState, config: RunnableConfig | None = None):
     """generate ppt outline"""
     run_dir = run_dir_from_config(config, str(app_base_dir))
@@ -32,7 +66,9 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
 
     logger.info(task_payload["is_markdown_doc"])
     outline_results = await generate_outline_app.ainvoke(task_payload)
-    outline_list = outline_results["final_output"]
+    outline_list = _normalize_outline_list(outline_results["final_output"])
+    if not outline_list:
+        raise ValueError("Outline generation returned no usable slides after retries")
 
     if outline_list[0]["type"] == PageType.COVER_THANKS:
         outline_list.append(
@@ -80,14 +116,10 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
 
 
 async def generate_pages_node(state: PPTState):
-    """generate ppt pages"""
+    """generate ppt pages — dispatch to the HTML or SVG sub-pipeline by render_mode."""
     if state.get("render_mode", "html") == "svg":
-        from core.ppt_generator.thought_to_ppt.page_generators.svg_graph import generate_svg_slides_app
-
-        pages_results = await generate_svg_slides_app.ainvoke(state)
-        return pages_results
+        from core.ppt_generator.thought_to_ppt.svg_page_generators.graph import generate_svg_pages_app
+        return await generate_svg_pages_app.ainvoke(state)
 
     from core.ppt_generator.thought_to_ppt.page_generators.graph import generate_pages_app
-
-    pages_results = await generate_pages_app.ainvoke(state)
-    return pages_results
+    return await generate_pages_app.ainvoke(state)

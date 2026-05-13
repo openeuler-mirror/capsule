@@ -1,0 +1,375 @@
+import asyncio
+import os
+from pathlib import Path
+from typing import List
+
+from langchain.messages import HumanMessage
+from PIL import Image
+from pydantic import TypeAdapter
+
+from core.utils.logger import logger
+from core.utils.config import app_base_dir, settings
+from core.ppt_generator.utils.common import get_web_images_content, build_image_url
+from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_invoke
+from core.utils.tavily_search import async_search
+from core.ppt_generator.utils.image import generate_ai_image, get_ai_images_content
+from core.ppt_generator.thought_to_ppt.state import PageType
+from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.state import (
+    ContentPagesState,
+    ContentWorkerState,
+    ImgScoreWorkerState,
+    ImageQueries,
+    ImageScoreResult,
+)
+from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.graph import generate_ppt_page_app
+
+
+def _svg_prompt_header() -> str:
+    return (
+        Path(app_base_dir)
+        / "core" / "ppt_generator" / "assets" / "prompts"
+        / "svg_generator_prompt.txt"
+    ).read_text(encoding="utf-8")
+
+
+def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
+                          relevant_material, page) -> str:
+    return f"""
+{_svg_prompt_header()}
+
+# 当前任务
+撰写一张 PPT 内容页 SVG。用户的原始请求为：{query}
+完整 PPT 大纲：
+{outline}
+
+当前正在撰写第 {page.index + 1} / {len(outline)} 页：
+- 标题："{page.title}"
+- 摘要：{page.abstract}
+
+# 可参考的相关资料（含本页文档要点 + 已检索/评分排序后的图片素材）
+{relevant_material}
+
+# 图片使用要求
+- 上方"相关图片素材"中给出的图片地址都是相对路径（如 "images/xxx.jpg"），可直接作为 <image href="images/xxx.jpg" .../> 使用，finalize 阶段会自动嵌入为 data URI。
+- 如果上方"可参考的相关资料"中没有出现以"图片地址"开头的图片素材条目，本页禁止使用 <image> 元素，请用矢量形状/图标化 path/色块/渐变等纯矢量方式表达，不要因此降低信息密度。
+- 严禁编造图片文件名，包括 `图片1.png`、`图片2.png`、`image1.jpg`、`pic.png` 等占位名；只能逐字引用上方列出的真实文件名。
+- 当资料里给出了图片时，可适度使用 <image> 提升表达，但宁可不用，也不要拼凑。
+
+# 设计要求
+- 配色与字体必须沿用下方模板示意 SVG 的视觉语言。
+- 不要参考模板中的具体文字内容，只参考视觉风格、卡片结构、留白节奏。
+- 信息密度要高但克制，避免大段文字。
+- 不要添加页码（除非模板示意 SVG 自身带页码）。
+
+# 语言
+生成页面文字必须使用：{language}
+
+# 模板示意 SVG（仅供视觉参考）
+{template}
+"""
+
+
+async def get_content_pages_node(state: ContentPagesState):
+    """get content pages from outline"""
+    pages = []
+    for page in state["outline"]:
+        if page.type == PageType.CONTENT:
+            pages.append(page)
+
+    return {"content_pages": pages}
+
+
+async def extract_relevant_doc_node(state: ContentWorkerState):
+    """extract related materials for each page"""
+    page = state["content_page"]
+    prompt = f"""
+你是一个素材整理和过滤专家，正在整理用于撰写某页PPT的材料。
+
+# 用户原始请求
+{state["query"]}
+
+# 完整PPT的目录结构
+{str(state["outline"])}。
+
+# 你的任务是
+请从以下原始资料中抽取过滤出"{page.title}:{page.abstract}"的相关素材。
+
+# 注意
+不要遗漏关键信息，所有关键时间、地点、信息都不要遗漏！
+抽取要做到全面，同时不要抽取无关内容，不要抽取和其他PPT页重复的内容！
+不要只提供主要内容，尽可能保留原文，不要只说明引用而不写出引用的内容！
+生成的内容使用的语言必须为{state["language"]}！！！
+
+# 参考资料
+{page.reference_doc}
+"""
+    response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)])
+    return {"relevant_material": response}
+
+
+async def generate_image_queries_node(state: ContentWorkerState):
+    """generate image queries for the page"""
+    page = state["content_page"]
+    prompt = f"""
+请根据正在撰写的PPT的文字资料，判断是否需要搜索额外的素材。
+# 正在撰写的PPT页
+{page.title}:{page.abstract}
+
+# 输出格式要求
+如果需要额外的图片素材，返回如下格式的json，不要返回额外内容：
+{{
+    "need_search_image": ["需要的图片素材描述1", "需要的图片素材描述2"],
+    "need_ai_image": ["需要AI生成的图片描述Prompt"]
+}}
+如果不需要，返回如下格式的json，不要返回额外内容：
+{{
+    "need_search_image": [],
+    "need_ai_image": []
+}}
+决定需要为此内容补充什么样的图片素材。你需要根据内容将图片需求分为两类："网络搜索图片"和"AI生成图片"。
+
+# 核心规则
+你认为大概率能在网络上搜到的图片（例如人物照片、产品照片等），优先使用网络搜索；
+你认为大概率网上搜不到的图片，生成一个Prompt用于指导用于指导AI绘画模型("need_ai_image"最多只包含一个Prompt，即列表只有一个对象！)。
+
+# PPT的文字资料
+{state["relevant_material"]}
+"""
+    response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=ImageQueries)
+    if not response:
+        response = ImageQueries(need_search_image=[], need_ai_image=[])
+
+    return {"need_search_image": response.need_search_image, "need_ai_image": response.need_ai_image}
+
+
+async def get_web_ai_images_node(state: ContentWorkerState):
+    """get web, ai and mem image"""
+    web_images = state["need_search_image"]
+    ai_images = state["need_ai_image"]
+    reference_image_descriptions = {}
+    web_images_tasks = []
+    if settings.USE_WEB_IMG_SEARCH:
+        for image_query in web_images:
+            web_images_tasks.append(asyncio.create_task(async_search(query=image_query, search_image=True, max_results=5)))
+
+    if settings.is_image_generation_enabled():
+        ai_images_tasks = []
+        for image_prompt in ai_images:
+            ai_images_tasks.append(asyncio.create_task(generate_ai_image(image_prompt, state["save_dir"])))
+        ai_results = await asyncio.gather(*ai_images_tasks)
+        ai_content, _, ai_image_descriptions = await get_ai_images_content(ai_images, ai_results, state["save_dir"])
+        reference_image_descriptions.update(ai_image_descriptions)
+    else:
+        ai_content = ""
+
+    if settings.USE_WEB_IMG_SEARCH:
+        web_results = await asyncio.gather(*web_images_tasks) if web_images_tasks else []
+        web_content, _, web_image_descriptions = await get_web_images_content(web_images, web_results, state["save_dir"])
+        reference_image_descriptions.update(web_image_descriptions)
+    else:
+        web_content = ""
+
+    if settings.is_image_generation_enabled() and settings.USE_WEB_IMG_SEARCH:
+        img_content = f"\n\n额外的图片搜索结果如下：{web_content}\n\n以下图片的分辨率为1280*720：\n{ai_content}\n\n"
+    elif settings.is_image_generation_enabled():
+        img_content = f"\n\n以下图片的分辨率为1280*720：\n{ai_content}\n\n"
+    elif settings.USE_WEB_IMG_SEARCH:
+        img_content = f"\n\n额外的图片搜索结果如下：{web_content}\n\n"
+    else:
+        img_content = ""
+
+    return {
+        "img_content": img_content,
+        "reference_image_descriptions": reference_image_descriptions,
+    }
+
+
+async def get_final_images_node(state: ContentWorkerState):
+    """select images from all the images"""
+    prompt = f"""
+请从以下图片中选择5张最适合放在该页PPT中的图片（不足5张则按需返回，可以为空[]）。
+# PPT的文字素材
+{state["relevant_material"]}
+
+# 输出格式要求
+只返回一个json格式的列表，如：
+['图片1绝对路径'， '图片2绝对路径']
+
+# 图片绝对路径以及描述
+{state["img_content"]}
+
+每个路径一定要以完整的绝对路径输出！！
+"""
+    schema = TypeAdapter(List[str]).json_schema()
+    img_list = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], json_schema=schema)
+    if not img_list:
+        img_list = []
+    img_list.extend(state["content_page"].reference_images)
+    final_img_list = [img for img in img_list if os.path.exists(img)]
+    description_map = state.get("reference_image_descriptions") or {}
+    final_description_map = {
+        image_path: description_map[image_path]
+        for image_path in final_img_list
+        if image_path in description_map and description_map[image_path]
+    }
+
+    return {
+        "reference_images": final_img_list,
+        "reference_image_descriptions": final_description_map,
+    }
+
+
+async def get_img_score_node(state: ImgScoreWorkerState):
+    """score the image"""
+    relevant_material = state["relevant_material"]
+    image_path = state["image_path"]
+    image_description = (state.get("image_description") or "").strip()
+    _, ext = os.path.splitext(image_path)
+    ext = ext.lower()
+    mime_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".avif": "image/avif",
+    }
+    mime_type = mime_types.get(ext)
+    if not mime_type:
+        logger.debug(f"Error in get_img_score: Not support img type: {image_path}")
+        return {"img_scores": [None]}
+    if ext in [".avif", ".webp"]:
+        try:
+            jpg_path = os.path.splitext(image_path)[0] + ".jpg"
+            with Image.open(image_path) as im:
+                im = im.convert("RGB")
+                im.save(jpg_path, "JPEG", quality=90)
+            image_path = jpg_path
+            ext = ".jpg"
+            mime_type = mime_types.get(ext)
+        except Exception as e:
+            logger.debug(f"Error in get_img_score: convert {image_path} failed - {e}")
+            return {"img_scores": [None]}
+
+    try:
+        Image.open(image_path).verify()
+    except Exception as e:
+        logger.debug(f"Error in get_img_score: {e} from img: {image_path}")
+        return {"img_scores": [None]}
+
+    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
+        height, width = get_image_size(image_path)
+        size = f"图片高度为{height}，宽度为{width}"
+        logger.warning(
+            "No available VLM route for image scoring. Use a fallback image score without VLM analysis: "
+            f"{image_path}"
+        )
+        return {"img_scores": [
+            {
+                "img_description": image_description or "参考图片，未进行 VLM 内容分析。",
+                "score": 5.0,
+                "size": size,
+                "image_path": image_path,
+            }
+        ]}
+
+    prompt = f"""
+请判断能否将该图片用于该页PPT当中，并返回图片描述以及得分(分数为0-10的float数字，0代表完全不可用，9.9代表一定能用到)。
+# 用户的PPT的文字素材
+{relevant_material}
+# 输出示例
+{{
+    "img_description": "图片描述"，
+    "score": 6.3
+}}
+"""
+
+    messages = [HumanMessage(
+        content=[
+            {"type": "text", "text": prompt},
+            {
+                "type": "image_url",
+                "image_url": {"url": build_image_url(image_path)},
+            },
+        ]
+    )]
+
+    try:
+        response_data = await vlm_invoke(ModelRoute.DEFAULT, messages, pydantic_schema=ImageScoreResult)
+
+        if not response_data or not response_data.img_description or not response_data.score:
+            logger.debug(f"Error in get_img_score from img: {image_path}")
+            return {"img_scores": [None]}
+        height, width = get_image_size(image_path)
+        size = f"图片高度为{height}，宽度为{width}"
+        return {"img_scores": [
+            {
+                "img_description": response_data.img_description,
+                "score": response_data.score,
+                "size": size,
+                "image_path": image_path,
+            }
+        ]}
+    except Exception as e:
+        logger.debug(f"Error scoring img {image_path}: {e}")
+        return {"img_scores": [None]}
+
+
+async def extend_relevant_material_node(state: ContentWorkerState):
+    """extend relevant material with images"""
+    img_scores = [item for item in state["img_scores"] if item is not None]
+    sorted_list = sorted(img_scores, key=lambda item: item["score"], reverse=True)
+    top_n_list = sorted_list[:min(len(sorted_list), settings.TOP_N_IMAGE)]
+    relevant_material = state["relevant_material"]
+
+    final_images = []
+    for item in top_n_list:
+        img_path = item["image_path"]
+        description = item["img_description"]
+        size_info = item["size"]
+
+        formatted_str = (
+            f'图片地址，可以直接相对引用："images/{os.path.basename(img_path)}"\n'
+            f'图片描述为：{description}\n'
+            f'图片大小为{size_info}\n'
+        )
+        final_images.append(formatted_str)
+    relevant_material = relevant_material + "\n可以使用的相关图片素材如下:\n" + "\n".join(final_images)
+    return {"relevant_material": relevant_material}
+
+
+async def generate_content_page_node(state: ContentWorkerState):
+    """generate content page (SVG)"""
+    page = state["content_page"]
+    relevant_material = state["relevant_material"]
+    logger.info(f'start generate page {page.index}...')
+    prompt = _build_content_prompt(
+        query=state["query"],
+        outline=state["outline"],
+        ppt_prompt=state["ppt_prompt"],
+        template=state["template"],
+        language=state["language"],
+        relevant_material=relevant_material,
+        page=page,
+    )
+    task_payload = {
+        "index": page.index,
+        "page": page,
+        "generate_ppt_prompt": prompt,
+        "ppt_prompt": state["ppt_prompt"],
+        "save_dir": state["save_dir"],
+        "content": None,
+    }
+    output = await generate_ppt_page_app.ainvoke(task_payload)
+    return {"generated_pages": output["generated_pages"]}
+
+
+def get_image_size(image_path):
+    """get image height and width"""
+    try:
+        with Image.open(image_path) as img:
+            height = img.height
+            width = img.width
+    except Exception as e:
+        logger.warning(f"open Image {image_path} failed {e}")
+        return 0, 0
+    return height, width
