@@ -6,23 +6,23 @@ from core.ppt_generator.thought_to_ppt.state import GeneratedPageResult, PPTPage
 
 
 class SEPPagesState(TypedDict):
-    save_dir: str  # 保存目录
-    ppt_prompt: str  # 生成PPT的提示词
-    language: str  # 生成PPT的语言
-    html_template: str  # 生成PPT的模板
-    outline: List[PPTPage]  # PPT的整体大纲
+    save_dir: str
+    ppt_prompt: str
+    language: str
+    template: str  # HTML 模板内容
+    outline: List[PPTPage]
 
-    sep_pages: Optional[List[PPTPage]]  # PPT中需要生成的章节分割页列表
-    sep_template: Optional[str]  # 生成SEP的模板
-    generated_pages: Annotated[List[GeneratedPageResult], operator.add]  # 生成的PPT页面结果列表
+    sep_pages: Optional[List[PPTPage]]
+    sep_template: Optional[str]
+    generated_pages: Annotated[List[GeneratedPageResult], operator.add]
 
 
 class SEPWorkerState(TypedDict):
-    save_dir: str  # 保存目录
-    ppt_prompt: str  # 生成PPT的提示词
-    language: str  # 生成PPT的语言
-    outline: List[PPTPage]  # PPT的整体大纲
+    save_dir: str
+    ppt_prompt: str
+    language: str
+    outline: List[PPTPage]
 
-    sep_page: PPTPage  # 正在生成的章节分割页
-    sep_template: str   # 生成SEP的模板
-    generated_pages: Annotated[List[GeneratedPageResult], operator.add]  # 生成的PPT页面结果列表
+    sep_page: PPTPage
+    sep_template: str
+    generated_pages: Annotated[List[GeneratedPageResult], operator.add]

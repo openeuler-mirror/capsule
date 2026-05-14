@@ -22,9 +22,9 @@ except ImportError:  # pragma: no cover - minimal fallback for test environments
             return {"title": cls.__name__, "type": "object"}
 
 try:
-    from typing_extensions import TypedDict, Literal
+    from typing_extensions import TypedDict, Literal, NotRequired
 except ImportError:  # pragma: no cover - Python 3.11+ fallback
-    from typing import TypedDict, Literal
+    from typing import TypedDict, Literal, NotRequired
 
 
 class PageType(IntEnum):
@@ -43,6 +43,7 @@ class PPTPage(BaseModel):
     index: int = 0  # 页码
     reference_doc: str = ""  # 该页PPT内容所对应的原始文档内容
     reference_images: list = []  # 该页PPT内容所对应的图片列表
+    reference_doc_is_full_context: bool = False  # reference_doc 已是完整可用上下文，跳过二次抽取
 
     def __str__(self) -> str:
         page_dict = self.model_dump(include={'index', 'title', 'abstract', 'type'})
@@ -67,26 +68,31 @@ class GeneratedPageResult(TypedDict):
 class PPTState(TypedDict):
     """全局状态"""
     query: str  # 用户输入的原始要求
+    render_mode: NotRequired[Literal["html", "svg"]]  # 渲染路线（节点用它构造 backend，避免把不可序列化的实例放进 state）
     ori_doc: str  # 用于生成PPT的原始文档
     images: list  # 用于生成PPT的图片列表
     is_markdown_doc: bool  # 原始文档是否为Markdown格式
     outline: List[PPTPage]  # PPT大纲
     save_dir: str  # PPT保存目录
     topic: str  # PPT主题
-    html_template_name: str  # 模板名称
-    html_template: str  # HTML 模板内容
+    template_name: NotRequired[str]  # 选中的模板名称（HTML/SVG 共用）
+    template: NotRequired[str]  # 模板内容（HTML/SVG 共用）
     ppt_prompt: str  # 生成PPT的提示词
     language: str  # 生成PPT的语言
 
     generated_pages: Annotated[List[GeneratedPageResult], operator.add]  # 生成的PPT页面结果列表
-    htmls: list  # 生成PPT的HTML文件路径列表
+    page_files: NotRequired[list]  # 生成的页面文件路径列表（按 index 排序）
+    svg_final_dir: NotRequired[str]  # SVG后处理目录
+    svg_quality_report: NotRequired[list]  # SVG质量检查结果
     final_pdf_path: Optional[str]  # 生成PPT的PDF文件路径
     final_pptx_path: Optional[str]  # 生成PPT的PPTX文件路径
 
 
 class InputSchema(TypedDict):
     query: str  # 用户输入的原始要求
+    render_mode: NotRequired[Literal["html", "svg"]]  # 渲染路线
     ori_doc: str  # 用于生成PPT的原始文档
     is_markdown_doc: bool  # 原始文档是否为Markdown格式
-    html_template_name: Optional[str]  # 模板名称
-    images: list  # 用于生成PPT的图片列表
+    template_name: Optional[str]  # 模板名称
+    html_template_name: NotRequired[Optional[str]]  # 兼容旧的 HTML 模板参数
+    images: NotRequired[list]  # 用于生成PPT的图片列表

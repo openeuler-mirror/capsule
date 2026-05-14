@@ -45,6 +45,7 @@ python3 scripts/run_ppt_pipeline.py --text "<request>"
 | `--resume` | No* | Resume payload for an interrupted full-graph run |
 | `--session-id` | No | LangGraph thread/session identifier, default `local` |
 | `--stages` | No | Comma-separated stage list, default `all` |
+| `--render-mode` | No | Render backend, `html` by default; use `svg` for SVG-to-native-PPTX output |
 | `--research-mode` | No | Runtime override for research routing: `skip`, `simple`, `deep` |
 | `--use-cache` | No | String boolean controlling cache-backed reuse |
 | `--image-search` | No | String boolean override for web image search |
@@ -235,6 +236,12 @@ Render from a cached outline:
 
 ```bash
 python3 scripts/run_ppt_pipeline.py --text "..." --stages render --run-id <run_id>
+```
+
+Render through the SVG backend:
+
+```bash
+python3 scripts/run_ppt_pipeline.py --text "..." --render-mode svg
 ```
 
 Resume an interrupted run:

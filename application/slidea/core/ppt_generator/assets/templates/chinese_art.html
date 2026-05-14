@@ -36,8 +36,8 @@
             font-family: 'Noto Serif SC', 'STKaiti', 'KaiTi', 'FangSong', serif;
             margin: 0;
             padding: 0;
-            background-color: #E6DECD; /* 页面外围浅茶底色 */
-            color: #2D2B29; /* 全局水墨黑文字 */
+            background-color: #FBF7ED; /* 页面外围宣纸底色 */
+            color: #3F3933; /* 全局国风主文字 */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -50,8 +50,8 @@
             height: 720px;
             box-sizing: border-box;
             overflow: hidden;
-            background-color: #FDF9EE; /* PPT内部宣纸底色 */
-            border: 1px solid #D7C8B6;
+            background-color: #FBF7ED; /* PPT内部宣纸底色 */
+            border: 1px solid #C6B6A5;
         }
 
         .section-container {
@@ -61,7 +61,7 @@
             overflow: hidden;
             flex-direction: column;
             box-sizing: border-box;
-            margin-top: 20px;
+            margin-top: 10px;
             margin-bottom: 20px;
             min-height: 0;
         }
@@ -77,15 +77,41 @@
     </style>
 </head>
 <body>
+<!--
+颜色说明：
+1. 背景色：#FBF7ED
+   使用要求：页面背景，仅用于整体底色或宣纸感留白区域。
 
-    <!-- 主容器 (去除了上下粗蓝边框) -->
-    <div id="ppt-container" class="flex flex-col box-border">
+2. 主色：#3F3933
+   使用要求：用于页面标题、核心视觉元素、国风主题主文字。
+
+3. 强调色：#8C5A2B
+   使用要求：用于重点数据、印章式高亮、局部强调，不应大面积使用。
+
+4. 正文文字色：#3F3933
+   使用要求：用于主要正文、表格主文字、说明文字。
+
+5. 辅助文字色：#8C8070
+   使用要求：用于注释、说明、次级标签、弱化信息。
+
+6. 边框/分割线色：#C6B6A5
+   使用要求：用于边框、辅助线、分割线、国风双线框描边。
+
+7. 可选警示色：#B91C1C
+   使用要求：仅在表达风险、问题、下降时使用。
+
+8. 可选成功色：#166534
+   使用要求：仅在表达增长、完成、正向结果时使用。
+-->
+
+    <!-- 主容器 -->
+    <div id="ppt-container" data-description="固定页面容器；保留国风宣纸背景、整体尺寸和视觉基底。" class="flex flex-col box-border">
         
         <!-- Header -->
-        <header class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
+        <header id="header" data-description="内容页固定标题栏；只替换标题文字，不加额外标题装饰。" class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
             <div class="flex items-center">
                 <!-- 标题采用水墨深色，字体加大以展现书法气韵 -->
-                <h1 class="text-4xl font-bold text-[#3E3832] tracking-wide">{{标题}}</h1>
+                <h1 id="page-title-text" data-description="标题固定样式：text-4xl font-bold text-[#3F3933] tracking-wide。" class="text-4xl font-bold text-[#3F3933] tracking-wide">{{PAGE_TITLE}}</h1>
             </div>
         </header>
 
@@ -93,13 +119,13 @@
         <div class="section-container flex-1 px-10 py-2">
             <div class="scalable-content">
                 <!-- 顶级容器架构：边框改为古典的双实线和浅褐色，模拟古籍版式 -->
-                <div class="flex-1 flex flex-col w-full h-full border-double border-[4px] border-[#C6B6A5] p-8 min-h-0">
+                <div id="main-content-safe-area" data-description="主体内容范围；正式内容应在此区域内布局，保留国风双线框。" class="flex-1 flex flex-col w-full h-full border-double border-[4px] border-[#C6B6A5] min-h-0">
                     
                     <!-- 内容区布局: flex-1 flex flex-col justify-around (后续在此处放入真实内容模块) -->
                     <div class="flex-1 flex flex-col justify-around items-center min-h-0">
-                        <div class="text-center min-h-0">
+                        <div id="content-placeholder" data-description="占位提示，正式输出删除。" class="text-center min-h-0">
                             <!-- 占位文字同样使用国风配色 -->
-                            <p class="text-3xl font-bold mb-4 text-[#5D5144] tracking-widest">{{CONTENT_AREA}}</p>
+                            <p class="text-3xl font-bold mb-4 text-[#3F3933] tracking-widest">{{CONTENT_AREA}}</p>
                             <p class="text-lg text-[#8C8070]">(根据实际内容自由布局)</p>
                         </div>
                     </div>

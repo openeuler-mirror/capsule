@@ -1,0 +1,94 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <g id="background" data-description="固定背景，保留。">
+    <rect id="slide-background" x="0" y="0" width="1280" height="720" fill="#FFF8FC"/>
+  </g>
+
+  <g id="template-decoration" data-description="固定装饰，保留。">
+    <circle cx="92" cy="86" r="44" fill="#FBCFE8"/>
+    <circle cx="150" cy="128" r="22" fill="#FED7AA"/>
+    <circle cx="1186" cy="96" r="54" fill="#DDD6FE"/>
+    <circle cx="1128" cy="142" r="24" fill="#BBF7D0"/>
+    <circle cx="84" cy="642" r="38" fill="#FEF3C7"/>
+    <circle cx="1188" cy="620" r="64" fill="#C4B5FD"/>
+    <path d="M260 58 C306 28 354 28 396 58 C354 88 306 88 260 58 Z" fill="#BFDBFE"/>
+    <path d="M890 628 C938 596 986 596 1034 628 C986 660 938 660 890 628 Z" fill="#FCE7F3"/>
+    <circle cx="90" cy="148" r="8" fill="#FF8FB1"/>
+    <circle cx="114" cy="148" r="8" fill="#FDBA74"/>
+    <circle cx="138" cy="148" r="8" fill="#6EE7B7"/>
+    <circle cx="1190" cy="642" r="8" fill="#A78BFA"/>
+    <circle cx="1166" cy="642" r="8" fill="#FDE68A"/>
+    <circle cx="1142" cy="642" r="8" fill="#FF8FB1"/>
+  </g>
+
+  <g id="header" data-description="内容页固定标题栏；只替换标题文字，不加额外标题装饰。">
+    <text id="page-title-text" data-description="标题固定样式：x=640 y=60 font-size=34 font-weight=700。" x="640" y="60" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="34" font-weight="700" fill="#5B556D">{{PAGE_TITLE}}</text>
+    <line id="title-accent-line" x1="520" y1="80" x2="760" y2="80" stroke="#A78BFA" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="490" cy="80" r="7" fill="#FF8FB1"/>
+    <circle cx="790" cy="80" r="7" fill="#FDBA74"/>
+  </g>
+
+  <g id="main-content-frame" data-description="主体装饰框，正式输出保留；内容布局在框内。">
+    <rect id="content-frame-outer" x="40" y="104" width="1200" height="586" rx="18" ry="18" fill="#FFFFFF" stroke="#FFB3C7" stroke-width="2" stroke-dasharray="6 6"/>
+    <rect id="content-frame-inner" x="58" y="122" width="1164" height="550" rx="14" ry="14" fill="#FFFFFF" stroke="#C4B5FD" stroke-width="1"/>
+  </g>
+
+  <g id="main-content-safe-area" data-description="主体内容范围：x=80 y=150 width=1120 height=490。">
+  </g>
+
+  <g id="content-placeholder" data-description="占位提示，正式输出删除。">
+    <text id="content-placeholder-label" x="640" y="394" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="30" font-weight="700" fill="#5B556D">CONTENT_AREA</text>
+    <text id="content-placeholder-hint" x="640" y="436" text-anchor="middle" font-family="Microsoft YaHei, Arial, sans-serif" font-size="18" font-weight="400" fill="#7B8794">实际内容</text>
+  </g>
+
+  <g id="palette-sample" data-description="颜色示例色卡，仅供模板预览，正式输出必须删除。">
+    <text x="80" y="575" font-family="Microsoft YaHei, Arial, sans-serif" font-size="14" font-weight="700" fill="#7B8794">颜色示例色卡，正式输出删除</text>
+
+    <g id="palette-background-color" data-description="背景色：#FFF8FC；使用要求：页面背景，仅用于整体底色或柔和留白区域。">
+      <rect x="80" y="592" width="96" height="34" rx="8" fill="#FFF8FC" stroke="#FFB3C7" stroke-width="1.5"/>
+      <text x="80" y="646" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12" fill="#7B8794">背景色</text>
+      <text x="80" y="664" font-family="Arial, sans-serif" font-size="12" fill="#7B8794">#FFF8FC</text>
+    </g>
+
+    <g id="palette-primary-color" data-description="主色：#FF8FB1；使用要求：用于核心视觉元素、重点模块、按钮和一级强调。">
+      <rect x="220" y="592" width="96" height="34" rx="8" fill="#FF8FB1"/>
+      <text x="220" y="646" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12" fill="#7B8794">主色</text>
+      <text x="220" y="664" font-family="Arial, sans-serif" font-size="12" fill="#7B8794">#FF8FB1</text>
+    </g>
+
+    <g id="palette-accent-color" data-description="强调色：#A78BFA；使用要求：用于标题强调线、重点高亮、局部强调和二级视觉焦点，不应大面积使用。">
+      <rect x="360" y="592" width="96" height="34" rx="8" fill="#A78BFA"/>
+      <text x="360" y="646" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12" fill="#7B8794">强调色</text>
+      <text x="360" y="664" font-family="Arial, sans-serif" font-size="12" fill="#7B8794">#A78BFA</text>
+    </g>
+
+    <g id="palette-body-text-color" data-description="正文文字色：#5B556D；使用要求：用于主要正文、表格主文字、说明文字。">
+      <rect x="500" y="592" width="96" height="34" rx="8" fill="#5B556D"/>
+      <text x="500" y="646" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12" fill="#7B8794">正文文字色</text>
+      <text x="500" y="664" font-family="Arial, sans-serif" font-size="12" fill="#7B8794">#5B556D</text>
+    </g>
+
+    <g id="palette-muted-text-color" data-description="辅助文字色：#7B8794；使用要求：用于注释、说明、次级标签、弱化信息。">
+      <rect x="640" y="592" width="96" height="34" rx="8" fill="#7B8794"/>
+      <text x="640" y="646" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12" fill="#7B8794">辅助文字色</text>
+      <text x="640" y="664" font-family="Arial, sans-serif" font-size="12" fill="#7B8794">#7B8794</text>
+    </g>
+
+    <g id="palette-border-color" data-description="边框/分割线色：#C4B5FD；使用要求：用于边框、辅助线、分割线、浅色容器描边。">
+      <rect x="780" y="592" width="96" height="34" rx="8" fill="#C4B5FD" stroke="#C4B5FD" stroke-width="1"/>
+      <text x="780" y="646" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12" fill="#7B8794">边框/分割线</text>
+      <text x="780" y="664" font-family="Arial, sans-serif" font-size="12" fill="#7B8794">#C4B5FD</text>
+    </g>
+
+    <g id="palette-warning-color" data-description="可选警示色：#FB7185；使用要求：仅在表达风险、问题、下降时使用。">
+      <rect x="920" y="592" width="96" height="34" rx="8" fill="#FB7185"/>
+      <text x="920" y="646" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12" fill="#7B8794">可选警示色</text>
+      <text x="920" y="664" font-family="Arial, sans-serif" font-size="12" fill="#7B8794">#FB7185</text>
+    </g>
+
+    <g id="palette-success-color" data-description="可选成功色：#6EE7B7；使用要求：仅在表达增长、完成、正向结果时使用。">
+      <rect x="1060" y="592" width="96" height="34" rx="8" fill="#6EE7B7"/>
+      <text x="1060" y="646" font-family="Microsoft YaHei, Arial, sans-serif" font-size="12" fill="#7B8794">可选成功色</text>
+      <text x="1060" y="664" font-family="Arial, sans-serif" font-size="12" fill="#7B8794">#6EE7B7</text>
+    </g>
+  </g>
+</svg>

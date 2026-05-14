@@ -65,7 +65,7 @@ This layer matters because it discretizes continuous source text into pages, whi
 
 The third layer is the visual implementation layer.
 
-Its job is not to rethink content. Its job is to turn an already-defined page structure into stable rendered artifacts. The system chooses HTML as the canonical intermediate, then uses Playwright and LibreOffice to derive PDF and optional PPTX outputs.
+Its job is not to rethink content. Its job is to turn an already-defined page structure into stable rendered artifacts. The default backend chooses HTML as the canonical intermediate, then uses Playwright and LibreOffice to derive PDF and optional PPTX outputs. The optional SVG backend keeps the same outline boundary but generates one SVG per page and exports native editable PPTX through the SVG converter.
 
 In code, this lives in `thought_to_ppt/page_generators/` plus `utils/common.py` and `utils/browser.py`.
 
@@ -93,6 +93,10 @@ This is the most important idea in the entire system.
 The pipeline does not go directly from user request to final pages. It keeps generating progressively more concrete intermediate representations:
 
 user request -> writing thought -> slide outline -> page HTML -> PDF/PPTX
+
+or, when explicitly requested:
+
+user request -> writing thought -> slide outline -> page SVG -> native PPTX
 
 This has major engineering benefits:
 
@@ -181,6 +185,8 @@ The system does not generate PPTX directly. It generates HTML first and converts
 
 So in practice, this is closer to "web-native slide generation" than direct binary presentation generation. PPTX is a downstream export format, not the primary internal representation.
 
+The SVG route is a parallel backend for cases where editable native PPTX structure matters more than HTML/CSS expressiveness. It uses stricter SVG constraints, quality checks, finalization, and repair before export.
+
 ## Main Internal Subsystems
 
 Once that architectural picture is in place, the main subsystems become easy to read.
@@ -214,6 +220,8 @@ With the architectural model established, the file mapping is simple:
 | `node.py` | Bridges thought generation into slide-generation entry points |
 | `ppt_thought/` | Intent layer and research routing |
 | `thought_to_ppt/` | Structure layer and rendering layer |
+| `svg_pipeline/` | SVG quality checking, finalization, templates, and spec locking |
+| `svg_to_pptx/` | Native editable PPTX export from SVG pages |
 | `utils/` | HTML/PDF/PPTX helpers, browser management, images, and render support |
 | `assets/` | templates and shared prompt assets |
 
@@ -248,6 +256,6 @@ When modifying this package, the most important thing to preserve is not any ind
 
 - the content-planning layer and rendering layer should stay separated,
 - `PPTPage` should remain the stable boundary between structure and rendering,
-- HTML should remain the primary rendering intermediate,
+- HTML should remain the default rendering intermediate, with SVG kept as an explicit parallel backend,
 - page-type specialization should not collapse into one generic generation path,
 - render-result feedback should stay intact, or output quality will degrade quickly.

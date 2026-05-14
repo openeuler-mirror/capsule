@@ -20,11 +20,11 @@ except ImportError:  # pragma: no cover - fallback for minimal environments
         def random(self):
             return "Mozilla/5.0"
 from PyPDF2 import PdfWriter
-from pptx import Presentation
 from PIL import Image
 
 from core.utils.logger import logger
 from core.utils.config import app_base_dir
+from core.ppt_generator.utils.pptx_postprocess import remove_full_slide_solid_backdrops
 from core.utils.image_payload import build_image_url
 from core.utils.libreoffice import get_available_libreoffice_executable
 from core.ppt_generator.utils.browser import BrowserManager
@@ -813,7 +813,7 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
             logger.error("Local LibreOffice conversion finished but no PPTX output was generated.")
             return ""
 
-        _remove_bottom_layers(pptx_path)
+        remove_full_slide_solid_backdrops(pptx_path)
 
         logger.info(f"Client: Successfully converted and saved to '{pptx_path}'")
         return pptx_path
@@ -821,27 +821,6 @@ async def _libreoffice_convert_pdf_to_pptx(file_path):
     except Exception as e:
         logger.info(f"An error occurred while converting PDF to PPTX: {str(e)}")
         return ""
-
-
-def _remove_bottom_layers(pptx_path):
-    """
-    Remove the bottom two shapes (Z-order wise) from every slide in the pptx.
-    python-pptx shapes[0] is the bottom-most layer.
-    """
-    logger.info(f"Client: Removing bottom 2 shapes from slides in {pptx_path}")
-    prs = Presentation(pptx_path)
-
-    for _, slide in enumerate(prs.slides):
-        for _ in range(2):
-            if len(slide.shapes) > 0:
-                shape_to_delete = slide.shapes[0]
-                sp = shape_to_delete._element
-                sp.getparent().remove(sp)
-            else:
-                break
-
-    prs.save(pptx_path)
-    logger.info(f"Client: Successfully removed bottom shapes in '{pptx_path}'")
 
 
 def _extract_web_image_description(image: dict, image_query: str) -> str:

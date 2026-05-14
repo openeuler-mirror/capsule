@@ -23,9 +23,12 @@ from core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.state
 
 PROMPT_DIR = Path(app_base_dir) / "core" / "ppt_generator" / "assets" / "prompts"
 SEVERITY_RANK = {"none": 0, "minor": 1, "critical": 2, None: 3}
-VLM_VISUAL_REVIEW_MAX_ITERATIONS = 3
+VLM_VISUAL_REVIEW_MAX_ITERATIONS = 1
 VLM_SCREENSHOT_DIR_NAME = "vlm_screenshots"
 VLM_HTML_CANDIDATE_DIR_NAME = "vlm_html_candidates"
+GENERATE_PROMPT_LOG_DIR_NAME = "prompts"
+HTML_JUDGE_PROMPT = "vlm_judge_prompt.txt"
+HTML_FIX_PROMPT = "vlm_fix_prompt.txt"
 
 
 @dataclass
@@ -33,8 +36,36 @@ class VLMCandidateInput:
     iteration: int
     file_path: str
     screenshot_path: str
-    html_content: str
+    content: str
     judge_result: Dict[str, Any]
+    
+
+def _save_generate_prompt(state: PPTWorkerState) -> None:
+    """Persist the per-page generation prompt to ``<save_dir>/prompts/`` for inspection.
+
+    Best-effort: filesystem failures are logged but don't interrupt generation.
+    """
+    save_dir = state.get("save_dir")
+    prompt = state.get("generate_ppt_prompt")
+    if not save_dir or not prompt:
+        return
+    index = state.get("index", 0)
+    page = _resolve_page(state)
+    title = getattr(page, "title", None)
+    cleaned = re.sub(r'[\\/*?:"<>|]', "_", title or "slide")
+    cleaned = re.sub(r"\s+", "_", cleaned).strip("_")[:40] or "slide"
+    filename = f"{index + 1:02d}_{cleaned}.txt"
+    prompt_dir = Path(save_dir) / GENERATE_PROMPT_LOG_DIR_NAME
+    try:
+        prompt_dir.mkdir(parents=True, exist_ok=True)
+        (prompt_dir / filename).write_text(prompt, encoding="utf-8")
+    except OSError as error:
+        logger.warning(f"save generate prompt failed: {error}")
+
+
+def _resolve_page(state: PPTWorkerState):
+    """Pull the active PPTPage from state (added in Stage 2). Returns None if absent."""
+    return state.get("page") if isinstance(state, dict) else None
 
 
 def _load_prompt(name: str) -> str:
@@ -45,14 +76,14 @@ def _load_prompt(name: str) -> str:
 
 async def generate_ppt_page_node(state: PPTWorkerState):
     """generate ppt page"""
-    response = await llm_invoke(ModelRoute.PREMIUM,
-                                [
-                                    HumanMessage(content=state["generate_ppt_prompt"]),
-                                ]
-                                )
+    _save_generate_prompt(state)
+    response = await llm_invoke(
+        ModelRoute.PREMIUM,
+        [HumanMessage(content=state["generate_ppt_prompt"])],
+    )
     html_content = extract_html_content_regex(response)
 
-    return {"html_content": html_content}
+    return {"content": html_content}
 
 
 async def modify_ppt_page_node(state: PPTWorkerState):
@@ -67,7 +98,7 @@ async def modify_ppt_page_node(state: PPTWorkerState):
             "No available VLM route for page modification. "
             "Skip page modification and keep the current HTML."
         )
-        return {"html_content": state["html_content"]}
+        return {"content": state["content"]}
 
     async with BrowserManager.get_browser_context() as browser:
         context = await browser.new_context(viewport={'width': 1280, 'height': 720}, ignore_https_errors=True)
@@ -94,11 +125,11 @@ async def modify_ppt_page_node(state: PPTWorkerState):
 3) 摘要应足够用于重构页面，但必须明显短于原HTML。
 
 原HTML：
-{state["html_content"]}
+{state["content"]}
 """
     summarized_html = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=summary_prompt)])
     if not summarized_html:
-        summarized_html = state["html_content"]
+        summarized_html = state["content"]
 
     generate_ppt_prompt = f"""
 这个PPT的HTML网页因为内容过多，或者布局不合理等原因导致了HTML中缩放脚本过度缩放。
@@ -115,28 +146,20 @@ PPT的HTML网页摘要如下：
 
     response = await vlm_raw_invoke(ModelRoute.PREMIUM, [HumanMessage(
         content=[
-            {
-                "type": "text",
-                "text": generate_ppt_prompt
-            },
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": build_image_url(img_path),
-                },
-            }
+            {"type": "text", "text": generate_ppt_prompt},
+            {"type": "image_url", "image_url": {"url": build_image_url(img_path)}},
         ]
     )])
     html_content = extract_html_content_regex(response.content)
 
-    return {"html_content": html_content}
+    return {"content": html_content}
 
 
 async def ratio_evaluator_node(state: PPTWorkerState):
     """保存并基于缩放 ratio 给出下一步动作（老路径快速预筛）。"""
     index = state["index"]
     save_dir = state["save_dir"]
-    html_content = state["html_content"]
+    html_content = state["content"]
     iteration = state["iteration"]
     file_path = Path(save_dir) / f"{index}.html"
     with open(file_path, "w", encoding="utf-8") as f:
@@ -164,21 +187,19 @@ async def ratio_evaluator_node(state: PPTWorkerState):
     return {
         "action": next_action,
         "iteration": iteration + 1,
-        "final_file_path": file_path_str
+        "final_file_path": file_path_str,
     }
 
 
 async def vlm_judge_node(state: PPTWorkerState):
-    """使用 VLM 对当前 HTML 渲染截图做视觉审阅。
-
-    将 html_content 写盘 → 截图 → 调用 VLM 拿结构化判定 → 更新最佳版本。
-    """
+    """使用 VLM 对当前 HTML 渲染截图做视觉审阅。"""
     index = state["index"]
     save_dir = state["save_dir"]
-    html_content = state["html_content"]
+    html_content = state["content"]
     vlm_iteration = state.get("vlm_iteration") or 0
 
     file_path = Path(save_dir) / f"{index}.html"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(html_content)
     file_path_str = str(file_path.resolve())
@@ -195,7 +216,7 @@ async def vlm_judge_node(state: PPTWorkerState):
         logger.warning(f"vlm_judge screenshot failed for page {index}: {error}")
         return _fallback_finish(state, file_path_str, reason="screenshot_failed")
 
-    judge_prompt = _load_prompt("vlm_judge_prompt.txt")
+    judge_prompt = _load_prompt(HTML_JUDGE_PROMPT)
 
     try:
         response = await vlm_raw_invoke(
@@ -221,9 +242,7 @@ async def vlm_judge_node(state: PPTWorkerState):
     issues = judge_result.get("issues") or []
     logger.info(f"page {index} vlm_judge result: severity={severity}, issues={len(issues)}")
     if issues:
-        logger.info(
-            f"page {index} vlm_judge issues:\n{_format_issues(issues)}"
-        )
+        logger.info(f"page {index} vlm_judge issues:\n{_format_issues(issues)}")
     judge_history = _append_judge_history(
         state.get("vlm_judge_history") or [],
         vlm_iteration,
@@ -235,7 +254,7 @@ async def vlm_judge_node(state: PPTWorkerState):
             iteration=vlm_iteration,
             file_path=file_path_str,
             screenshot_path=img_path,
-            html_content=html_content,
+            content=html_content,
             judge_result=judge_result,
         ),
     )
@@ -253,7 +272,7 @@ async def vlm_judge_node(state: PPTWorkerState):
         state.get("best_severity"),
         state.get("best_issue_count"),
     ):
-        update["best_html_content"] = html_content
+        update["best_content"] = html_content
         update["best_file_path"] = file_path_str
         update["best_severity"] = severity
         update["best_issue_count"] = len(issues)
@@ -262,9 +281,9 @@ async def vlm_judge_node(state: PPTWorkerState):
 
 
 async def vlm_modify_node(state: PPTWorkerState):
-    """使用 VLM 基于截图、问题列表和压缩历史重排当前页面。"""
+    """使用 VLM 基于截图、问题列表和压缩历史重排当前 HTML 页面。"""
     index = state["index"]
-    html_content = state["html_content"]
+    html_content = state["content"]
     judge_result = state.get("judge_result") or {}
     issues: List[Dict[str, Any]] = judge_result.get("issues") or []
     screenshot_path = state.get("screenshot_path")
@@ -274,14 +293,14 @@ async def vlm_modify_node(state: PPTWorkerState):
         logger.warning(f"vlm_modify missing screenshot for page {index}, skip")
         return {"vlm_iteration": vlm_iteration + 1}
 
-    fix_prompt_template = _load_prompt("vlm_fix_prompt.txt")
+    fix_prompt_template = _load_prompt(HTML_FIX_PROMPT)
     issues_block = _format_issues(issues)
     history_block = _format_judge_history(state.get("vlm_judge_history") or [])
     fix_prompt = fix_prompt_template.format(
         issues_block=issues_block,
         history_block=history_block,
         ppt_prompt=state.get("ppt_prompt", ""),
-        html_content=html_content,
+        content=html_content,
     )
 
     try:
@@ -306,7 +325,7 @@ async def vlm_modify_node(state: PPTWorkerState):
         return {"vlm_iteration": vlm_iteration + 1}
 
     return {
-        "html_content": new_html,
+        "content": new_html,
         "vlm_iteration": vlm_iteration + 1,
     }
 
@@ -317,20 +336,20 @@ async def vlm_select_best_node(state: PPTWorkerState):
     candidates = _valid_vlm_candidates(state.get("vlm_candidates") or [])
     if len(candidates) <= 1:
         logger.info(f"page {index} skip vlm best selection, candidates={len(candidates)}")
-        return {}
+        return {
+            "vlm_selection_record": {
+                "method": "skipped_single_candidate",
+                "selected_iteration": candidates[0]["iteration"] if candidates else None,
+                "reason": "candidates<=1, no cross-comparison needed",
+            }
+        }
 
     prompt = _build_best_selection_prompt(candidates)
     content: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
     for candidate in candidates:
         content.extend([
-            {
-                "type": "text",
-                "text": f"候选 iteration={candidate['iteration']} 的截图：",
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": build_image_url(candidate["screenshot_path"])},
-            },
+            {"type": "text", "text": f"候选 iteration={candidate['iteration']} 的截图："},
+            {"type": "image_url", "image_url": {"url": build_image_url(candidate["screenshot_path"])}},
         ])
 
     try:
@@ -341,19 +360,37 @@ async def vlm_select_best_node(state: PPTWorkerState):
         )
     except Exception as error:
         logger.warning(f"vlm_select_best call failed for page {index}: {error}")
-        return {}
+        return {
+            "vlm_selection_record": {
+                "method": "issue_count_fallback",
+                "selected_iteration": state.get("best_severity"),
+                "reason": f"vlm_select_best call failed: {error}",
+            }
+        }
 
     selection = _parse_best_selection_response(response.content if response else "", candidates)
     selected_iteration = selection.get("selected_iteration") if selection else None
     if selected_iteration is None:
         logger.warning(f"page {index} vlm_select_best response unparsable, keep issue-count best version")
-        return {}
+        return {
+            "vlm_selection_record": {
+                "method": "issue_count_fallback",
+                "selected_iteration": None,
+                "reason": "vlm_select_best response unparsable",
+            }
+        }
     reason = selection.get("reason") or ""
 
     selected = next((item for item in candidates if item["iteration"] == selected_iteration), None)
     if not selected:
         logger.warning(f"page {index} vlm_select_best chose missing iteration={selected_iteration}")
-        return {}
+        return {
+            "vlm_selection_record": {
+                "method": "issue_count_fallback",
+                "selected_iteration": None,
+                "reason": f"vlm chose missing iteration={selected_iteration}",
+            }
+        }
 
     logger.info(
         f"page {index} vlm_select_best selected iteration={selected_iteration}, "
@@ -365,26 +402,36 @@ async def vlm_select_best_node(state: PPTWorkerState):
             f"page {index} selected candidate iteration={selected_iteration} missing html content, "
             "keep issue-count best version"
         )
-        return {}
+        return {
+            "vlm_selection_record": {
+                "method": "issue_count_fallback",
+                "selected_iteration": selected_iteration,
+                "reason": "selected candidate file missing on disk",
+            }
+        }
 
     return {
         "final_file_path": selected["file_path"],
         "screenshot_path": selected["screenshot_path"],
-        "best_html_content": selected_html_content,
+        "best_content": selected_html_content,
         "best_file_path": selected["file_path"],
         "best_severity": selected["severity"],
         "best_issue_count": selected["issue_count"],
+        "vlm_selection_record": {
+            "method": "vlm_select_best",
+            "selected_iteration": selected_iteration,
+            "reason": reason,
+        },
     }
 
 
 def ppt_submitter_node(state: PPTWorkerState):
-    """submit ppt result, 优先使用记录的 best 版本。"""
+    """submit ppt result, 优先使用记录的 best 版本，并落盘 vlm_review.json 审计记录。"""
     best_file_path = state.get("best_file_path")
-    best_html_content = state.get("best_html_content")
+    best_html_content = state.get("best_content")
     file_path = best_file_path or state["final_file_path"]
 
-    # best 版可能不是最后一次写盘的版本，需要把 best_html_content 重写到磁盘。
-    if best_file_path and best_html_content and best_html_content != state.get("html_content"):
+    if best_file_path and best_html_content and best_html_content != state.get("content"):
         try:
             with open(best_file_path, "w", encoding="utf-8") as f:
                 f.write(best_html_content)
@@ -392,19 +439,72 @@ def ppt_submitter_node(state: PPTWorkerState):
         except Exception as error:
             logger.warning(f"write best_html_content failed: {error}")
 
+    _write_vlm_review_json(state, file_path)
+
     return {
         "generated_pages": [
             {
                 "index": state["index"],
                 "file_path": file_path,
-                "status": "success"
+                "status": "success",
             }
         ]
     }
 
 
+def _write_vlm_review_json(state: PPTWorkerState, final_file_path: str) -> None:
+    """Persist a per-page audit record of the VLM review process (under vlm_html_candidates/)."""
+    import json
+
+    candidates = state.get("vlm_candidates") or []
+    if not candidates:
+        return
+
+    candidate_dir = os.path.dirname(candidates[0].get("html_path") or "") or None
+    if not candidate_dir:
+        return
+
+    selection_record = state.get("vlm_selection_record") or {
+        "method": "early_exit_non_critical",
+        "selected_iteration": candidates[-1].get("iteration"),
+        "reason": "first iteration passed VLM judge with severity!=critical",
+    }
+    final_iteration = next(
+        (c.get("iteration") for c in candidates if c.get("file_path") == final_file_path),
+        candidates[-1].get("iteration"),
+    )
+
+    iterations_payload = []
+    for candidate in candidates:
+        iterations_payload.append({
+            "iteration": candidate.get("iteration"),
+            "candidate_path": candidate.get("html_path"),
+            "screenshot_path": candidate.get("screenshot_path"),
+            "severity": candidate.get("severity"),
+            "issue_count": candidate.get("issue_count"),
+            "issues": candidate.get("issues") or [],
+        })
+
+    record = {
+        "page_index": state.get("index"),
+        "final_file_path": final_file_path,
+        "final_iteration": final_iteration,
+        "selection": selection_record,
+        "iterations": iterations_payload,
+    }
+
+    page_stem = os.path.splitext(os.path.basename(final_file_path))[0] or f"page_{state.get('index')}"
+    review_path = os.path.join(candidate_dir, f"{page_stem}_vlm_review.json")
+    try:
+        with open(review_path, "w", encoding="utf-8") as fh:
+            json.dump(record, fh, ensure_ascii=False, indent=2)
+        logger.info(f"page {state.get('index')} vlm review written to {review_path}")
+    except Exception as error:
+        logger.warning(f"write vlm review json failed for page {state.get('index')}: {error}")
+
+
 def route_after_generate(state: PPTWorkerState) -> str:
-    """generate 之后选择走 VLM 路径还是老的 ratio 路径。"""
+    """generate 之后选择审阅路径：VLM > ratio。"""
     if settings.ENABLE_VLM_VISUAL_REVIEW and can_vlm_invoke_route(ModelRoute.PREMIUM):
         return "VLM"
     return "RATIO"
@@ -567,7 +667,7 @@ def _append_vlm_candidate(
     html_path = _write_vlm_candidate_html(
         candidate_input.file_path,
         candidate_input.iteration,
-        candidate_input.html_content,
+        candidate_input.content,
     )
     entry = {
         "iteration": candidate_input.iteration,
@@ -576,6 +676,7 @@ def _append_vlm_candidate(
         "html_path": html_path,
         "severity": candidate_input.judge_result.get("severity") or "none",
         "issue_count": len(candidate_input.judge_result.get("issues") or []),
+        "issues": candidate_input.judge_result.get("issues") or [],
     }
     max_candidates = max(1, VLM_VISUAL_REVIEW_MAX_ITERATIONS + 1)
     return [*candidates, entry][-max_candidates:]
@@ -600,14 +701,15 @@ def _valid_vlm_candidates(candidates: List[Dict[str, Any]]) -> List[Dict[str, An
 
 
 def _write_vlm_candidate_html(file_path: str, iteration: int, html_content: str) -> str:
+    """Write a candidate HTML file for later cross-comparison (under vlm_html_candidates/)."""
     base_dir = os.path.dirname(file_path)
     candidate_dir = os.path.join(base_dir, VLM_HTML_CANDIDATE_DIR_NAME)
     os.makedirs(candidate_dir, exist_ok=True)
     page_name = os.path.splitext(os.path.basename(file_path))[0]
-    html_path = os.path.join(candidate_dir, f"{page_name}_vlm_{iteration}.html")
-    with open(html_path, "w", encoding="utf-8") as fh:
+    candidate_path = os.path.join(candidate_dir, f"{page_name}_vlm_{iteration}.html")
+    with open(candidate_path, "w", encoding="utf-8") as fh:
         fh.write(html_content)
-    return html_path
+    return candidate_path
 
 
 def _read_vlm_candidate_html(candidate: Dict[str, Any]) -> Optional[str]:
@@ -711,7 +813,7 @@ def _fallback_finish(
     if screenshot_path is not None:
         update["screenshot_path"] = screenshot_path
     if state.get("best_severity") is None:
-        update["best_html_content"] = state["html_content"]
+        update["best_content"] = state["content"]
         update["best_file_path"] = file_path_str
         update["best_severity"] = "none"
         update["best_issue_count"] = 0

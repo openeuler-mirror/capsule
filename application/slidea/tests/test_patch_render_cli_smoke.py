@@ -21,6 +21,9 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         exec(code, module.__dict__)
         return module
 
+    async def _noop_async(self, *_args, **_kwargs):
+        return {}
+
     def _make_state_module(self):
         module = types.ModuleType("core.ppt_generator.thought_to_ppt.state")
 
@@ -38,21 +41,47 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         module.PageType = PageType
         return module
 
-    def _make_page_generators_module(self):
-        node_module = types.ModuleType("core.ppt_generator.thought_to_ppt.page_generators.node")
+    def _make_html_page_generators_node(self):
+        module = types.ModuleType("core.ppt_generator.thought_to_ppt.page_generators.node")
 
         async def prepare_generation_context_node(state, _writer):
             return {
                 "save_dir": state["save_dir"],
                 "ppt_prompt": "prompt",
                 "language": "中文",
-                "html_template": "<html></html>",
+                "render_mode": "html",
+                "template_name": "common_light",
+                "template": "<html></html>",
             }
 
-        node_module.prepare_generation_context_node = prepare_generation_context_node
-        return node_module
+        module.prepare_generation_context_node = prepare_generation_context_node
+        return module
 
-    def _make_graph_modules(self):
+    def _make_svg_page_generators_node(self):
+        module = types.ModuleType("core.ppt_generator.thought_to_ppt.svg_page_generators.node")
+
+        async def prepare_generation_context_node(state, _writer):
+            return {
+                "save_dir": state["save_dir"],
+                "ppt_prompt": "prompt",
+                "language": "中文",
+                "render_mode": "svg",
+                "template_name": "common_light",
+                "template": "<svg></svg>",
+            }
+
+        async def quality_check_node(_state, _writer):
+            return {}
+
+        async def finalize_node(state, _writer):
+            return {"page_files": state.get("page_files", [])}
+
+        module.prepare_generation_context_node = prepare_generation_context_node
+        module.quality_check_node = quality_check_node
+        module.finalize_node = finalize_node
+        return module
+
+    def _make_html_subgraph_modules(self):
         cover_module = types.ModuleType(
             "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph"
         )
@@ -62,13 +91,10 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
             "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph"
         )
         content_module.content_page_worker_app = types.SimpleNamespace(ainvoke=self._noop_async)
-        return cover_module, content_module
 
-    async def _noop_async(self, *_args, **_kwargs):
-        return {}
-
-    def _make_sep_module(self):
-        module = types.ModuleType("core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.node")
+        sep_module = types.ModuleType(
+            "core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.node"
+        )
 
         async def generate_sep_template_node(_state):
             return {"sep_template": "template"}
@@ -76,18 +102,54 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         async def generate_sep_page_node(_state):
             return {}
 
-        module.generate_sep_template_node = generate_sep_template_node
-        module.generate_sep_page_node = generate_sep_page_node
-        return module
+        sep_module.generate_sep_template_node = generate_sep_template_node
+        sep_module.generate_sep_page_node = generate_sep_page_node
 
-    def _make_toc_module(self):
-        module = types.ModuleType("core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.node")
+        toc_module = types.ModuleType(
+            "core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.node"
+        )
 
         async def generate_toc_page_node(_state):
             return {}
 
-        module.generate_toc_page_node = generate_toc_page_node
-        return module
+        toc_module.generate_toc_page_node = generate_toc_page_node
+
+        return cover_module, content_module, sep_module, toc_module
+
+    def _make_svg_subgraph_modules(self):
+        cover_module = types.ModuleType(
+            "core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph"
+        )
+        cover_module.generate_cover_thanks_pages_app = types.SimpleNamespace(ainvoke=self._noop_async)
+
+        content_module = types.ModuleType(
+            "core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.graph"
+        )
+        content_module.content_page_worker_app = types.SimpleNamespace(ainvoke=self._noop_async)
+
+        sep_module = types.ModuleType(
+            "core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.node"
+        )
+
+        async def generate_sep_template_node(_state):
+            return {"sep_template": "template"}
+
+        async def generate_sep_page_node(_state):
+            return {}
+
+        sep_module.generate_sep_template_node = generate_sep_template_node
+        sep_module.generate_sep_page_node = generate_sep_page_node
+
+        toc_module = types.ModuleType(
+            "core.ppt_generator.thought_to_ppt.svg_page_generators.toc_page_generator.node"
+        )
+
+        async def generate_toc_page_node(_state):
+            return {}
+
+        toc_module.generate_toc_page_node = generate_toc_page_node
+
+        return cover_module, content_module, sep_module, toc_module
 
     def _make_common_module(self):
         module = types.ModuleType("core.ppt_generator.utils.common")
@@ -102,16 +164,32 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         module.htmls_to_pptx = htmls_to_pptx
         return module
 
-    def _run_main(self, argv, cwd):
-        cover_module, content_module = self._make_graph_modules()
+    def _make_svg_export_module(self):
+        module = types.ModuleType("core.ppt_generator.utils.svg_export")
+
+        async def svgs_to_pptx(_svgs, save_dir, filename):
+            return "", str(Path(save_dir) / f"{filename}.pptx")
+
+        module.svgs_to_pptx = svgs_to_pptx
+        return module
+
+    def _run_main(self, argv, cwd, render_mode="html"):
+        cover_h, content_h, sep_h, toc_h = self._make_html_subgraph_modules()
+        cover_s, content_s, sep_s, toc_s = self._make_svg_subgraph_modules()
         fake_modules = {
             "core.ppt_generator.thought_to_ppt.state": self._make_state_module(),
-            "core.ppt_generator.thought_to_ppt.page_generators.node": self._make_page_generators_module(),
-            "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph": cover_module,
-            "core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.node": self._make_sep_module(),
-            "core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.node": self._make_toc_module(),
-            "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph": content_module,
+            "core.ppt_generator.thought_to_ppt.page_generators.node": self._make_html_page_generators_node(),
+            "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph": cover_h,
+            "core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.node": sep_h,
+            "core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.node": toc_h,
+            "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph": content_h,
+            "core.ppt_generator.thought_to_ppt.svg_page_generators.node": self._make_svg_page_generators_node(),
+            "core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph": cover_s,
+            "core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.node": sep_s,
+            "core.ppt_generator.thought_to_ppt.svg_page_generators.toc_page_generator.node": toc_s,
+            "core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.graph": content_s,
             "core.ppt_generator.utils.common": self._make_common_module(),
+            "core.ppt_generator.utils.svg_export": self._make_svg_export_module(),
         }
         stdout = io.StringIO()
 
@@ -190,6 +268,65 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         self.assertTrue(payload["output"]["pdf_path"].endswith(".pdf"))
         self.assertEqual(ppt_payload["run_id"], run_id)
         self.assertEqual(ppt_payload["render_dir"], str(render_dir))
+
+    def test_svg_success_returns_structured_completed_payload(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "svg-success"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            outline_dir = out_dir / "outline"
+            render_dir = Path(tmp_dir) / "rendered"
+            outline_dir.mkdir(parents=True, exist_ok=True)
+            render_dir.mkdir(parents=True, exist_ok=True)
+            (outline_dir / "outline.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "topic": "SVG Demo",
+                        "outline": [
+                            {
+                                "title": "Cover",
+                                "abstract": "Intro",
+                                "type": 1,
+                                "index": 0,
+                                "reference_doc": "",
+                                "reference_images": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "ppt.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "topic": "SVG Demo",
+                        "render_mode": "svg",
+                        "render_dir": str(render_dir),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            svg_output = render_dir / "svg_output"
+            svg_output.mkdir(parents=True, exist_ok=True)
+            (svg_output / "01_Cover.svg").write_text(
+                '<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg"></svg>',
+                encoding="utf-8",
+            )
+
+            payload = self._run_main(
+                ["--run-id", run_id, "--indices", "0"],
+                cwd=tmp_dir,
+                render_mode="svg",
+            )
+            ppt_payload = json.loads((out_dir / "ppt.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["stage"], "completed")
+        self.assertEqual(payload["output"]["stage"], "completed")
+        self.assertEqual(payload["output"]["target_indices"], [0])
+        self.assertEqual(ppt_payload["render_mode"], "svg")
+        self.assertTrue(ppt_payload["pptx_path"].endswith(".pptx"))
 
 
 if __name__ == "__main__":

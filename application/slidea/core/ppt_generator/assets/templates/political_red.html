@@ -35,7 +35,7 @@
             font-family: 'Noto Sans SC', sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #fcfcfc; /* 稍微偏暖的整体背景 */
+            background-color: #FFFFFF; /* 页面背景 */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -59,7 +59,7 @@
             overflow: hidden;
             flex-direction: column;
             box-sizing: border-box;
-            margin-top: 20px;
+            margin-top: 10px;
             margin-bottom: 20px;
             min-height: 0;
         }
@@ -75,27 +75,53 @@
     </style>
 </head>
 <body>
+<!--
+颜色说明：
+1. 背景色：#FFFFFF
+   使用要求：页面背景，仅用于整体底色或大面积留白区域。
 
-    <!-- 主容器：边框改为中国红 #de2910 -->
-    <div id="ppt-container" class="border-t-[8px] border-b-[8px] border-[#de2910] flex flex-col box-border">
+2. 主色：#DE2910
+   使用要求：用于页面标题、核心视觉元素、重要强调。
+
+3. 强调色：#F59E0B
+   使用要求：用于重点数据、徽章、高亮信息、局部强调，不应大面积使用。
+
+4. 正文文字色：#1F2937
+   使用要求：用于主要正文、表格主文字、说明文字。
+
+5. 辅助文字色：#6B7280
+   使用要求：用于注释、说明、次级标签、弱化信息。
+
+6. 边框/分割线色：#FCA5A5
+   使用要求：用于边框、辅助线、分割线、浅红容器描边。
+
+7. 可选警示色：#B91C1C
+   使用要求：仅在表达风险、问题、下降时使用。
+
+8. 可选成功色：#15803D
+   使用要求：仅在表达增长、完成、正向结果时使用。
+-->
+
+    <!-- 主容器：边框改为中国红 #DE2910 -->
+    <div id="ppt-container" data-description="固定页面容器；保留顶部/底部中国红边框、背景和整体尺寸。" class="border-t-[8px] border-b-[8px] border-[#DE2910] flex flex-col box-border">
         
         <!-- Header -->
-        <header class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
+        <header id="header" data-description="内容页固定标题栏；只替换标题文字，不加额外标题装饰。" class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
             <div class="flex items-center">
                 <!-- 标题文字改为中国红 -->
-                <h1 class="text-3xl font-bold text-[#de2910]">{{PAGE_TITLE}}</h1>
+                <h1 id="page-title-text" data-description="标题固定样式：text-3xl font-bold text-[#DE2910]。" class="text-3xl font-bold text-[#DE2910]">{{PAGE_TITLE}}</h1>
             </div>
         </header>
 
         <!-- Main Content 区域 (带缩放兼容结构) -->
         <div class="section-container flex-1 px-10 py-2">
             <div class="scalable-content">
-                <!-- 顶级容器架构: 边框改为淡红色 border-red-200 -->
-                <div class="flex-1 flex flex-col w-full h-full border-2 border-dashed border-red-200 p-8 min-h-0">
+                <!-- 顶级容器架构: 边框改为浅红容器描边色 -->
+                <div id="main-content-safe-area" data-description="主体内容范围；正式内容应在此区域内布局。" class="flex-1 flex flex-col w-full h-full border-2 border-dashed border-[#FCA5A5] min-h-0">
                     
                     <!-- 内容区布局: flex-1 flex flex-col justify-around (后续在此处放入真实内容模块) -->
                     <div class="flex-1 flex flex-col justify-around items-center min-h-0">
-                        <div class="text-center text-gray-400 min-h-0">
+                        <div id="content-placeholder" data-description="占位提示，正式输出删除。" class="text-center text-[#6B7280] min-h-0">
                             <p class="text-3xl font-bold mb-4">{{CONTENT_AREA}}</p>
                             <p class="text-base">(由 Executor 根据实际内容自由布局)</p>
                         </div>

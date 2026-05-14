@@ -188,10 +188,20 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 
 - 演示文稿的写作思路，
 - 幻灯片大纲，
-- 页级 HTML 渲染结果，
+- 页级渲染结果，
 - 以及最终的 PDF / PPTX 产物。
 
 这个子系统被拆分出来，是为了把“如何思考这份 deck”与“如何把 deck 渲染出来”这两类问题分开处理。
+
+Slidea 支持 HTML 和 SVG 两条渲染路线，HTML 路线是普通 PPT 生成的默认路线，SVG 路线是可选路线。
+
+使用示例：
+
+```bash
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --text "生成一份 10 页的 PPT，介绍 AI Agent，不要深入洞察，面向技术人员介绍 Agent 技术发展趋势" \
+  --render-mode svg
+```
 
 在 PPT 渲染过程中，会采用 fewshots 的模式，让模型输出的排版保持一致的风格。
 
@@ -263,3 +273,7 @@ Slidea 主要暴露三个脚本入口：
 - 对外公开文档
 
 如果你修改了行为，请在同一个改动中同步更新 `docs/` 下对应文档。
+
+## 第三方声明
+
+本项目包含 [PPT Master](https://github.com/hugohe3/ppt-master) 的代码，采用 MIT 许可证，详见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)。

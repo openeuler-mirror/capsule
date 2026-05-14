@@ -55,6 +55,7 @@
             overflow: hidden;
             flex-direction: column;
             box-sizing: border-box;
+            margin-top: 10px;
             margin-bottom: 20px;
             min-height: 0;
         }
@@ -71,21 +72,47 @@
         .main-title {
             font-size: 2.2rem;
             font-weight: 800;
-            color: #1a56db;
+            color: #2563D9;
             display: inline-block;
             margin: 0;
             padding-bottom: 0.5rem;
-            border-bottom: 4px solid #1a56db; /* 保留你想要的横线 */
+            border-bottom: 4px solid #2563D9; /* 保留你想要的横线 */
         }
     </style>
 </head>
 <body>
-<div id="ppt-container" class="border-[#005aab] flex flex-col box-border">
+<!--
+颜色说明：
+1. 背景色：#FFFFFF
+   使用要求：页面背景，仅用于整体底色或大面积留白区域。
+
+2. 主色：#2563D9
+   使用要求：用于页面标题、标题强调线、核心视觉元素。
+
+3. 强调色：#60A5FA
+   使用要求：用于重点数据、辅助高亮、局部强调，不应大面积使用。
+
+4. 正文文字色：#111827
+   使用要求：用于主要正文、表格主文字、说明文字。
+
+5. 辅助文字色：#6B7280
+   使用要求：用于注释、说明、次级标签、弱化信息。
+
+6. 边框/分割线色：#E5E7EB
+   使用要求：用于边框、辅助线、分割线、浅色容器描边。
+
+7. 可选警示色：#DC2626
+   使用要求：仅在表达风险、问题、下降时使用。
+
+8. 可选成功色：#16A34A
+   使用要求：仅在表达增长、完成、正向结果时使用。
+-->
+<div id="ppt-container" data-description="固定页面容器；保留学术蓝模板背景、边框和整体尺寸。" class="border-[#E5E7EB] flex flex-col box-border">
 
     <!-- 采用你的外围结构，使用变量标记标题 -->
-    <header class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
+    <header id="header" data-description="内容页固定标题栏；只替换标题文字，不加额外标题装饰。" class="flex-none flex items-end justify-between px-10 pt-8 pb-4">
         <div class="flex items-center">
-            <h1 class="main-title">{{PAGE_TITLE}}</h1>
+            <h1 id="page-title-text" data-description="标题固定样式：main-title，含底部强调线。" class="main-title">{{PAGE_TITLE}}</h1>
         </div>
     </header>
 
@@ -93,11 +120,11 @@
     <div class="section-container flex-1 px-10 py-2">
         <div class="scalable-content">
             <!-- 顶级容器架构: flex-1 flex flex-col -->
-            <div class="flex-1 flex flex-col w-full h-full border-2 border-dashed border-gray-200 p-8 min-h-0">
+            <div id="main-content-safe-area" data-description="主体内容范围；正式内容应在此区域内布局。" class="flex-1 flex flex-col w-full h-full border-2 border-dashed border-[#E5E7EB] min-h-0">
                 
                 <!-- 内容区布局: flex-1 flex flex-col justify-around (后续在此处放入真实内容模块) -->
                 <div class="flex-1 flex flex-col justify-around items-center min-h-0">
-                    <div class="text-center text-gray-400 min-h-0">
+                    <div id="content-placeholder" data-description="占位提示，正式输出删除。" class="text-center text-[#6B7280] min-h-0">
                         <p class="text-3xl font-bold mb-4">{{CONTENT_AREA}}</p>
                         <p class="text-base">(由 Executor 根据实际内容自由布局)</p>
                     </div>
