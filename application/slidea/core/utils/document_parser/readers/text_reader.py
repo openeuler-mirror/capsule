@@ -13,7 +13,7 @@ class TextReader:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def parse(self, file_path: str) -> ParseResult:
-        logger.info("TextReader 开始解析: {}", file_path)
+        logger.debug("TextReader 开始解析: {}", file_path)
         with open(file_path, "r", encoding=self.encoding) as f:
             text = f.read()
 
@@ -23,5 +23,5 @@ class TextReader:
         with open(md_path, "w", encoding=self.encoding) as f:
             f.write(text)
 
-        logger.info("TextReader 解析完成，文本长度: {} 字符", len(text))
+        logger.debug("TextReader 解析完成，文本长度: {} 字符", len(text))
         return ParseResult(text=text, images=[], markdown_file=md_path)

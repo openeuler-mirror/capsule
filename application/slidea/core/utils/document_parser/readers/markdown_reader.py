@@ -28,7 +28,7 @@ class MarkdownReader:
             from core.utils.document_parser.parser import DocumentParser
             try:
                 local_path = DocumentParser.download_from_url(img_path)
-                logger.info("网络图片已下载: {} -> {}", img_path, local_path)
+                logger.debug("网络图片已下载: {} -> {}", img_path, local_path)
                 return local_path
             except Exception as e:
                 logger.warning("下载网络图片失败: {}, 错误: {}", img_path, e)
@@ -41,7 +41,7 @@ class MarkdownReader:
         return abs_path
 
     def parse(self, file_path: str) -> ParseResult:
-        logger.info("MarkdownReader 开始解析: {}", file_path)
+        logger.debug("MarkdownReader 开始解析: {}", file_path)
         with open(file_path, "r", encoding="utf-8") as f:
             text = f.read()
 
@@ -53,7 +53,7 @@ class MarkdownReader:
             resolved = self._resolve_image_path(img_path, md_dir)
             images.append(ImageInfo(path=resolved, description=""))
 
-        logger.info(
+        logger.debug(
             "MarkdownReader 解析完成，文本长度: {} 字符，图片数量: {}",
             len(text),
             len(images),

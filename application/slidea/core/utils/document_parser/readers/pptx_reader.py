@@ -18,7 +18,7 @@ class PptxReader:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def parse(self, file_path: str) -> ParseResult:
-        logger.info("PptxReader 开始解析: {}", file_path)
+        logger.debug("PptxReader 开始解析: {}", file_path)
         real_path = os.path.realpath(file_path)
         if not os.path.exists(real_path):
             logger.warning("PptxReader 文件不存在: {}", file_path)
@@ -40,7 +40,7 @@ class PptxReader:
             f.write(md_text)
 
         images = image_list if self.extract_images else []
-        logger.info(
+        logger.debug(
             "PptxReader 解析完成，文本长度: {} 字符，图片数量: {}",
             len(md_text),
             len(images),

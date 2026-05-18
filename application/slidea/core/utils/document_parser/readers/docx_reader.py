@@ -19,7 +19,7 @@ class DocxReader:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def parse(self, file_path: str) -> ParseResult:
-        logger.info("DocxReader 开始解析: {}", file_path)
+        logger.debug("DocxReader 开始解析: {}", file_path)
         document = self._load_document(file_path)
         if document is None:
             logger.warning("DocxReader 无法加载文档: {}", file_path)
@@ -35,7 +35,7 @@ class DocxReader:
             f.write(md_text)
 
         images = image_list if self.extract_images else []
-        logger.info(
+        logger.debug(
             "DocxReader 解析完成，文本长度: {} 字符，图片数量: {}",
             len(md_text),
             len(images),

@@ -246,12 +246,27 @@ async def deep_research_node(state: ThoughtState, writer: StreamWriter, config: 
     return result or {}
 
 
+def build_references(state: ThoughtState) -> str:
+    raw_content = state.get("raw_content", "")
+    search_results = state.get("search_results", "")
+    deep_report = state.get("deep_report", "")
+
+    parts = []
+    if raw_content:
+        parts.append(f"\n【以下为用户提供的原始资料，请严格参照该内容，不得遗漏或修改】\n{raw_content}")
+    if deep_report:
+        parts.append(f"\n【以下为深度研究报告，请严格参照该内容，不得遗漏或修改】\n{deep_report}")
+    if search_results:
+        parts.append(f"\n【以下为搜索获取的参考内容】\n{search_results}")
+    return "\n".join(parts)
+
+
 async def generate_thought_node(state: ThoughtState, config: RunnableConfig, writer: StreamWriter):
     """ generate final thought """
 
     writer({"step": "生成PPT写作思路"})
     history = "\n".join(state.get("messages", []))
-    references = state.get("raw_content", "") + state.get("search_results", "") + state.get("deep_report", "")
+    references = build_references(state)
     requirement = state.get("parsed_requirements")
     prompt = f"""
 **根据参考资料和历史信息，基于用户PPT需求，请给出PPT的写作思路。**

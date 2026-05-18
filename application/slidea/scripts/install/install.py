@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import os
 import platform
 import shutil
 import subprocess
 import ssl
+import sys
 import urllib.error
 import urllib.request
 import time
@@ -597,14 +599,14 @@ def install_libreoffice_to_local_dir() -> None:
     raise RuntimeError(f"Unsupported operating system: {os_type}")
 
 
-def main() -> int:
+def main(*, skip_playwright: bool = False, skip_libreoffice: bool = False) -> int:
     issues: list[StepIssue] = []
     setup_completed = (
         read_env_value(ENV_FILE, "SETUP_COMPLETED") or ""
     ).lower() == "true"
     venv_ready = VENV_DIR.exists() and get_venv_python_path().exists()
     venv_python: Path | None = get_venv_python_path() if venv_ready else None
-    playwright_runtime_ready = (
+    playwright_runtime_ready = True if skip_playwright else (
         verify_playwright_installation(venv_python, log_output=False) if venv_python is not None else False
     )
     libreoffice_ready = verify_libreoffice_installation()
@@ -687,7 +689,10 @@ def main() -> int:
 
         step_start = time.perf_counter()
         log_step(3, "Install Playwright Chromium")
-        if not python_runtime_ready or venv_python is None:
+        if skip_playwright:
+            record_step_skip(issues, 3, "Install Playwright Chromium", "skipped via --skip-playwright")
+            playwright_ready = True
+        elif not python_runtime_ready or venv_python is None:
             record_step_skip(
                 issues,
                 3,
@@ -711,22 +716,50 @@ def main() -> int:
             except Exception as exc:
                 record_step_failure(issues, 3, "Install Playwright Chromium", exc)
 
-    step_start = time.perf_counter()
-    log_step(4, "Check LibreOffice")
-    libreoffice_step_ready = False
-    try:
-        os_release = read_linux_os_release() if platform.system() == "Linux" else {}
-        helper_command = get_rhel_family_linux_helper_command() if is_linux_rhel_family(os_release) else ""
-        helper_needed = bool(helper_command) and not has_rhel_family_linux_helper_marker()
-        rhel_arm64 = is_linux_arm64_rhel_family(os_release)
-        rhel_x86_64 = is_linux_x86_64_rhel_family(os_release)
+    if not skip_libreoffice:
+        step_start = time.perf_counter()
+        log_step(4, "Check LibreOffice")
+        libreoffice_step_ready = False
+        try:
+            os_release = read_linux_os_release() if platform.system() == "Linux" else {}
+            helper_command = get_rhel_family_linux_helper_command() if is_linux_rhel_family(os_release) else ""
+            helper_needed = bool(helper_command) and not has_rhel_family_linux_helper_marker()
+            rhel_arm64 = is_linux_arm64_rhel_family(os_release)
+            rhel_x86_64 = is_linux_x86_64_rhel_family(os_release)
 
-        if libreoffice_ready or verify_libreoffice_installation():
-            libreoffice_step_ready = True
-            log_success(
-                f"Detected that a usable LibreOffice executable is available. Duration: {format_duration(time.perf_counter() - step_start)}"
-            )
-            if rhel_x86_64 and helper_needed:
+            if libreoffice_ready or verify_libreoffice_installation():
+                libreoffice_step_ready = True
+                log_success(
+                    "Detected that a usable LibreOffice executable is available. "
+                    f"Duration: {format_duration(time.perf_counter() - step_start)}"
+                )
+                if rhel_x86_64 and helper_needed:
+                    libreoffice_guidance = format_rhel_family_manual_completion_guidance(helper_command)
+                    status_line_override = (
+                        "The Slidea skill base dependencies were installed, "
+                        "but manual completion is still required on RHEL-family Linux."
+                    )
+                    show_issue_summary = False
+                    log_warning(
+                        f"Detected Linux x86_64 on a {LINUX_RHEL_FAMILY_DISTRO_LABEL} distro. "
+                        "LibreOffice is ready, but Playwright system dependencies still "
+                        "require the helper script."
+                    )
+                    log_info(f"Run this command manually first: {helper_command}")
+                    log_info("Without the Playwright system dependencies from that script,"
+                             "PDF generation will not work.")
+                    issues.append(
+                        StepIssue(
+                            step_no=4,
+                            title="Check LibreOffice",
+                            status="manual",
+                            message=(
+                                f"run `{helper_command}` on {LINUX_RHEL_FAMILY_DISTRO_LABEL} Linux "
+                                "before using PDF/PPTX generation"
+                            ),
+                        )
+                    )
+            elif rhel_arm64 and helper_needed:
                 libreoffice_guidance = format_rhel_family_manual_completion_guidance(helper_command)
                 status_line_override = (
                     "The Slidea skill base dependencies were installed, "
@@ -734,11 +767,13 @@ def main() -> int:
                 )
                 show_issue_summary = False
                 log_warning(
-                    f"Detected Linux x86_64 on a {LINUX_RHEL_FAMILY_DISTRO_LABEL} distro. "
-                    "LibreOffice is ready, but Playwright system dependencies still require the helper script."
+                    f"Detected Linux arm64 on a {LINUX_RHEL_FAMILY_DISTRO_LABEL} distro. "
+                    "Manual completion is required before Slidea can generate PDF or PPTX."
                 )
+                log_info("Python/bootstrap dependencies were installed successfully, but the project is not ready yet.")
                 log_info(f"Run this command manually first: {helper_command}")
-                log_info("Without the Playwright system dependencies from that script, PDF generation will not work.")
+                log_info("That script installs the required Playwright dependencies and the ARM64 LibreOffice runtime.")
+                log_info("Without that script, PDF generation will not work, and PPTX generation will not work.")
                 issues.append(
                     StepIssue(
                         step_no=4,
@@ -750,98 +785,80 @@ def main() -> int:
                         ),
                     )
                 )
-        elif rhel_arm64 and helper_needed:
-            libreoffice_guidance = format_rhel_family_manual_completion_guidance(helper_command)
-            status_line_override = (
-                "The Slidea skill base dependencies were installed, "
-                "but manual completion is still required on RHEL-family Linux."
-            )
-            show_issue_summary = False
-            log_warning(
-                f"Detected Linux arm64 on a {LINUX_RHEL_FAMILY_DISTRO_LABEL} distro. "
-                "Manual completion is required before Slidea can generate PDF or PPTX."
-            )
-            log_info("Python/bootstrap dependencies were installed successfully, but the project is not ready yet.")
-            log_info(f"Run this command manually first: {helper_command}")
-            log_info("That script installs the required Playwright dependencies and the ARM64 LibreOffice runtime.")
-            log_info("Without that script, PDF generation will not work, and PPTX generation will not work.")
-            issues.append(
-                StepIssue(
-                    step_no=4,
-                    title="Check LibreOffice",
-                    status="manual",
-                    message=(
-                        f"run `{helper_command}` on {LINUX_RHEL_FAMILY_DISTRO_LABEL} Linux "
-                        "before using PDF/PPTX generation"
-                    ),
-                )
-            )
-        elif is_linux_arm64():
-            libreoffice_step_ready = True
-            log_warning(
-                "Detected Linux arm64. Skipping bundled LibreOffice installation because the current automated Linux download flow only supports the x86_64 AppImage."
-            )
-            install_command = None
-            try:
-                install_command = get_linux_libreoffice_install_command()
-            except FileNotFoundError as exc:
+            elif is_linux_arm64():
+                libreoffice_step_ready = True
                 log_warning(
-                    "Could not prepare the Linux ARM64 LibreOffice helper script. "
-                    f"Falling back to generic manual guidance. Reason: {format_exception_message(exc)}"
+                    "Detected Linux arm64. Skipping bundled LibreOffice installation "
+                    "because the current automated Linux download flow only supports the x86_64 AppImage."
                 )
-            if install_command is None:
-                log_info(
-                    "PDF generation remains available. If you later need PPTX output, please manually install LibreOffice with your distro's package manager. "
-                    f"The extra install script is only prepared for {LINUX_RHEL_FAMILY_DISTRO_LABEL} ARM64 distros."
+                install_command = None
+                try:
+                    install_command = get_linux_libreoffice_install_command()
+                except FileNotFoundError as exc:
+                    log_warning(
+                        "Could not prepare the Linux ARM64 LibreOffice helper script. "
+                        f"Falling back to generic manual guidance. Reason: {format_exception_message(exc)}"
+                    )
+                if install_command is None:
+                    log_info(
+                        "PDF generation remains available. If you later need PPTX output, "
+                        "please manually install LibreOffice with your distro's package manager. "
+                        "The extra install script is only prepared for "
+                        f"{LINUX_RHEL_FAMILY_DISTRO_LABEL} ARM64 distros."
+                    )
+                else:
+                    distro_name, command = install_command
+                    libreoffice_guidance = format_linux_arm64_post_install_guidance(install_command)
+                    log_info(
+                        "PDF generation remains available. "
+                        f"For Linux ({distro_name}) ARM64, please manually install LibreOffice first: {command}"
+                    )
+                log_success(
+                    "Skipped bundled LibreOffice installation on Linux arm64. "
+                    f"Duration: {format_duration(time.perf_counter() - step_start)}"
                 )
             else:
-                distro_name, command = install_command
-                libreoffice_guidance = format_linux_arm64_post_install_guidance(install_command)
-                log_info(
-                    "PDF generation remains available. "
-                    f"For Linux ({distro_name}) ARM64, please manually install LibreOffice first: {command}"
+                log_info("No usable local LibreOffice installation was found. Starting download and installation.")
+                install_libreoffice_to_local_dir()
+                if not verify_libreoffice_installation():
+                    raise RuntimeError("LibreOffice did not pass the --version verification after installation.")
+                libreoffice_step_ready = True
+                log_success(
+                    "LibreOffice download and installation completed, and --version verification passed. "
+                    f"Duration: {format_duration(time.perf_counter() - step_start)}"
                 )
-            log_success(
-                f"Skipped bundled LibreOffice installation on Linux arm64. Duration: {format_duration(time.perf_counter() - step_start)}"
-            )
-        else:
-            log_info("No usable local LibreOffice installation was found. Starting download and installation.")
-            install_libreoffice_to_local_dir()
-            if not verify_libreoffice_installation():
-                raise RuntimeError("LibreOffice did not pass the --version verification after installation.")
-            libreoffice_step_ready = True
-            log_success(
-                f"LibreOffice download and installation completed, and --version verification passed. Duration: {format_duration(time.perf_counter() - step_start)}"
-            )
-            if rhel_x86_64 and helper_needed:
-                libreoffice_guidance = format_rhel_family_manual_completion_guidance(helper_command)
-                status_line_override = (
-                    "The Slidea skill base dependencies were installed, "
-                    "but manual completion is still required on RHEL-family Linux."
-                )
-                show_issue_summary = False
-                log_warning(
-                    f"Detected Linux x86_64 on a {LINUX_RHEL_FAMILY_DISTRO_LABEL} distro. "
-                    "LibreOffice was prepared successfully, but the helper script is still required for Playwright."
-                )
-                log_info(f"Run this command manually first: {helper_command}")
-                log_info(
-                    "Without the Playwright system dependencies from that script, PDF generation will not work, "
-                    "so PDF/PPTX generation will not work correctly."
-                )
-                issues.append(
-                    StepIssue(
-                        step_no=4,
-                        title="Check LibreOffice",
-                        status="manual",
-                        message=(
-                            f"run `{helper_command}` on {LINUX_RHEL_FAMILY_DISTRO_LABEL} Linux "
-                            "before using PDF/PPTX generation"
-                        ),
+                if rhel_x86_64 and helper_needed:
+                    libreoffice_guidance = format_rhel_family_manual_completion_guidance(helper_command)
+                    status_line_override = (
+                        "The Slidea skill base dependencies were installed, "
+                        "but manual completion is still required on RHEL-family Linux."
                     )
-                )
-    except Exception as exc:
-        record_step_failure(issues, 4, "Check LibreOffice", exc)
+                    show_issue_summary = False
+                    log_warning(
+                        f"Detected Linux x86_64 on a {LINUX_RHEL_FAMILY_DISTRO_LABEL} distro. "
+                        "LibreOffice was prepared successfully, but the helper script is still required for Playwright."
+                    )
+                    log_info(f"Run this command manually first: {helper_command}")
+                    log_info(
+                        "Without the Playwright system dependencies from that script, PDF generation will not work, "
+                        "so PDF/PPTX generation will not work correctly."
+                    )
+                    issues.append(
+                        StepIssue(
+                            step_no=4,
+                            title="Check LibreOffice",
+                            status="manual",
+                            message=(
+                                f"run `{helper_command}` on {LINUX_RHEL_FAMILY_DISTRO_LABEL} Linux "
+                                "before using PDF/PPTX generation"
+                            ),
+                        )
+                    )
+        except Exception as exc:
+            record_step_failure(issues, 4, "Check LibreOffice", exc)
+    else:
+        record_step_skip(issues, 4, "Check LibreOffice", "skipped via --skip-libreoffice")
+        libreoffice_step_ready = True
 
     step_start = time.perf_counter()
     log_step(5, "Write environment marker")
@@ -896,4 +913,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--skip-playwright", action="store_true", help="Skip Playwright Chromium installation")
+    parser.add_argument("--skip-libreoffice", action="store_true", help="Skip LibreOffice check and installation")
+    args = parser.parse_args()
+    raise SystemExit(main(skip_playwright=args.skip_playwright, skip_libreoffice=args.skip_libreoffice))

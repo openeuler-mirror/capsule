@@ -148,27 +148,27 @@ class DocumentParser:
 
 
     async def parse(self, file_path: str) -> dict:
-        logger.info("开始解析: {}", file_path)
+        logger.debug("开始解析: {}", file_path)
 
         task_name = self._compute_task_name(file_path)
         task_output_dir = os.path.join(self.config.output_dir, task_name)
         os.makedirs(task_output_dir, exist_ok=True)
-        logger.info("任务输出目录: {}", task_output_dir)
+        logger.debug("任务输出目录: {}", task_output_dir)
 
         if self._is_url(file_path):
-            logger.info("检测到 URL，开始下载: {}", file_path)
+            logger.debug("检测到 URL，开始下载: {}", file_path)
             file_path = self.download_from_url(file_path)
-            logger.info("下载完成，临时文件: {}", file_path)
+            logger.debug("下载完成，临时文件: {}", file_path)
 
         mime_type = self.detect_mime_type(file_path)
         ext = MIME_TO_EXT.get(mime_type, Path(file_path).suffix.lower())
-        logger.info("文件类型: {} (MIME: {})", ext, mime_type)
+        logger.debug("文件类型: {} (MIME: {})", ext, mime_type)
 
         engine = self._resolve_engine()
         engine.output_dir = task_output_dir
 
         if ext in engine.support_file_type():
-            logger.info("使用引擎: {}", engine.__class__.__name__)
+            logger.debug("使用引擎: {}", engine.__class__.__name__)
             result = await engine.parse(file_path)
         else:
             result = await self.native_parser(task_output_dir, file_path, ext)
@@ -176,7 +176,7 @@ class DocumentParser:
         original_count = len(result.images) if hasattr(result, 'images') else len(result.get('images', []))
         result.images = DocumentParser.filter_images(result.images)
         removed_count = original_count - len(result.images)
-        logger.info(
+        logger.debug(
             "解析完成，文本长度: {} 字符，图片数量: {}， 移除: {}",
             len(result.text),
             len(result.images),
@@ -243,7 +243,7 @@ class DocumentParser:
 
     @staticmethod
     def download_from_url(url: str) -> str:
-        logger.info("开始下载 URL: {}", url)
+        logger.debug("开始下载 URL: {}", url)
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36",
             "Accept": "*/*",
@@ -259,7 +259,7 @@ class DocumentParser:
         total_size = response.headers.get("Content-Length")
         total_size = int(total_size) if total_size else None
         if total_size:
-            logger.info("文件总大小: {:.2f} MB", total_size / (1024 * 1024))
+            logger.debug("文件总大小: {:.2f} MB", total_size / (1024 * 1024))
 
         suffix = ""
         logger.debug("尝试从 Content-Type 推断扩展名")
@@ -295,16 +295,16 @@ class DocumentParser:
                     percent = int(downloaded / total_size * 100)
                     if percent >= last_logged_percent + 10:
                         last_logged_percent = percent
-                        logger.info(
+                        logger.debug(
                             "下载进度: {}% ({:.2f} MB / {:.2f} MB)",
                             percent,
                             downloaded / (1024 * 1024),
                             total_size / (1024 * 1024),
                         )
                 elif downloaded % (5 * 1024 * 1024) < chunk_size:
-                    logger.info("已下载: {:.2f} MB", downloaded / (1024 * 1024))
+                    logger.debug("已下载: {:.2f} MB", downloaded / (1024 * 1024))
 
-        logger.info("下载完成，总大小: {:.2f} MB", downloaded / (1024 * 1024))
+        logger.debug("下载完成，总大小: {:.2f} MB", downloaded / (1024 * 1024))
         return tmp.name
 
     def _resolve_engine(self) -> PDFParserBase:
@@ -319,13 +319,13 @@ class DocumentParser:
             if not engine_cls.is_available(pdf_config):
                 logger.warning("引擎 {} 不可用", engine_name)
                 raise EngineNotAvailableError(f"引擎 {engine_name} 不可用")
-            logger.info("初始化引擎: {}", engine_name)
+            logger.debug("初始化引擎: {}", engine_name)
             return engine_cls(pdf_config)
 
         sorted_engines = sorted(ENGINE_REGISTRY.values(), key=lambda cls: cls.priority)
         for engine_cls in sorted_engines:
             if engine_cls.is_available(pdf_config):
-                logger.info(
+                logger.debug(
                     "自动选择引擎: {} (优先级: {})",
                     engine_cls.__name__,
                     engine_cls.priority,

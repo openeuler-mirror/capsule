@@ -10,7 +10,7 @@ from core.utils.document_parser.pdf_engines.base import PDFParserBase
 
 
 class DoclingPDFParser(PDFParserBase):
-    priority: int = 0
+    priority: int = 10
 
     def __init__(self, config: PDFEngineConfig):
         super().__init__(config)
@@ -28,7 +28,7 @@ class DoclingPDFParser(PDFParserBase):
             return False
 
     async def parse(self, pdf_path: str) -> ParseResult:
-        logger.info("Docling 引擎开始解析: {} {}", pdf_path, self.config.extract_images)
+        logger.debug("Docling 引擎开始解析: {} {}", pdf_path, self.config.extract_images)
         from docling.document_converter import DocumentConverter, PdfFormatOption
         from docling.datamodel.pipeline_options import PdfPipelineOptions
 
@@ -98,5 +98,5 @@ class DoclingPDFParser(PDFParserBase):
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(text)
 
-        logger.info("Docling 解析完成，提取 {} 张图片", len(images))
+        logger.debug("Docling 解析完成，提取 {} 张图片", len(images))
         return ParseResult(text=text, images=images, markdown_file=md_path)
