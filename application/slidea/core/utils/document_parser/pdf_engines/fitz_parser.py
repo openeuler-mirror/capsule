@@ -27,14 +27,15 @@ class FitzPDFParser(PDFParserBase):
 
     async def parse(self, pdf_path: str) -> ParseResult:
         logger.info("Fitz 引擎开始解析: {}", pdf_path)
-        devnull = open(os.devnull, "w")
-        with redirect_stderr(devnull):
+        with open(os.devnull, "w") as devnull, redirect_stderr(devnull):
             doc = fitz.open(pdf_path)
-        devnull.close()
-        pages = [
-            self._extract_page_content(doc[i], doc, i + 1) for i in range(len(doc))
-        ]
-        doc.close()
+        try:
+            pages = [
+                self._extract_page_content(doc[i], doc, i + 1)
+                for i in range(len(doc))
+            ]
+        finally:
+            doc.close()
         all_images = self._deduplicate_images(pages)
         return self._assemble_result(pages, pdf_path, all_images)
 
