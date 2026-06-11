@@ -2,7 +2,7 @@
 
 This directory defines the exported Slidea skill package layout used by `scripts/export_skill.py`.
 
-The repository root under `application/slidea/` remains the source workspace. The actual installed skill package is assembled from `skill/manifest.json` and written to a target directory.
+The repository root under `application/slidea/` remains the source workspace. The actual installed skill package is assembled from `skill/slidea/manifest.json` and written to a target directory.
 
 ## Export the skill package
 

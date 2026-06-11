@@ -141,11 +141,11 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
 
    When you find Tavily credentials, write them into `<SKILLS_DIR>/deep_research/.env` by strictly following the comments immediately above `TAVILY_API_KEYS`.
 
-   Do not guess or fabricate Tavily keys. If you cannot find a reliable local value, leave `TAVILY_API_KEYS='[]'` as-is and explicitly tell the user that web search will be skipped until they provide a Tavily key.
+   Do not guess or fabricate Tavily keys. If you cannot find a reliable local value, leave `TAVILY_API_KEYS='[]'` as-is and explicitly tell the user that deep research will be unable to retrieve any web search content until they provide a Tavily key, which may lead to inaccurate or hallucinated results.
 
-   Optional items:
+   Strongly recommended items:
 
-   - `TAVILY_API_KEYS`: recommended for web search; leaving it empty may cause content hallucinations
+   - `TAVILY_API_KEYS`: strongly recommended for web search; without it, deep research cannot retrieve any web search content, which may lead to inaccurate or hallucinated results
    - `EMBEDDING_MODEL` / `EMBEDDING_API_KEY` / `EMBEDDING_API_BASE_URL`: optional, used for embedding-based retrieval in deep research ranking
    - `DISABLE_EMBEDDING`: set to `true` to disable embedding-based retrieval
 
@@ -178,13 +178,13 @@ Inside that final summary block, keep the wording concise and easy to scan. Cove
 
 3. **Optional settings the user may still configure**
    - Mention only the items that are still relevant after the work you completed.
-   - Optional items:
-     - `TAVILY_API_KEYS`: recommended for web search; leaving it empty may cause content hallucinations
-     - `EMBEDDING_MODEL` / `EMBEDDING_API_KEY` / `EMBEDDING_API_BASE_URL`: optional, used for embedding-based retrieval in deep research ranking
+   - `TAVILY_API_KEYS`: strongly recommended for web search; without it, deep research cannot retrieve any web search content, which may lead to inaccurate or hallucinated results
+   - `EMBEDDING_MODEL` / `EMBEDDING_API_KEY` / `EMBEDDING_API_BASE_URL`: used for embedding-based retrieval in deep research ranking
    - If you already configured Tavily for the user, do not repeat `TAVILY_API_KEYS` in this optional list.
 
 4. **Required reminders**
    - If you did not help auto-configure the default LLM settings, explicitly tell the user that they still need to fill in the three `DEFAULT_LLM_*` values.
+   - If you did not help auto-configure `TAVILY_API_KEYS`, explicitly tell the user that deep research will be unable to retrieve any web search content until they provide a Tavily key, which may lead to inaccurate or hallucinated results.
 
 5. **What the user should do next**
    - Ask the user to send their LLM API key / base URL / model information if they want help filling the remaining `.env` settings.

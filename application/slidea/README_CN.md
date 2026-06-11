@@ -37,23 +37,34 @@
 - 研究、规划、大纲生成和渲染分离后，整体生成质量更稳定；
 - 中间产物可以被缓存、检查、编辑、恢复或重复利用。
 
-## 快速开始：使用 Agent 将 Slidea 安装为 Skill（推荐）
+## 快速开始：使用 Agent 安装 Skill（推荐）
 
+Slidea 提供两个可安装到 agent 环境中的 skill：**Slidea**（PPT 生成）和 **Deep Research**（深度研究）。如果你的 agent 平台支持本地 skill，则可以安装其中一个或两个。安装完成之后，按当前二元路由配置 `.env` 即可开始使用。
 
-Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent 平台支持本地 skill，则可以轻松安装 Slidea。安装完成之后，在 Slidea skill 目录中按当前二元路由配置 `.env` 即可开始使用。默认建议先配置 `DEFAULT_LLM`；如果你要开启 `PREMIUM` 模式，推荐保持 `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` 与 `PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1` 不变，通常只补充 `PREMIUM_LLM_API_KEY` 即可。
+两个 skill 均已适配 openEuler，Apple Silicon macOS，Windows WSL/PowerShell，以及部分其他 Linux 系统。可在主流 agent 环境中快捷安装并运行，如 OpenClaw、Codex、Claude Code 等。
 
-目前 Slidea Skill已适配 openEuler，Apple Silicon macOS，Windows WSL/PowerShell，以及部分其他 Linux 系统。Slidea 可在主流 agent 环境中快捷安装并运行，如 OpenClaw、Codex、Claude Code 等。
+### Slidea Skill
 
-### 安装 Slidea skill
+Slidea 是 AI 驱动的 PPT 生成 skill。默认建议先配置 `DEFAULT_LLM`；如果你要开启 `PREMIUM` 模式，推荐保持 `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` 与 `PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1` 不变，通常只补充 `PREMIUM_LLM_API_KEY` 即可。
+
+#### 安装 Slidea Skill
 
 可将以下指令发送给你的 Agent：
 ```text
-请直接获取并遵循这里的说明安装 slidea skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/INSTALL.md
+请直接获取并遵循这里的说明安装 slidea skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/INSTALL.md
 ```
 
-安装并配置完 Slidea 模型资源后后，重启 agent，使其重新加载已安装的 skill。随后通过你的 agent 环境支持的 skill 调用方式来触发 Slidea。
+安装并配置完 Slidea 模型资源后，重启 agent，使其重新加载已安装的 skill。随后通过你的 agent 环境支持的 skill 调用方式来触发 Slidea。
 
-### 使用 Slidea Skill
+#### 升级 Slidea Skill
+
+要升级已有的 Slidea 安装，请将以下指令发送给你的 Agent：
+
+```text
+请直接获取并遵循这里的说明更新 slidea skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/UPDATE.md
+```
+
+#### 使用 Slidea Skill
 
 在 OpenClaw 这种环境中，你可能会这样调用：
 
@@ -69,20 +80,11 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 
 具体语法取决于宿主 agent，但预期体验是一致的：agent 加载 Slidea skill，在必要时补充缺失信息，并将幻灯片生成流水线执行到最终产物。
 
-### 支持平台
+### Deep Research Skill
 
-| 平台 | 架构 | 支持情况 |
-| --- | --- | --- |
-| Linux | x86_64 / ARM64 | 支持openEuler |
-| Linux | x86_64 | 支持 Ubuntu/Debian |
-| Windows | x86_64 / ARM64 | ✅ |
-| macOS | Apple Silicon | ✅ |
+Deep Research 是一个可独立安装和使用的深度研究 skill。它可以对给定主题进行多源调查，自动搜索网络、提取相关页面内容，并将发现综合为结构化的研究报告。
 
-## Deep Research Skill
-
-除了主要的 Slidea PPT 生成 skill 之外，本仓库还包含一个可独立安装和使用的 **Deep Research**（深度研究）skill。它可以对给定主题进行多源调查，自动搜索网络、提取相关页面内容，并将发现综合为结构化的研究报告。
-
-### 安装 Deep Research Skill
+#### 安装 Deep Research Skill
 
 要安装 Deep Research skill，请将以下指令发送给你的 Agent：
 
@@ -92,7 +94,7 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 
 安装完成后，在已安装的 skill 目录中配置 `.env`，至少需要填写 `DEFAULT_LLM_MODEL`、`DEFAULT_LLM_API_KEY` 和 `DEFAULT_LLM_API_BASE_URL`。可选配置 `TAVILY_API_KEYS` 以启用网络搜索能力。
 
-### 升级 Deep Research Skill
+#### 升级 Deep Research Skill
 
 要升级已有的 Deep Research 安装，请将以下指令发送给你的 Agent：
 
@@ -100,7 +102,7 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 请直接获取并遵循这里的说明更新 Deep Research skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/deep_research/UPDATE.md
 ```
 
-### 使用 Deep Research Skill
+#### 使用 Deep Research Skill
 
 在 Agent 环境中，通过研究主题调用 Deep Research skill：
 
@@ -115,6 +117,15 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 ```
 
 该 skill 将自动搜索网络、提取并综合信息，最终生成一份结构化的 Markdown 格式研究报告。一次典型的研究运行需要 10-30 分钟。
+
+### 支持平台
+
+| 平台 | 架构 | 支持情况 |
+| --- | --- | --- |
+| Linux | x86_64 / ARM64 | 支持openEuler |
+| Linux | x86_64 | 支持 Ubuntu/Debian |
+| Windows | x86_64 / ARM64 | ✅ |
+| macOS | Apple Silicon | ✅ |
 
 ## 从源码使用
 
@@ -211,7 +222,7 @@ Slidea 的主要定位是安装到 agent 环境中的 skill。如果你的 agent
 ## 仓库结构
 
 - `scripts/`: 面向用户的 CLI 入口，包括 skill 导出、完整流水线、分阶段执行、补渲染以及嵌套的安装辅助脚本
-- `skill/`: 导出的 skill 包定义目录，包含 `SKILL.md`、`INSTALL.md` 以及 skill 清单
+- `skill/`: 导出的 skill 包定义目录，包含 `skill/slidea/`（Slidea PPT 生成 skill）和 `skill/deep_research/`（Deep Research 深度研究 skill），各自包含 `SKILL.md`、`INSTALL.md`、`UPDATE.md` 及 skill 清单
 - `core/`: 主要的 LangGraph 应用，包括深度研究、PPT 生成以及共享核心工具
 - `docs/`: 面向公开仓库读者的文档，包括快速开始、CLI、架构和 app 说明
 - `tests/`: 针对可移植性、CLI 契约与运行时行为的回归测试

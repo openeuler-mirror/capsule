@@ -6,7 +6,7 @@ This guide explains the fastest way to start using Slidea, with the recommended 
 
 Slidea is primarily designed to run as an installed skill inside an agent environment.
 
-If your agent supports local skills, use that platform's skill installation workflow first. For the skill-installation steps, see [skill/INSTALL.md](../skill/INSTALL.md).
+If your agent supports local skills, use that platform's skill installation workflow first. For the skill-installation steps, see [skill/slidea/INSTALL.md](../skill/slidea/INSTALL.md).
 
 After the skill has been installed:
 

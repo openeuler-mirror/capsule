@@ -417,7 +417,7 @@ python3 scripts/export_skill.py --target "<SKILLS_DIR>/slidea"
 
 ### Current behavior
 
-The exporter reads `skill/manifest.json` and assembles a skill package that includes:
+The exporter reads `skill/slidea/manifest.json` and assembles a skill package that includes:
 
 - exported `SKILL.md`, and `INSTALL.md`,
 - `core/`,

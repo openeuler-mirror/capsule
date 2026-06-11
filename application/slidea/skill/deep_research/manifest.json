@@ -17,7 +17,7 @@
       "to": "requirements.txt"
     },
     {
-      "from": ".env.example",
+      "from": "skill/deep_research/.env.example",
       "to": ".env.example"
     },
     {
