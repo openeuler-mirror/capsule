@@ -889,6 +889,17 @@ def main(*, skip_playwright: bool = True, skip_libreoffice: bool = True) -> int:
         except Exception as exc:
             record_step_failure(issues, 4, "Check LibreOffice", exc)
     else:
+        # SVG 默认路线不需要 LibreOffice，也不需要 RHEL helper 脚本（那个脚本
+        # 仅为 HTML 路线准备 Playwright 系统依赖 + ARM64 LibreOffice）。
+        # 在 RHEL 系系统上显式说明，避免用户/agent 误以为漏了步骤。
+        if platform.system() == "Linux":
+            os_release = read_linux_os_release()
+            if is_linux_rhel_family(os_release):
+                log_info(
+                    f"Detected {LINUX_RHEL_FAMILY_DISTRO_LABEL} Linux. The RHEL helper script "
+                    "(extra_install_linux_rhel.sh) is not required for the default SVG render "
+                    "route; it is only needed when the optional HTML route is enabled. Skipping."
+                )
         record_step_skip(
             issues,
             4,

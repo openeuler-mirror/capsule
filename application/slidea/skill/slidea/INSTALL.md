@@ -204,12 +204,12 @@ Inside that final summary block, keep the wording concise and easy to scan. Cove
 4. **Required reminders**
    - If you did not help auto-configure the default LLM settings, explicitly tell the user that they still need to fill in `SLIDEA_MODE` and the three `DEFAULT_LLM_*` values.
    - If the user wants premium mode, explicitly remind them that the recommended premium model is **Gemini 3.1 Pro Preview**, and they should normally only need to fill in `PREMIUM_LLM_API_KEY`.
-   - If the platform is RHEL-family Linux, you must explicitly show the full command the user needs to run next. The command must be complete and directly copyable.
+   - RHEL-family Linux helper script (`extra_install_linux_rhel.sh`) is only required by the optional HTML render route. The default SVG-only install does not run it and does not ask the user to run it. Only mention the helper when the user explicitly opted into the HTML route via `python3 scripts/install/install.py --with-html-route`; in that case, the installer log will surface the exact command to run and you should relay it verbatim.
 
 5. **What the user should do next**
    - Ask the user to send their LLM API key / base URL / model information if they want help filling the remaining `.env` settings.
    - Offer to help them finish any remaining optional configuration.
 
-When the platform is RHEL-family Linux, the final summary block should include the exact command from the installer result, not an abbreviated filename-only reference.
+The RHEL-family helper command, if it was actually requested by an `install.py --with-html-route` run, must be relayed to the user verbatim in the final summary block — do not abbreviate it to a filename-only reference.
 
 During the whole installation flow, including progress updates, warnings, final result summaries, and follow-up questions, always reply in the same language the user is currently using.

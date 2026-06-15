@@ -663,6 +663,55 @@ class EnsureDependenciesTests(unittest.TestCase):
             )
             mock_install_libreoffice.assert_called_once()
 
+    def test_main_svg_default_on_rhel_does_not_request_helper_script(self):
+        # SVG-only install on RHEL-family Linux must NOT ask the user to run the
+        # RHEL helper script. The helper is only needed by the HTML route
+        # (Playwright system deps + ARM64 LibreOffice). The installer should
+        # emit an explicit INFO log explaining the skip, and the bootstrap
+        # must still succeed.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            env_file = root_dir / ".env"
+            env_example = root_dir / ".env.example"
+            requirements = root_dir / "requirements.txt"
+            venv_dir = root_dir / ".venv"
+            venv_python = venv_dir / "bin" / "python"
+
+            env_example.write_text("SLIDEA_MODE=ECONOMIC\nDEFAULT_LLM_MODEL=\n", encoding="utf-8")
+            requirements.write_text("cairosvg\n", encoding="utf-8")
+            venv_python.parent.mkdir(parents=True, exist_ok=True)
+            venv_python.write_text("", encoding="utf-8")
+
+            buffer = io.StringIO()
+            with patch.object(install, "ROOT_DIR", root_dir), \
+                patch.object(install, "ENV_FILE", env_file), \
+                patch.object(install, "ENV_EXAMPLE_FILE", env_example), \
+                patch.object(install, "REQUIREMENTS_FILE", requirements), \
+                patch.object(install, "VENV_DIR", venv_dir), \
+                patch.object(install, "get_bootstrap_python_command", return_value="python3"), \
+                patch.object(install, "ensure_uv_installed", return_value=["uv"]), \
+                patch.object(install, "create_virtualenv", return_value=venv_python), \
+                patch.object(install, "run_python_install_command"), \
+                patch.object(install, "run_command") as mock_run_command, \
+                patch("scripts.install.install.platform.system", return_value="Linux"), \
+                patch.object(
+                    install,
+                    "read_linux_os_release",
+                    return_value={"ID": "openeuler", "ID_LIKE": "rhel fedora", "NAME": "openEuler"},
+                ), \
+                patch.object(install, "is_linux_rhel_family", return_value=True), \
+                patch.object(install, "is_linux_arm64", return_value=False), \
+                redirect_stdout(buffer):
+                result = install.main()
+
+            output = buffer.getvalue()
+            self.assertEqual(result, 0)
+            self.assertIn("Detected RHEL family Linux", output)
+            self.assertIn("not required for the default SVG render route", output)
+            # No playwright install, no libreoffice download on SVG-only path
+            mock_run_command.assert_not_called()
+            self.assertEqual(install.read_env_value(env_file, "SETUP_COMPLETED"), "true")
+
     def test_main_when_setup_done_but_missing_libreoffice_installs_local_copy(self):
         # HTML route path: when setup is done but LibreOffice is missing, the
         # installer downloads a local copy. Only relevant when --with-html-route
