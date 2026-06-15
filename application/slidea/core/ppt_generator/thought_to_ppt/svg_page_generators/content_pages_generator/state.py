@@ -30,8 +30,8 @@ from core.ppt_generator.thought_to_ppt.state import GeneratedPageResult, PPTPage
 
 
 class ImageQueries(BaseModel):
-    need_search_image: list = pydantic_field(default_factory=list, description="网络搜图的搜索关键词。")
-    need_ai_image: list = pydantic_field(default_factory=list, description="AI生图的Prompt。")
+    need_search_image: List[str] = pydantic_field(default_factory=list, description="网络搜图的搜索关键词。")
+    need_ai_image: List[str] = pydantic_field(default_factory=list, description="AI生图的Prompt。")
 
 
 class ImageScoreResult(BaseModel):

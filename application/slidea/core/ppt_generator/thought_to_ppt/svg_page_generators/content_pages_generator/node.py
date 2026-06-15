@@ -130,9 +130,47 @@ async def extract_relevant_doc_node(state: ContentWorkerState):
     return {"relevant_material": response}
 
 
+def _coerce_str_list(value) -> list[str]:
+    """容错：LLM 偶尔会把单元素 list 字段返回成裸 string，统一包成 list[str]。"""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    return []
+
+
 async def generate_image_queries_node(state: ContentWorkerState):
     """generate image queries for the page"""
     page = state["content_page"]
+    relevant_material = state["relevant_material"]
+
+    # 若网页搜图和 AI 生图都关闭，直接短路，不浪费一次 LLM 调用。
+    if not settings.USE_WEB_IMG_SEARCH and not settings.is_image_generation_enabled():
+        logger.info("skip generate_image_queries: both web image search and AI image generation are disabled")
+        return {"need_search_image": [], "need_ai_image": []}
+
+    # AI 生图未启用时，prompt 只问网络搜图关键词，避免 LLM 误返回 AI prompt 触发下游无效调用。
+    if settings.is_image_generation_enabled():
+        ai_image_section = """
+你认为大概率网上搜不到的图片，生成一个Prompt用于指导AI绘画模型("need_ai_image"最多只包含一个Prompt，即列表只有一个对象！)。
+"""
+        output_format = """
+{
+    "need_search_image": ["需要的图片素材描述1", "需要的图片素材描述2"],
+    "need_ai_image": ["需要AI生成的图片描述Prompt"]
+}
+"""
+    else:
+        ai_image_section = ""
+        output_format = """
+{
+    "need_search_image": ["需要的图片素材描述1", "需要的图片素材描述2"],
+    "need_ai_image": []
+}
+"""
+
     prompt = f"""
 请根据正在撰写的PPT的文字资料，判断是否需要搜索额外的素材。
 # 正在撰写的PPT页
@@ -140,10 +178,7 @@ async def generate_image_queries_node(state: ContentWorkerState):
 
 # 输出格式要求
 如果需要额外的图片素材，返回如下格式的json，不要返回额外内容：
-{{
-    "need_search_image": ["需要的图片素材描述1", "需要的图片素材描述2"],
-    "need_ai_image": ["需要AI生成的图片描述Prompt"]
-}}
+{output_format}
 如果不需要，返回如下格式的json，不要返回额外内容：
 {{
     "need_search_image": [],
@@ -153,16 +188,22 @@ async def generate_image_queries_node(state: ContentWorkerState):
 
 # 核心规则
 你认为大概率能在网络上搜到的图片（例如人物照片、产品照片等），优先使用网络搜索；
-你认为大概率网上搜不到的图片，生成一个Prompt用于指导用于指导AI绘画模型("need_ai_image"最多只包含一个Prompt，即列表只有一个对象！)。
-
+{ai_image_section}
 # PPT的文字资料
-{state["relevant_material"]}
+{relevant_material}
 """
     response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=ImageQueries)
     if not response:
-        response = ImageQueries(need_search_image=[], need_ai_image=[])
+        return {"need_search_image": [], "need_ai_image": []}
 
-    return {"need_search_image": response.need_search_image, "need_ai_image": response.need_ai_image}
+    # 防御性容错：即便 schema 是 List[str]，部分模型仍可能返回裸 string。
+    need_search_image = _coerce_str_list(getattr(response, "need_search_image", []))
+    need_ai_image = _coerce_str_list(getattr(response, "need_ai_image", []))
+    # 配置兜底：若 AI 生图已被关闭，即便 LLM 返回了 prompt 也丢弃。
+    if not settings.is_image_generation_enabled():
+        need_ai_image = []
+
+    return {"need_search_image": need_search_image, "need_ai_image": need_ai_image}
 
 
 async def get_web_ai_images_node(state: ContentWorkerState):
@@ -286,8 +327,10 @@ async def get_img_score_node(state: ImgScoreWorkerState):
     if not can_vlm_invoke_route(ModelRoute.DEFAULT):
         height, width = get_image_size(image_path)
         size = f"图片高度为{height}，宽度为{width}"
-        logger.warning(
-            "No available VLM route for image scoring. Use a fallback image score without VLM analysis: "
+        # VLM 未配置是合法的预期场景（见 .env.example），不需要 WARNING 级别。
+        # 一次性提示由 assign_img_score_workers 给出，这里只保留 debug 级别细节。
+        logger.debug(
+            "VLM not configured; image scoring falls back to default score without VLM analysis: "
             f"{image_path}"
         )
         return {"img_scores": [
