@@ -129,10 +129,12 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
 
 
 async def generate_pages_node(state: PPTState):
-    """generate ppt pages — dispatch to the HTML or SVG sub-pipeline by render_mode."""
-    if state.get("render_mode", "html") == "svg":
-        from core.ppt_generator.thought_to_ppt.svg_page_generators.graph import generate_svg_pages_app
-        return await generate_svg_pages_app.ainvoke(state)
+    """generate ppt pages — dispatch to the SVG (default) or HTML sub-pipeline by render_mode."""
+    if state.get("render_mode", "svg") == "html":
+        # HTML 路线为可选备用方案；仅当显式指定 render_mode=html 时才加载。
+        # 默认 SVG 路线不会触发对 playwright/BrowserManager 等 HTML 路线依赖的 import。
+        from core.ppt_generator.thought_to_ppt.page_generators.graph import generate_pages_app
+        return await generate_pages_app.ainvoke(state)
 
-    from core.ppt_generator.thought_to_ppt.page_generators.graph import generate_pages_app
-    return await generate_pages_app.ainvoke(state)
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.graph import generate_svg_pages_app
+    return await generate_svg_pages_app.ainvoke(state)

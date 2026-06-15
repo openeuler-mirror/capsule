@@ -177,7 +177,7 @@ def _resolve_render_mode(args, cached_run: dict) -> str:
     if args.render_mode:
         return args.render_mode
 
-    return "html"
+    return "svg"
 
 
 async def _run_all_stages(args, run_id: str, out_dir: str):
@@ -376,7 +376,12 @@ async def main():
     args = parser.parse_args()
     logger.debug(f"All arguments: {vars(args)}")
     stages = [s.strip() for s in args.stages.split(',') if s.strip()] or ["all"]
-    preflight = run_preflight(stages=stages, dry_run=args.dry_run)
+    # Preflight 仅关心用户意图：显式 --render-mode html 才需要 HTML 路线相关的
+    # 运行时检查（playwright/libreoffice）。其他情况（默认或显式 svg）按 SVG
+    # 路线检查，不依赖这两个组件。完整的 render_mode 解析（含 cached run 回填）
+    # 在 preflight 之后再做。
+    preflight_render_mode = args.render_mode or "svg"
+    preflight = run_preflight(stages=stages, dry_run=args.dry_run, render_mode=preflight_render_mode)
     print_preflight_report(preflight)
 
     if args.dry_run:

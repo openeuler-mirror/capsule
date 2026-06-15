@@ -255,7 +255,12 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (out_dir / "ppt.json").write_text(
-                json.dumps({"run_id": run_id, "topic": "Demo Topic", "render_dir": str(render_dir)}),
+                json.dumps({
+                    "run_id": run_id,
+                    "topic": "Demo Topic",
+                    "render_mode": "html",
+                    "render_dir": str(render_dir),
+                }),
                 encoding="utf-8",
             )
             (render_dir / "0.html").write_text("<html></html>", encoding="utf-8")

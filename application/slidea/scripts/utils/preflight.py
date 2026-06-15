@@ -227,14 +227,23 @@ def run_preflight(
     *,
     stages: list[str] | None = None,
     dry_run: bool = False,
+    render_mode: str = "svg",
 ) -> dict:
+    """Run readiness checks.
+
+    ``render_mode`` controls whether HTML-route-only runtime checks
+    (Playwright/Chromium for HTML-to-PDF, LibreOffice for PDF-to-PPTX) are
+    included. The SVG render route (the default) does not need either of
+    them, so by default these checks are skipped. Pass ``render_mode="html"``
+    to enable them.
+    """
     settings = settings or Settings()
     stages = stages or ["all"]
     checks = []
 
     checks.append(check_env_setup(settings))
     checks.append(check_runtime_python())
-    if "all" in stages or "render" in stages:
+    if render_mode == "html" and ("all" in stages or "render" in stages):
         checks.append(check_browser_runtime())
 
     missing_llm = settings.missing_default_llm_settings()
@@ -325,7 +334,7 @@ def run_preflight(
     else:
         checks.append(_result("embedding", "ok", "Embedding settings are configured."))
 
-    if "all" in stages or "render" in stages:
+    if render_mode == "html" and ("all" in stages or "render" in stages):
         checks.append(check_libreoffice_runtime())
 
     status = "ok"

@@ -85,10 +85,10 @@ def _resolve_save_dir(out_dir: str, topic: str):
 
 
 def _resolve_target_indices(args, save_dir: str, outline):
-    return _resolve_target_indices_for_mode(args, save_dir, outline, "html")
+    return _resolve_target_indices_for_mode(args, save_dir, outline, "svg")
 
 
-def _resolve_target_indices_for_mode(args, save_dir: str, outline, render_mode: str = "html"):
+def _resolve_target_indices_for_mode(args, save_dir: str, outline, render_mode: str = "svg"):
     target_indices = parse_indices(args.indices)
     if not target_indices:
         if render_mode == "svg":
@@ -423,9 +423,9 @@ async def _patch_render(context: PatchRenderContext):
 def _read_render_mode(out_dir: str) -> str:
     try:
         ppt_record = load_json(str(Path(out_dir) / "ppt.json")) or {}
-        return ppt_record.get("render_mode", "html")
+        return ppt_record.get("render_mode", "svg")
     except Exception:
-        return "html"
+        return "svg"
 
 
 async def main():
@@ -442,7 +442,7 @@ async def main():
 
     save_dir = _resolve_save_dir(out_dir, topic)
     ppt_json = load_json(str(Path(out_dir) / "ppt.json")) or {}
-    render_mode = ppt_json.get("render_mode") or "html"
+    render_mode = ppt_json.get("render_mode") or "svg"
     target_indices = _resolve_target_indices_for_mode(args, save_dir, outline, render_mode)
     if not target_indices:
         emit_stage_payload(

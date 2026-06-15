@@ -219,11 +219,38 @@ class PreflightTests(unittest.TestCase):
                 ),
                 stages=["render"],
                 dry_run=False,
+                render_mode="html",
             )
 
         libreoffice_checks = [item for item in result["checks"] if item["name"] == "libreoffice"]
         self.assertEqual(len(libreoffice_checks), 1)
         self.assertEqual(libreoffice_checks[0]["status"], "warning")
+
+    def test_render_stage_preflight_skips_html_only_checks_on_default_svg_route(self):
+        from scripts.utils.preflight import run_preflight
+
+        with patch("scripts.utils.preflight.check_env_setup", return_value={"name": "env_setup", "status": "ok", "message": "ok"}), \
+             patch("scripts.utils.preflight.check_runtime_python", return_value={"name": "runtime_python", "status": "ok", "message": "ok"}), \
+             patch("scripts.utils.preflight.check_browser_runtime") as browser_check, \
+             patch("scripts.utils.preflight.check_libreoffice_runtime") as libreoffice_check:
+            result = run_preflight(
+                Settings(
+                    SLIDEA_MODE="ECONOMIC",
+                    DEFAULT_LLM_MODEL="demo",
+                    DEFAULT_LLM_API_KEY="key",
+                    DEFAULT_LLM_API_BASE_URL="https://example.com",
+                    DISABLE_EMBEDDING=True,
+                ),
+                stages=["render"],
+                dry_run=False,
+                # default render_mode="svg"
+            )
+
+        check_names = [item["name"] for item in result["checks"]]
+        self.assertNotIn("browser", check_names)
+        self.assertNotIn("libreoffice", check_names)
+        browser_check.assert_not_called()
+        libreoffice_check.assert_not_called()
 
     def test_libreoffice_preflight_checks_environment_command_on_windows(self):
         from scripts.utils.preflight import _iter_libreoffice_candidates
@@ -253,6 +280,7 @@ class PreflightTests(unittest.TestCase):
                 ),
                 stages=["render"],
                 dry_run=False,
+                render_mode="html",
             )
 
         self.assertEqual(
