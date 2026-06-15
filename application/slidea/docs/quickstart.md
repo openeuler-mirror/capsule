@@ -46,7 +46,7 @@ From the project root:
 python3 scripts/install/install.py
 ```
 
-The installer creates `.venv`, installs Python dependencies, installs Playwright Chromium, prepares local LibreOffice support, creates `.env` when needed, and writes the setup marker.
+The installer creates `.venv`, installs Python dependencies for the default SVG render route, creates `.env` when needed, and writes the setup marker. Playwright Chromium and a bundled LibreOffice are not installed by default — they are only needed by the optional HTML route. See the main README's "HTML Render Route (Optional)" section if you need them.
 
 ## Configure Environment
 
@@ -110,9 +110,9 @@ The default `--stages all` path runs:
 2. reference gathering and optional research
 3. writing-thought generation
 4. outline generation
-5. HTML rendering
-6. PDF synthesis
-7. optional PPTX conversion
+5. SVG rendering
+6. SVG quality check and finalize
+7. native PPTX export
 
 ## Resume After User Input
 
@@ -175,7 +175,7 @@ Typical contents:
 Important distinction:
 
 - `output/<run_id>/` stores cache files and metadata,
-- rendered slide HTML plus final PDF/PPTX are written into the separate render directory referenced by `ppt.json`.
+- rendered SVG pages plus the final PPTX are written into the separate render directory referenced by `ppt.json`.
 
 ## Common Local Modes
 
@@ -211,7 +211,7 @@ If `preflight_failed` is returned:
 - check `SLIDEA_MODE` and the three default LLM settings first,
 - if `SLIDEA_MODE=PREMIUM`, also make sure `PREMIUM_LLM_API_KEY` is filled in when you want premium-routed callsites to use the premium model first,
 - make sure the local runtime has been bootstrapped with `scripts/install/install.py`,
-- ensure Playwright Chromium is available when `render` or `all` is used.
+- (HTML route only) ensure Playwright Chromium is available when `render` or `all` is used with `--render-mode html`. The default SVG route does not need Playwright.
 
 If search silently skips:
 
@@ -223,8 +223,9 @@ If embedding work fails:
 - either configure embedding settings fully,
 - or set `DISABLE_EMBEDDING=true`.
 
-If PPTX is missing but PDF exists:
+If PPTX is missing but PDF exists (HTML route only):
 
-- the render pipeline likely succeeded,
+- the HTML render pipeline likely succeeded,
 - local LibreOffice conversion was skipped or failed,
 - inspect the render/export path in `core/ppt_generator/utils/common.py`.
+- The default SVG route produces PPTX directly without a PDF intermediate, so this symptom is specific to the HTML route.

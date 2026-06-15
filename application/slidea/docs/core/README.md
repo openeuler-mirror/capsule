@@ -3,7 +3,7 @@
 The `core/` directory contains the two core business applications in this repository:
 
 - [`deep_research`](deep-research.md): produces a structured markdown report for complex research requests
-- [`ppt_generator`](ppt-generator.md): turns a slide request into thought, outline, HTML slides, PDF, and optional PPTX
+- [`ppt_generator`](ppt-generator.md): turns a slide request into thought, outline, SVG slides, and native editable PPTX
 
 ## Package Layout
 

@@ -11,8 +11,8 @@ At the highest level, the system does this:
 3. Gather user-provided references and optionally perform web/deep research.
 4. Generate a writing thought process for the presentation.
 5. Produce a normalized slide outline.
-6. Render each page as HTML.
-7. Convert HTML pages to a merged PDF and optionally to PPTX.
+6. Render each page as SVG (default route).
+7. Convert SVG pages into a native editable PPTX.
 
 ## Top-Level Module Map
 
@@ -158,24 +158,30 @@ Routing depends on:
 
 ## Rendering Model
 
-Rendering uses HTML as the intermediate canonical artifact.
+Rendering uses SVG as the default intermediate canonical artifact.
 
-Why HTML first:
+Why SVG first:
 
-- the LLM can directly produce layout code
-- Playwright can render deterministic slide-sized pages
-- HTML is easier to inspect and patch than binary presentation formats
+- the LLM can directly produce vector layout code,
+- SVG maps cleanly onto editable DrawingML inside the PPTX,
+- no Playwright/Chromium or LibreOffice runtime is needed for the default route,
+- the intermediate artifact stays inspectable and patchable.
 
-Render pipeline:
+Render pipeline (default SVG route):
 
-1. choose template YAML
-2. load shared PPT prompt
-3. prepare output directory
-4. generate each page HTML
-5. evaluate scaling quality in a browser
-6. retry or modify pages when scaling is poor
-7. convert HTML pages to PDF
-8. optionally convert PDF to PPTX via local LibreOffice
+1. choose template,
+2. load shared PPT prompt,
+3. prepare output directory,
+4. generate each page as SVG,
+5. run quality checks (XML well-formedness, forbidden constructs, etc.),
+6. finalize SVG files (embed local images, copy into `svg_final/`),
+7. export native editable PPTX.
+
+An alternative HTML render route is preserved in the codebase for users who
+need HTML/CSS expressiveness. It is not enabled by default and is not
+advertised through `skill/SKILL.md`. The repository README documents how to
+install its extra dependencies (Playwright, PyPDF2, LibreOffice) and how to
+invoke the pipeline with `--render-mode html`.
 
 ## Reliability and Degradation Strategy
 
@@ -186,7 +192,7 @@ Examples:
 - no Tavily: search is skipped
 - no embeddings: ranking falls back or can be disabled explicitly
 - no VLM: image scoring/distribution features are limited
-- no local LibreOffice: PDF can still be produced even if PPTX is absent
+- (HTML route only) no local LibreOffice: PDF can still be produced even if PPTX is absent. The default SVG route does not depend on LibreOffice.
 
 This makes the project portable across environments with very different capabilities.
 

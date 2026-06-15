@@ -87,13 +87,12 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
 7. **What the installer does:**
    - Detects `uv` and installs it when missing
    - Creates `.venv` with `uv venv --python 3.11 --seed`
-   - Installs `requirements.txt`
-   - Installs Playwright Chromium
-   - Detects whether a usable LibreOffice installation is already available
-   - If LibreOffice is missing, installs a local copy on supported platforms, or prints manual installation guidance
-   - On RHEL-family Linux x86_64 and arm64, follow the final `install.py` log output and explicitly tell the user to run `extra_install_linux_rhel.sh` manually when the installer asks for it
+   - Installs `requirements.txt` (SVG render route dependencies only)
+   - Skips Playwright Chromium and LibreOffice by default — they are only needed by the optional HTML render route
    - Creates `.env` from `.env.example` when needed
    - Writes `SETUP_COMPLETED=true` after the base Python/bootstrap dependencies are installed
+
+   The default SVG render route does not need Playwright or LibreOffice. If the user explicitly asks for the HTML render route, point them to the repository README's "HTML Render Route (Optional)" section, which describes how to run `python3 scripts/install/install.py --with-html-route` and what extra dependencies it installs.
 
 8. **Try to populate the default LLM settings, the premium API key when needed, and Tavily search keys in `.env`.**
 
@@ -176,8 +175,8 @@ Check `<SKILLS_DIR>/slidea/.env`.
 
 - If `.env` does not exist, installation is not complete.
 - If `SETUP_COMPLETED` is not `true`, installation is not complete.
-- If `SETUP_COMPLETED=true`, treat the base Python/bootstrap dependencies as complete.
-- `SETUP_COMPLETED=true` does not guarantee PPTX export on every platform. PPTX export still requires a usable LibreOffice installation for the PDF-to-PPTX conversion step.
+- If `SETUP_COMPLETED=true`, treat the base Python/bootstrap dependencies as complete. The default SVG render route can produce PPTX with no extra system dependencies.
+- `SETUP_COMPLETED=true` does not imply that the optional HTML render route is ready. HTML route requires Playwright Chromium and LibreOffice, which are not installed by default.
 
 ## Report Result
 

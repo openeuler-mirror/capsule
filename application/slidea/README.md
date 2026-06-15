@@ -32,7 +32,7 @@ Given a request such as "create a 10-slide PPT about AI Agents for product, engi
 - collect source material from user input, URLs, and optional search,
 - generate the writing direction for the full deck,
 - turn that writing direction into a slide outline,
-- render each slide as HTML, merge and export PDF, and finally export PPTX.
+- render each slide as SVG and export a native editable PPTX.
 
 The system is designed for agent-driven usage. It supports staged execution, resuming after interruptions, and other flexible workflows. This staged design exists mainly for two reasons:
 
@@ -217,11 +217,18 @@ If you do not want to use the installer in step 2 to prepare the runtime automat
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
+```
+
+That is enough for the default SVG route. If you also want the optional HTML route, additionally run:
+
+```bash
+pip install playwright PyPDF2
 python -m playwright install chromium
 ```
 
 LibreOffice (version >= 25.2) can be downloaded and installed from:
 `https://www.libreoffice.org/download/download-libreoffice/`
+(It is only needed by the optional HTML route, not by the default SVG route.)
 
 ## Repository Structure
 
@@ -246,15 +253,55 @@ It turns source material into:
 
 This subsystem is split out to separate "how to think about the deck" from "how to render the deck".
 
-Slidea supports two render routes: HTML and SVG. The HTML route is the default route for normal PPT generation, and the SVG route is optional.
+Slidea supports two render routes:
 
-Example:
+- SVG route: the default. Each slide is generated as SVG and exported into a native editable PPTX (no Playwright or LibreOffice required).
+- HTML route: an optional legacy backend. Each slide is rendered as HTML/CSS via a headless Chromium browser, then merged into PDF and converted to PPTX via LibreOffice. See the [HTML Render Route (Optional)](#html-render-route-optional) section below for how to enable it.
+
+Example (default SVG route):
 
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \
-  --text "Generate a 10-page PPT about AI Agent for technical audiences, without deep research, covering Agent technology trends" \
-  --render-mode svg
+  --text "Generate a 10-page PPT about AI Agent for technical audiences, without deep research, covering Agent technology trends"
 ```
+
+## HTML Render Route (Optional)
+
+The default SVG route produces editable native PPTX without extra system dependencies. If you specifically want the legacy HTML→PDF→PPTX route (which renders pages as HTML/CSS via a headless Chromium and converts PDF→PPTX via LibreOffice), follow the steps below.
+
+### 1. Install the extra dependencies
+
+From the skill directory:
+
+```bash
+.venv/bin/pip install playwright PyPDF2
+.venv/bin/python -m playwright install chromium
+```
+
+You will also need LibreOffice (≥ 25.2). Download it from `https://www.libreoffice.org/download/download-libreoffice/` or install via your system package manager.
+
+### 2. Re-run the installer with HTML route enabled (optional)
+
+If you want the installer to set up Playwright Chromium and a bundled LibreOffice copy for you, run:
+
+```bash
+python3 scripts/install/install.py --with-html-route
+```
+
+`--with-html-route` re-enables the Playwright Chromium install step and the bundled LibreOffice download that the default SVG-only install skips.
+
+### 3. Run the pipeline with `--render-mode html`
+
+```bash
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --text "<request>" \
+  --render-mode html
+```
+
+### Notes
+
+- `--render-mode html` is **not** advertised to host agents through `skill/SKILL.md`. When an agent uses the Slidea skill, it always runs the default SVG route unless you explicitly hand it the HTML-route command.
+- `scripts/html_to_pptx.py` and `scripts/patch_render_missing.py` (when `ppt.json` records `render_mode: "html"`) still work once the extra dependencies are in place.
 
 During PPT rendering, Slidea uses a few-shot approach to keep generated layouts visually consistent.
 
@@ -300,8 +347,8 @@ The runtime is configuration-driven. When optional services are unavailable, the
 
 - no Tavily configuration: skip web search
 - embedding disabled or unconfigured: skip embedding-based ranking
-- no LibreOffice conversion available: keep HTML/PDF outputs and skip PPTX conversion
 - no VLM configuration: skip VLM-based image scoring and distribution features
+- (HTML route only) no LibreOffice conversion available: keep HTML/PDF outputs and skip PPTX conversion. The default SVG route does not depend on LibreOffice.
 
 ## Documentation
 

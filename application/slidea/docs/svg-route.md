@@ -1,12 +1,12 @@
-# SVG Render Route
+# SVG Render Route (Default)
 
-Slidea now has an optional SVG-to-native-PPTX route alongside the default HTML route.
-
-The HTML route remains the default. The SVG route is selected explicitly with:
+Slidea renders slides as SVG and exports native editable PPTX. The SVG route is the default render route — no `--render-mode` flag is required.
 
 ```bash
-python3 scripts/run_ppt_pipeline.py --text "<request>" --render-mode svg
+python3 scripts/run_ppt_pipeline.py --text "<request>"
 ```
+
+The optional HTML render route is preserved in the codebase but is not advertised to host agents. See the repository README's "HTML Render Route (Optional)" section if you need it.
 
 ## Runtime Flow
 
@@ -26,14 +26,13 @@ Key output paths are recorded in `output/<run_id>/ppt.json`:
 
 ## Cache And Patch Rendering
 
-Render from a cached outline:
+Render from a cached outline (default SVG route):
 
 ```bash
 python3 scripts/run_ppt_pipeline.py \
   --text "<request>" \
   --stages render \
-  --run-id <run_id> \
-  --render-mode svg
+  --run-id <run_id>
 ```
 
 Patch render missing or selected pages:
@@ -43,7 +42,7 @@ python3 scripts/patch_render_missing.py --run-id <run_id>
 python3 scripts/patch_render_missing.py --run-id <run_id> --indices 0,3,5
 ```
 
-`patch_render_missing.py` reads `ppt.json` and chooses the HTML or SVG patch path automatically.
+`patch_render_missing.py` reads `ppt.json` and chooses the SVG or HTML patch path automatically based on the recorded `render_mode`.
 
 ## Quality Gates
 
@@ -66,7 +65,7 @@ If VLM is unavailable, the SVG route continues without visual review.
 
 Use this checklist before treating a new SVG-route change as production-ready:
 
-1. Generate a small deck with `--render-mode svg`.
+1. Generate a small deck with the default SVG route (no `--render-mode` flag needed).
 2. Confirm `ppt.json` contains `render_mode: "svg"` and non-empty `svg_output_dir`, `svg_final_dir`, and `pptx_path`.
 3. Inspect `svg_output/` and `svg_final/`; page count should match the outline.
 4. Open the generated PPTX in PowerPoint or LibreOffice.
