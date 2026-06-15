@@ -19,7 +19,6 @@ except ImportError:  # pragma: no cover - fallback for minimal environments
         @property
         def random(self):
             return "Mozilla/5.0"
-from PyPDF2 import PdfWriter
 from PIL import Image
 
 from core.utils.logger import logger
@@ -27,7 +26,6 @@ from core.utils.config import app_base_dir
 from core.ppt_generator.utils.pptx_postprocess import remove_full_slide_solid_backdrops
 from core.utils.image_payload import build_image_url
 from core.utils.libreoffice import get_available_libreoffice_executable
-from core.ppt_generator.utils.browser import BrowserManager
 
 
 UA = UserAgent()
@@ -106,6 +104,10 @@ async def get_scale_step_value(html_path):
     """
     使用 Playwright 获取在浏览器环境中 JS 循环的最终scale step值。
     """
+    # 懒加载：BrowserManager 顶部 import 会强制拉入 playwright，
+    # SVG 路线默认不安装 playwright。
+    from core.ppt_generator.utils.browser import BrowserManager
+
     absolute_html_path = os.path.abspath(html_path)
     async with BrowserManager.get_browser_context() as browser:
         context = await browser.new_context(viewport={'width': 1280, 'height': 720}, ignore_https_errors=True)
@@ -177,6 +179,9 @@ async def _batch_html_to_pdf(html_file_paths: list[str], save_dir: str) -> list[
     """
     并行处理 HTML 到 PDF 的转换 (使用全局 Browser 实例)
     """
+    # 懒加载：BrowserManager 仅在 HTML 路线被调用时才需要。
+    from core.ppt_generator.utils.browser import BrowserManager
+
     await warmup_render_assets()
     semaphore = asyncio.Semaphore(_get_html_to_pdf_concurrency())
     async with BrowserManager.get_browser_context() as browser:
@@ -741,6 +746,9 @@ async def _convert_single_html_to_pdf(browser, html_file_path: str, save_dir: st
 
 def _merge_pdfs(pdf_paths: list[str], output_path: str):
     """合并 PDF"""
+    # 懒加载：PyPDF2 仅在 HTML 路线（合并多页 PDF）时需要。
+    from PyPDF2 import PdfWriter
+
     merger = PdfWriter()
     for pdf_path in pdf_paths:
         merger.append(pdf_path)

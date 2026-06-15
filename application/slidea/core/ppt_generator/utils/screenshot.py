@@ -7,11 +7,6 @@ import subprocess
 import xml.etree.ElementTree as ET
 
 from core.utils.logger import logger
-from core.ppt_generator.utils.browser import BrowserManager
-from core.ppt_generator.utils.common import (
-    build_remote_asset_request_router,
-    wait_for_page_assets_ready,
-)
 
 
 SLIDE_WIDTH = 1280
@@ -40,6 +35,14 @@ _STYLE_FONT_FAMILY_RE = re.compile(r"(font-family\s*:\s*)([^;]+)", re.IGNORECASE
 
 async def screenshot_html(html_path: str, output_path: str) -> str:
     """渲染 HTML 并截图到 output_path，返回截图绝对路径。"""
+    # 懒加载 HTML 路线依赖：BrowserManager 顶部 import 会强制拉入 playwright，
+    # SVG 路线默认不安装 playwright，必须把 import 推迟到本函数被调用时。
+    from core.ppt_generator.utils.browser import BrowserManager
+    from core.ppt_generator.utils.common import (
+        build_remote_asset_request_router,
+        wait_for_page_assets_ready,
+    )
+
     absolute_html_path = os.path.abspath(html_path)
     async with BrowserManager.get_browser_context() as browser:
         context = await browser.new_context(
