@@ -46,8 +46,28 @@ run the PPT pipeline to generate the final presentation.
 
 Before starting, if no other slidea task is currently executing, clean up the `<SLIDEA_DIR>/output/db_data` directory.
 
-> **Important**: The PPT pipeline may take a long time to complete. If the runtime environment supports it, execute the pipeline with timeout set to 60 minutes.
+### Pre-run user reminder (mandatory)
 
+Before invoking the pipeline, you **must** send a short message to the user explaining that the run will take a while and asking them to be patient. Example:
+
+> Starting PPT generation. This typically takes 15-30 minutes (research, outline, rendering, PPTX export) and involves many model calls. Please be patient — I'll report back when generation completes.
+
+Do not silently start the pipeline. The user must know up front that this is a long-running operation.
+
+### Timeout requirement (mandatory)
+
+The PPT pipeline makes many sequential LLM calls (parsing, research routing, thought, outline, per-page SVG generation, quality checks, optional VLM review). End-to-end generation takes 15-30 minutes. Long runs are normal, not a sign of failure.
+
+When invoking the pipeline through a shell tool that accepts a timeout:
+
+- **Hard minimum: 15 minutes** (`timeout 15m` or equivalent). Never use anything below 15 minutes — the run will be killed mid-generation and leave a half-written cache.
+- **Hard maximum: 30 minutes** (`timeout 30m`). Do not exceed 30 minutes; if the run has not finished by then, something is wrong and you should investigate rather than wait longer.
+- **Recommended default: 30 minutes** (`timeout 30m`).
+- If the host tool does not accept a timeout flag, run the command in background mode and poll for completion instead of relying on a default short timeout.
+
+This rule applies to **every** command in this section: full pipeline, resume, and staged execution.
+
+### Commands
 
 **Full pipeline**:
 ```bash
@@ -141,6 +161,9 @@ If you want to set `--research-mode` to `simple` or `deep`, you must explicitly 
 
 ## Patch render (missing/target pages)
 Use when slide pages are missing or you want to re-render specific page indices without full rerun.
+
+Patch render also makes LLM calls (one per regenerated page plus quality check and PPTX export) and can take several minutes. Apply the same **timeout ≥ 15 minutes** rule as the full pipeline, and remind the user that patching takes a few minutes before invoking.
+
 ```bash
 .venv/bin/python scripts/patch_render_missing.py \
   --run-id <run_id> \
