@@ -96,7 +96,11 @@ async def extract_relevant_doc_node(state: ContentWorkerState):
 # 参考资料
 {page.reference_doc}
 """
-    response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)])
+    response = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        work_node="extract_relevant_doc",
+    )
     return {"relevant_material": response}
 
 
@@ -128,7 +132,12 @@ async def generate_image_queries_node(state: ContentWorkerState):
 # PPT的文字资料
 {state["relevant_material"]}
 """
-    response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=ImageQueries)
+    response = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        pydantic_schema=ImageQueries,
+        work_node="generate_image_queries",
+    )
     if not response:
         response = ImageQueries(need_search_image=[], need_ai_image=[])
 
@@ -194,7 +203,12 @@ async def get_final_images_node(state: ContentWorkerState):
 每个路径一定要以完整的绝对路径输出！！
 """
     schema = TypeAdapter(List[str]).json_schema()
-    img_list = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], json_schema=schema)
+    img_list = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        json_schema=schema,
+        work_node="get_final_images",
+    )
     if not img_list:
         img_list = []
     img_list.extend(state["content_page"].reference_images)
@@ -284,7 +298,12 @@ async def get_img_score_node(state: ImgScoreWorkerState):
     )]
 
     try:
-        response_data = await vlm_invoke(ModelRoute.DEFAULT, messages, pydantic_schema=ImageScoreResult)
+        response_data = await vlm_invoke(
+            ModelRoute.DEFAULT,
+            messages,
+            pydantic_schema=ImageScoreResult,
+            work_node="get_img_score",
+        )
 
         if not response_data or not response_data.img_description or not response_data.score:
             logger.debug(f"Error in get_img_score from img: {image_path}")

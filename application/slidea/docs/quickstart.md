@@ -54,10 +54,13 @@ Fill at least these fields in `.env`:
 
 ```env
 SLIDEA_MODE=ECONOMIC
+MODEL_INVOKE_HANDOVER=false
 DEFAULT_LLM_MODEL=...
 DEFAULT_LLM_API_KEY=...
 DEFAULT_LLM_API_BASE_URL=...
 ```
+
+When Slidea is pointed at `model_service`, set `MODEL_INVOKE_HANDOVER=true` to let `model_service` route by AgentProfile headers. In that mode Slidea ignores `SLIDEA_MODE`, `PREMIUM_LLM_*`, and `DEFAULT_VLM_*`; all text and vision requests go to `DEFAULT_LLM_API_BASE_URL` with an empty request model name. `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` are still required, but `DEFAULT_LLM_MODEL` can stay empty.
 
 Optional premium routing setup:
 

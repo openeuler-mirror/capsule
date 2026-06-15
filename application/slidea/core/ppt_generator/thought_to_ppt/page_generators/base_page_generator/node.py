@@ -38,7 +38,7 @@ class VLMCandidateInput:
     screenshot_path: str
     content: str
     judge_result: Dict[str, Any]
-    
+
 
 def _save_generate_prompt(state: PPTWorkerState) -> None:
     """Persist the per-page generation prompt to ``<save_dir>/prompts/`` for inspection.
@@ -80,6 +80,7 @@ async def generate_ppt_page_node(state: PPTWorkerState):
     response = await llm_invoke(
         ModelRoute.PREMIUM,
         [HumanMessage(content=state["generate_ppt_prompt"])],
+        work_node="generate_ppt_page",
     )
     html_content = extract_html_content_regex(response)
 
@@ -127,7 +128,11 @@ async def modify_ppt_page_node(state: PPTWorkerState):
 原HTML：
 {state["content"]}
 """
-    summarized_html = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=summary_prompt)])
+    summarized_html = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=summary_prompt)],
+        work_node="html_summary",
+    )
     if not summarized_html:
         summarized_html = state["content"]
 
@@ -144,12 +149,16 @@ PPT的HTML网页摘要如下：
 {state["ppt_prompt"]}
 """
 
-    response = await vlm_raw_invoke(ModelRoute.PREMIUM, [HumanMessage(
-        content=[
-            {"type": "text", "text": generate_ppt_prompt},
-            {"type": "image_url", "image_url": {"url": build_image_url(img_path)}},
-        ]
-    )])
+    response = await vlm_raw_invoke(
+        ModelRoute.PREMIUM,
+        [HumanMessage(
+            content=[
+                {"type": "text", "text": generate_ppt_prompt},
+                {"type": "image_url", "image_url": {"url": build_image_url(img_path)}},
+            ]
+        )],
+        work_node="modify_ppt_page",
+    )
     html_content = extract_html_content_regex(response.content)
 
     return {"content": html_content}
@@ -228,6 +237,7 @@ async def vlm_judge_node(state: PPTWorkerState):
                 ]
             )],
             schema_name="vlm_judge",
+            work_node="vlm_judge",
         )
     except Exception as error:
         logger.warning(f"vlm_judge call failed for page {index}: {error}")
@@ -313,6 +323,7 @@ async def vlm_modify_node(state: PPTWorkerState):
                 ]
             )],
             schema_name="vlm_fix",
+            work_node="vlm_fix",
         )
     except Exception as error:
         logger.warning(f"vlm_modify call failed for page {index}: {error}")
@@ -357,6 +368,7 @@ async def vlm_select_best_node(state: PPTWorkerState):
             ModelRoute.PREMIUM,
             [HumanMessage(content=content)],
             schema_name="vlm_select_best",
+            work_node="vlm_select_best",
         )
     except Exception as error:
         logger.warning(f"vlm_select_best call failed for page {index}: {error}")

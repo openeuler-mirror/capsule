@@ -81,7 +81,8 @@ class ImageReader:
 
             prompt = "请详细描述这张图片的内容。"
             logger.debug("ImageReader VLM 描述图片: {}", img_path)
-            response = await vlm_raw_invoke(ModelRoute.PREMIUM,
+            response = await vlm_raw_invoke(
+                ModelRoute.PREMIUM,
                 [
                     HumanMessage(
                         content=[
@@ -94,7 +95,8 @@ class ImageReader:
                             },
                         ]
                     )
-                ]
+                ],
+                work_node="image_file_description",
             )
             return response.content
         except Exception as e:

@@ -61,6 +61,7 @@ class Settings(BaseSettings):
 
     # Runtime routing mode
     SLIDEA_MODE: str = "ECONOMIC"
+    MODEL_INVOKE_HANDOVER: bool = False
 
     # Default LLM Settings
     DEFAULT_LLM_MODEL: str = ""
@@ -166,7 +167,13 @@ class Settings(BaseSettings):
             f"Invalid SLIDEA_MODE={raw_mode!r}. Supported values: PREMIUM, ECONOMIC, or empty."
         )
 
+    def should_handover_model_routing(self) -> bool:
+        return bool(self.MODEL_INVOKE_HANDOVER)
+
     def missing_premium_llm_settings(self) -> List[str]:
+        if self.should_handover_model_routing():
+            return []
+
         missing = []
         if not self.PREMIUM_LLM_MODEL:
             missing.append("PREMIUM_LLM_MODEL")
@@ -184,7 +191,7 @@ class Settings(BaseSettings):
 
     def missing_default_llm_settings(self) -> List[str]:
         missing = []
-        if not self.DEFAULT_LLM_MODEL:
+        if not self.should_handover_model_routing() and not self.DEFAULT_LLM_MODEL:
             missing.append("DEFAULT_LLM_MODEL")
         if not self.DEFAULT_LLM_API_KEY:
             missing.append("DEFAULT_LLM_API_KEY")
@@ -214,4 +221,5 @@ class Settings(BaseSettings):
 
 # Create settings instance
 settings = Settings()
-settings.get_slidea_mode()
+if not settings.should_handover_model_routing():
+    settings.get_slidea_mode()

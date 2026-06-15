@@ -77,6 +77,7 @@ async def _llm_invoke_slides_with_retry(
                 ModelRoute.PREMIUM,
                 [HumanMessage(content=attempt_prompt)],
                 json_schema=schema,
+                work_node=label,
             )
         except Exception as error:
             logger.warning(
@@ -148,7 +149,12 @@ async def analyze_input_node(state: OutlineState):
     - `reasoning`: str (简短的决策理由)
 """
 
-    result = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=UserQuery)
+    result = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        pydantic_schema=UserQuery,
+        work_node="analyze_input",
+    )
     if not result:
         logger.warning(f"--- 页数分析出错，使用默认值 15 ---")
         target_pages = 15
@@ -202,7 +208,12 @@ PPT制作的原始需求为：
 """
 
     json_schema = TypeAdapter(List[ChapterDetail]).json_schema()
-    chapters_data = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)], json_schema=json_schema)
+    chapters_data = await llm_invoke(
+        ModelRoute.PREMIUM,
+        [HumanMessage(content=prompt)],
+        json_schema=json_schema,
+        work_node="split_chapters",
+    )
     if not chapters_data:
         chapters_data = []
 
@@ -437,7 +448,12 @@ async def plan_and_allocate_node(state: OutlineState):
 """
 
     schema = TypeAdapter(List[ChapterItem]).json_schema()
-    plan_data = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)], json_schema=schema)
+    plan_data = await llm_invoke(
+        ModelRoute.PREMIUM,
+        [HumanMessage(content=prompt)],
+        json_schema=schema,
+        work_node="plan_and_allocate",
+    )
     if not plan_data:
         plan_data = []
 
@@ -523,7 +539,12 @@ async def assemble_chapters_node(state: OutlineState, writer: StreamWriter):
 )
 """
 
-    metadata = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=CoverItem)
+    metadata = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        pydantic_schema=CoverItem,
+        work_node="assemble_chapters",
+    )
     if metadata:
         logger.info(f"封面与目录: {metadata}")
         final_list.extend(

@@ -50,6 +50,10 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertEqual(mode, "ECONOMIC")
         self.assertTrue(any("Falling back to ECONOMIC mode" in message for message in logs.output))
 
+    def test_model_handover_flag_controls_routing_mode(self):
+        self.assertFalse(Settings().should_handover_model_routing())
+        self.assertTrue(Settings(MODEL_INVOKE_HANDOVER=True).should_handover_model_routing())
+
     def test_invalid_slidea_mode_fails_during_module_import(self):
         def fake_load_dotenv(*args, **kwargs):
             del args, kwargs
@@ -76,6 +80,40 @@ class RuntimeConfigTests(unittest.TestCase):
                 os.environ.pop("SLIDEA_MODE", None)
             else:
                 os.environ["SLIDEA_MODE"] = original_mode
+            importlib.import_module("core.utils.config")
+
+    def test_handover_skips_slidea_mode_validation_during_module_import(self):
+        def fake_load_dotenv(*args, **kwargs):
+            del args, kwargs
+            return False
+
+        original_mode = os.environ.get("SLIDEA_MODE")
+        original_handover = os.environ.get("MODEL_INVOKE_HANDOVER")
+        original_dotenv = sys.modules.get("dotenv")
+        sys.modules.pop("core.utils.config", None)
+        os.environ["SLIDEA_MODE"] = "fast"
+        os.environ["MODEL_INVOKE_HANDOVER"] = "true"
+        fake_dotenv = types.ModuleType("dotenv")
+        fake_dotenv.load_dotenv = fake_load_dotenv
+        sys.modules["dotenv"] = fake_dotenv
+
+        try:
+            module = importlib.import_module("core.utils.config")
+            self.assertTrue(module.settings.should_handover_model_routing())
+        finally:
+            sys.modules.pop("core.utils.config", None)
+            if original_dotenv is None:
+                sys.modules.pop("dotenv", None)
+            else:
+                sys.modules["dotenv"] = original_dotenv
+            if original_mode is None:
+                os.environ.pop("SLIDEA_MODE", None)
+            else:
+                os.environ["SLIDEA_MODE"] = original_mode
+            if original_handover is None:
+                os.environ.pop("MODEL_INVOKE_HANDOVER", None)
+            else:
+                os.environ["MODEL_INVOKE_HANDOVER"] = original_handover
             importlib.import_module("core.utils.config")
 
 

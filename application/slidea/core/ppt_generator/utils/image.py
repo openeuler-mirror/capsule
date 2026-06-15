@@ -143,7 +143,11 @@ async def generate_ai_image(image_prompt: str, save_dir: str | None = None):
         {image_prompt}
         生成朴素、简洁、AI味少的图片。
     """
-    response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)])
+    response = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        work_node="ai_image_prompt_optimization",
+    )
     prompt = response + "生成朴素、简洁、AI味少的图片。"
     logger.info(f"图片生成提示词: {prompt}")
     payload = {

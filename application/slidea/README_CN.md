@@ -155,6 +155,7 @@ Deep Research 是一个可独立安装和使用的深度研究 skill。它可以
    - `DEFAULT_LLM_API_BASE_URL`
    当前这些配置仅支持 OpenAI-compatible API。
    最小可运行配置是 `SLIDEA_MODE=ECONOMIC` 加上三项 `DEFAULT_LLM_*`。
+   如果 Slidea 连接的是 `model_service`，并希望由 `model_service` 根据 AgentProfile 自动选择模型，可以设置 `MODEL_INVOKE_HANDOVER=true`。此时 Slidea 会忽略 `SLIDEA_MODE`、`PREMIUM_LLM_*` 和 `DEFAULT_VLM_*`，所有文本和视觉请求都发往 `DEFAULT_LLM_API_BASE_URL`，请求中的模型名留空，并携带 AgentProfile header；仍需要配置 `DEFAULT_LLM_API_KEY` 和 `DEFAULT_LLM_API_BASE_URL`，但不再要求 `DEFAULT_LLM_MODEL`。
    如果你希望 premium 路由调用点优先使用高级模型，再额外补充 `PREMIUM_LLM_API_KEY`。
    `PREMIUM_LLM_MODEL` 和 `PREMIUM_LLM_API_BASE_URL` 已给出固定推荐默认值，通常不要改动；当前唯一推荐的 premium 模型是 `google/gemini-3.1-pro-preview`。
 

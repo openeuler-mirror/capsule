@@ -116,7 +116,7 @@ Blocking vs advisory behavior:
 
 - `env_setup` when `.env` is missing, and `default_llm`, are blocking checks.
 - `premium_llm`, `tavily`, `default_vlm`, `embedding`, and `libreoffice` are advisory warnings for agents.
-- `runtime_python`, `browser`, and incomplete `SETUP_COMPLETED` are warnings in phase 1 and should not stop execution on their own.
+- `runtime_python`, `browser`, and incomplete `SETUP_COMPLETED` are advisory warnings and should not stop execution on their own.
 
 Possible top-level outcomes:
 

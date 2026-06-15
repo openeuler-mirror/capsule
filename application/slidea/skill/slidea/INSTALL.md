@@ -101,6 +101,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
 
    ```env
    SLIDEA_MODE=ECONOMIC
+   MODEL_INVOKE_HANDOVER=false
    DEFAULT_LLM_MODEL=
    DEFAULT_LLM_API_KEY=
    DEFAULT_LLM_API_BASE_URL=
@@ -109,6 +110,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    PPT generation will not work properly until these values are configured.
 
    These settings currently support OpenAI-compatible APIs only.
+   If the endpoint is `model_service` and the user wants AgentProfile routing, set `MODEL_INVOKE_HANDOVER=true`; then Slidea ignores `SLIDEA_MODE`, `PREMIUM_LLM_*`, and `DEFAULT_VLM_*`, sends all text and vision requests to `DEFAULT_LLM_API_BASE_URL`, and `DEFAULT_LLM_MODEL` may stay empty. `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` must still be configured.
 
    Premium mode is optional. If the user wants premium-routed callsites to use the premium model first, keep these fixed defaults and only try to fill in `PREMIUM_LLM_API_KEY`:
 

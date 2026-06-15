@@ -249,7 +249,7 @@ def run_preflight(
     else:
         checks.append(_result("default_llm", "ok", "Default LLM settings are configured."))
 
-    if settings.get_slidea_mode() == "PREMIUM":
+    if not settings.should_handover_model_routing() and settings.get_slidea_mode() == "PREMIUM":
         if not settings.has_premium_llm_api_key():
             checks.append(
                 _result(
@@ -285,17 +285,26 @@ def run_preflight(
             )
         )
 
-    missing_vlm = settings.missing_default_vlm_settings()
-    if missing_vlm:
+    if settings.should_handover_model_routing():
         checks.append(
             _result(
-                "default_vlm",
-                "warning",
-                "Default VLM settings are not configured, so PPT reflection will be skipped, may increase layout anomalies.",
+                "model_handover",
+                "ok",
+                "Model handover is enabled; text and vision requests use the DEFAULT_LLM endpoint.",
             )
         )
     else:
-        checks.append(_result("default_vlm", "ok", "Default VLM settings are configured."))
+        missing_vlm = settings.missing_default_vlm_settings()
+        if missing_vlm:
+            checks.append(
+                _result(
+                    "default_vlm",
+                    "warning",
+                    "Default VLM settings are not configured, so PPT reflection will be skipped, may increase layout anomalies.",
+                )
+            )
+        else:
+            checks.append(_result("default_vlm", "ok", "Default VLM settings are configured."))
 
     if settings.DISABLE_EMBEDDING:
         checks.append(

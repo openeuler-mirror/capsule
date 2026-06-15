@@ -129,7 +129,11 @@ async def add_task_reference(existing_refs: List[ReferenceItem], datas: list, to
             if data["dont_summary"]:
                 summary = chunk
             else:
-                summary = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=summary_prompt)])
+                summary = await llm_invoke(
+                    ModelRoute.DEFAULT,
+                    [HumanMessage(content=summary_prompt)],
+                    work_node="reference_summary",
+                )
                 if not summary:
                     summary = ""
 

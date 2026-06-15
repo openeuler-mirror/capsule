@@ -159,6 +159,7 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
    - `DEFAULT_LLM_API_BASE_URL`
    These settings currently support OpenAI-compatible APIs only.
    The minimum runnable setup is `SLIDEA_MODE=ECONOMIC` plus the three `DEFAULT_LLM_*` values.
+   If Slidea connects to `model_service` and you want `model_service` to choose models through AgentProfile routing, set `MODEL_INVOKE_HANDOVER=true`. Slidea will ignore `SLIDEA_MODE`, `PREMIUM_LLM_*`, and `DEFAULT_VLM_*`; all text and vision requests go to `DEFAULT_LLM_API_BASE_URL` with an empty request model name and AgentProfile headers. `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` are still required, but `DEFAULT_LLM_MODEL` is no longer required.
    If you want premium-routed callsites to use the premium model first, also fill in `PREMIUM_LLM_API_KEY`.
    `PREMIUM_LLM_MODEL` and `PREMIUM_LLM_API_BASE_URL` already have fixed recommended defaults and should usually not be changed. The only recommended premium model right now is `google/gemini-3.1-pro-preview`.
 
