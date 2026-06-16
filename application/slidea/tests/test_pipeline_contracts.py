@@ -48,7 +48,7 @@ class PipelineContractTests(unittest.TestCase):
     def test_deep_research_context_uses_shared_settings_singleton(self):
         source = (ROOT / "core/deep_research/context.py").read_text(encoding="utf-8")
 
-        self.assertIn("from core.utils.config import settings, app_base_dir", source)
+        self.assertIn("from core.utils.config import settings, output_files_dir", source)
         self.assertNotIn("runtime_settings = Settings()", source)
         self.assertNotIn("if Settings().DISABLE_EMBEDDING:", source)
         self.assertIn("model = settings.EMBEDDING_MODEL", source)
@@ -107,7 +107,8 @@ class PipelineContractTests(unittest.TestCase):
         self.assertIn("def _load_outline_or_emit(args, out_dir: str):", source)
         self.assertIn("def _resolve_save_dir(out_dir: str, topic: str):", source)
         self.assertIn("def _resolve_target_indices(args, save_dir: str, outline):", source)
-        self.assertIn("async def _patch_render(args, out_dir: str, outline, topic: str, save_dir: str, target_indices: list[int]):", source)
+        self.assertIn("async def _patch_render(context: PatchRenderContext):", source)
+        self.assertIn("render_mode = getattr(context.args, \"render_mode\", None) or _read_render_mode(context.out_dir)", source)
 
 
 if __name__ == "__main__":
