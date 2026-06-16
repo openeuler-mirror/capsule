@@ -617,6 +617,33 @@ def install_libreoffice_to_local_dir() -> None:
     raise RuntimeError(f"Unsupported operating system: {os_type}")
 
 
+def check_bundled_fonts() -> None:
+    """Sanity-check the bundled CJK fonts under ``assets/fonts/``.
+
+    These fonts back the SVG-route PNG fallback on hosts without system CJK fonts
+    (see ``core/ppt_generator/utils/screenshot.py:_bundled_fonts_context``). Missing
+    fonts are not fatal — the SVG route still works if the host has its own CJK
+    fonts — so this only emits a warning to surface the gap.
+    """
+    fonts_dir = ROOT_DIR / "assets" / "fonts"
+    font_exts = (".otf", ".ttf", ".ttc")
+    found = [
+        p for p in sorted(fonts_dir.glob("*"))
+        if p.is_file() and p.suffix.lower() in font_exts
+    ] if fonts_dir.exists() else []
+    if not found:
+        log_warning(
+            "No bundled CJK fonts under assets/fonts/. SVG-route PNG fallback "
+            "will rely on the host's own CJK fonts; if the host has none, Chinese "
+            "characters may render as tofu in the fallback PNG (the editable "
+            "PPTX itself is unaffected). Re-export the skill from a clean checkout "
+            "to restore them."
+        )
+        return
+    names = ", ".join(p.name for p in found)
+    log_success(f"Bundled CJK fonts present ({names}).")
+
+
 def main(*, skip_playwright: bool = True, skip_libreoffice: bool = True) -> int:
     """Install slidea runtime.
 
@@ -950,6 +977,8 @@ def main(*, skip_playwright: bool = True, skip_libreoffice: bool = True) -> int:
             )
         except Exception as exc:
             record_step_failure(issues, 6, "Update Install State", exc)
+
+    check_bundled_fonts()
 
     print_post_install_summary(
         issues,

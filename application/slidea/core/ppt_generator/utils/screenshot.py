@@ -1,11 +1,15 @@
 import asyncio
+from contextlib import contextmanager
 from functools import lru_cache
 import os
 import re
 import shutil
 import subprocess
+import tempfile
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from core.utils.config import app_base_dir
 from core.utils.logger import logger
 
 
@@ -31,6 +35,8 @@ CJK_SERIF_FONT_FALLBACKS = (
     "SimSun",
 )
 _STYLE_FONT_FAMILY_RE = re.compile(r"(font-family\s*:\s*)([^;]+)", re.IGNORECASE)
+
+BUNDLED_FONTS_DIR = app_base_dir / "assets" / "fonts"
 
 
 async def screenshot_html(html_path: str, output_path: str) -> str:
@@ -73,13 +79,14 @@ async def screenshot_svg(svg_path: str, output_path: str) -> str:
     svg_bytes = _prepare_svg_bytes_for_cairo(absolute_svg_path)
 
     def _render() -> None:
-        cairosvg.svg2png(
-            bytestring=svg_bytes,
-            url=absolute_svg_path,
-            write_to=output_path,
-            output_width=SLIDE_WIDTH,
-            output_height=SLIDE_HEIGHT,
-        )
+        with _bundled_fonts_context():
+            cairosvg.svg2png(
+                bytestring=svg_bytes,
+                url=absolute_svg_path,
+                write_to=output_path,
+                output_width=SLIDE_WIDTH,
+                output_height=SLIDE_HEIGHT,
+            )
 
     await asyncio.to_thread(_render)
     logger.info(f"SVG 截图已保存到: {output_path}")
@@ -95,12 +102,13 @@ async def screenshot_svg_bytes(svg_bytes: bytes, output_path: str) -> str:
     svg_bytes = _add_cjk_font_fallbacks(svg_bytes)
 
     def _render() -> None:
-        cairosvg.svg2png(
-            bytestring=svg_bytes,
-            write_to=output_path,
-            output_width=SLIDE_WIDTH,
-            output_height=SLIDE_HEIGHT,
-        )
+        with _bundled_fonts_context():
+            cairosvg.svg2png(
+                bytestring=svg_bytes,
+                write_to=output_path,
+                output_width=SLIDE_WIDTH,
+                output_height=SLIDE_HEIGHT,
+            )
 
     await asyncio.to_thread(_render)
     logger.info(f"SVG 截图已保存到: {output_path}")
@@ -293,3 +301,84 @@ def _cjk_font_score(font_name: str, serif: bool) -> tuple[int, int, str]:
 def _quote_font_family(font_name: str) -> str:
     escaped = font_name.replace('"', '\\"')
     return f'"{escaped}"'
+
+
+@contextmanager
+def _bundled_fonts_context():
+    """Scope-local fontconfig pointing at bundled CJK fonts when the system has none.
+
+    Why: cairosvg/pango use fontconfig. On a system without CJK fonts (e.g. a minimal
+    intranet Linux), Chinese chars in the rasterized PNG fallback become tofu squares,
+    breaking both human preview and VLM layout reflection. Slidea bundles Noto Sans
+    CJK SC under ``assets/fonts/`` as a last-resort source.
+
+    How: detects via ``fc-list :charset=4e2d`` first. If the system already has any
+    CJK-capable font, this is a no-op so user preferences (Source Han, PingFang, etc.)
+    are respected. If none is found *and* bundled fonts exist, swaps ``FONTCONFIG_FILE``
+    to a temporary ``fonts.conf`` that adds the bundled dir while still ``<include>``-ing
+    the system config. Restored in ``finally``.
+    """
+    if _detect_system_cjk_fonts(False):
+        yield
+        return
+
+    bundled = _list_bundled_font_files()
+    if not bundled:
+        logger.debug("包内无 CJK 字体可用，跳过 fontconfig 注入")
+        yield
+        return
+
+    system_conf = _find_system_fontconfig_conf()
+    tmpdir = tempfile.mkdtemp(prefix="slidea-fc-")
+    try:
+        fonts_dir = Path(tmpdir) / "fonts"
+        fonts_dir.mkdir()
+        for source in bundled:
+            (fonts_dir / source.name).symlink_to(source)
+
+        conf_path = Path(tmpdir) / "fonts.conf"
+        conf_xml = [
+            '<?xml version="1.0"?>',
+            '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">',
+            '<fontconfig>',
+            f'  <dir>{fonts_dir}</dir>',
+            f'  <cachedir>{tmpdir}/cache</cachedir>',
+        ]
+        if system_conf and system_conf.exists():
+            conf_xml.append(f'  <include ignore_missing="yes">{system_conf}</include>')
+        conf_xml.append('</fontconfig>')
+        conf_path.write_text("\n".join(conf_xml), encoding="utf-8")
+
+        prev_fc = os.environ.get("FONTCONFIG_FILE")
+        os.environ["FONTCONFIG_FILE"] = str(conf_path)
+        logger.info(f"系统未检测到 CJK 字体，临时启用包内字体: {fonts_dir}")
+        try:
+            yield
+        finally:
+            if prev_fc is None:
+                os.environ.pop("FONTCONFIG_FILE", None)
+            else:
+                os.environ["FONTCONFIG_FILE"] = prev_fc
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _list_bundled_font_files() -> list[Path]:
+    if not BUNDLED_FONTS_DIR.exists():
+        return []
+    return [
+        path
+        for path in sorted(BUNDLED_FONTS_DIR.iterdir())
+        if path.suffix.lower() in (".otf", ".ttf", ".ttc")
+    ]
+
+
+def _find_system_fontconfig_conf() -> Path | None:
+    for candidate in (
+        Path("/etc/fonts/fonts.conf"),
+        Path("/usr/local/etc/fonts/fonts.conf"),
+        Path("/etc/fonts/local.conf"),
+    ):
+        if candidate.exists():
+            return candidate
+    return None

@@ -89,6 +89,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    - Creates `.venv` with `uv venv --python 3.11 --seed`
    - Installs `requirements.txt` (SVG render route dependencies only)
    - Skips Playwright Chromium and LibreOffice by default — they are only needed by the optional HTML render route
+   - Verifies the bundled CJK fonts under `assets/fonts/` — used as a fallback so the SVG-route PNG snapshot renders Chinese correctly even on hosts without system CJK fonts
    - Creates `.env` from `.env.example` when needed
    - Writes `SETUP_COMPLETED=true` after the base Python/bootstrap dependencies are installed
 
