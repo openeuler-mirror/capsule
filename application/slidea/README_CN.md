@@ -156,8 +156,21 @@ Deep Research 是一个可独立安装和使用的深度研究 skill。它可以
    当前这些配置仅支持 OpenAI-compatible API。
    最小可运行配置是 `SLIDEA_MODE=ECONOMIC` 加上三项 `DEFAULT_LLM_*`。
    如果 Slidea 连接的是 `model_service`，并希望由 `model_service` 根据 AgentProfile 自动选择模型，可以设置 `MODEL_INVOKE_HANDOVER=true`。此时 Slidea 会忽略 `SLIDEA_MODE`、`PREMIUM_LLM_*` 和 `DEFAULT_VLM_*`，所有文本和视觉请求都发往 `DEFAULT_LLM_API_BASE_URL`，请求中的模型名留空，并携带 AgentProfile header；仍需要配置 `DEFAULT_LLM_API_KEY` 和 `DEFAULT_LLM_API_BASE_URL`，但不再要求 `DEFAULT_LLM_MODEL`。
-   如果你希望 premium 路由调用点优先使用高级模型，再额外补充 `PREMIUM_LLM_API_KEY`。
-   `PREMIUM_LLM_MODEL` 和 `PREMIUM_LLM_API_BASE_URL` 已给出固定推荐默认值，通常不要改动；当前唯一推荐的 premium 模型是 `google/gemini-3.1-pro-preview`。
+   Slidea 采用两层模型路由。`DEFAULT_LLM` 是必填项——绝大部分 pipeline 调用点（解析、深度研究、大纲默认分支、页面生成、HTML 视觉复核）都固定走它；没有它 pipeline 起不来。`PREMIUM_LLM` 是可选项——只有 `SLIDEA_MODE=PREMIUM` 时才会用在大纲主结构、SVG 页面生成这两个质量关键调用点；调用失败会自动回退到 `DEFAULT_LLM`。
+
+   三种配置情况：
+
+   - **只配 `DEFAULT_LLM`**：pipeline 能完整跑完。即使 `SLIDEA_MODE=PREMIUM`，premium 路由的调用点也只会打一条警告并回退到 `DEFAULT_LLM`，效果等同 `ECONOMIC`。这是最小可用配置，常规使用足够了。
+   - **只配 `PREMIUM_LLM`（DEFAULT_LLM 留空）**：pipeline 在第一个 DEFAULT 路由调用点抛 `Missing configuration for default_llm` 后中断。不支持这种配置。
+   - **两个都配 + `SLIDEA_MODE=PREMIUM`**：premium 路由的调用点优先走 `PREMIUM_LLM`，调用失败时自动回退到 `DEFAULT_LLM`。
+
+   如果你希望 premium 路由调用点优先使用高级模型，再额外补充 `PREMIUM_LLM_API_KEY`。默认 `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` 即可；`GLM-5.2` 也是 premium 槽位的推荐选项。
+
+   推荐模型：
+
+   - `DEFAULT_LLM_MODEL`：`google/gemini-3.1-pro-preview`、`GLM-5.2` 或 `deepseek-v4-pro`
+   - `PREMIUM_LLM_MODEL`：`google/gemini-3.1-pro-preview` 或 `GLM-5.2`（默认为 gemini）
+   - `DEFAULT_VLM_MODEL`：`kimi-2.5` 或 `kimi-2.6`
 
 4. 快速示例：
 

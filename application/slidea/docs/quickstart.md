@@ -72,6 +72,14 @@ PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1
 
 `PREMIUM_LLM_MODEL` and `PREMIUM_LLM_API_BASE_URL` are intentionally fixed to the recommended default. In most cases you only need to fill in `PREMIUM_LLM_API_KEY`.
 
+`DEFAULT_LLM` is the baseline — the pipeline cannot start without it, and configuring only `DEFAULT_LLM` is sufficient for normal use. `PREMIUM_LLM` is optional and only used by two quality-critical callsites under `SLIDEA_MODE=PREMIUM` (outline main structure and SVG page generation), with automatic fallback to `DEFAULT_LLM` on error or empty key.
+
+Recommended models:
+
+- `DEFAULT_LLM_MODEL`: `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
+- `PREMIUM_LLM_MODEL`: `google/gemini-3.1-pro-preview` or `GLM-5.2` (default is gemini)
+- `DEFAULT_VLM_MODEL`: `kimi-2.5` or `kimi-2.6`
+
 Recommended minimum for a friction-free local setup:
 
 ```env

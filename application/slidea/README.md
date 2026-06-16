@@ -160,8 +160,21 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
    These settings currently support OpenAI-compatible APIs only.
    The minimum runnable setup is `SLIDEA_MODE=ECONOMIC` plus the three `DEFAULT_LLM_*` values.
    If Slidea connects to `model_service` and you want `model_service` to choose models through AgentProfile routing, set `MODEL_INVOKE_HANDOVER=true`. Slidea will ignore `SLIDEA_MODE`, `PREMIUM_LLM_*`, and `DEFAULT_VLM_*`; all text and vision requests go to `DEFAULT_LLM_API_BASE_URL` with an empty request model name and AgentProfile headers. `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` are still required, but `DEFAULT_LLM_MODEL` is no longer required.
-   If you want premium-routed callsites to use the premium model first, also fill in `PREMIUM_LLM_API_KEY`.
-   `PREMIUM_LLM_MODEL` and `PREMIUM_LLM_API_BASE_URL` already have fixed recommended defaults and should usually not be changed. The only recommended premium model right now is `google/gemini-3.1-pro-preview`.
+   Slidea uses two-tier model routing. `DEFAULT_LLM` is required — most pipeline callsites (parsing, deep research, outline default branches, page generation, HTML visual review) always use it; without it the pipeline cannot start. `PREMIUM_LLM` is optional — under `SLIDEA_MODE=PREMIUM` it powers two quality-critical callsites (outline main structure and SVG page generation); on error it automatically falls back to `DEFAULT_LLM`.
+
+   Three configuration outcomes:
+
+   - **Only `DEFAULT_LLM` configured**: pipeline runs end-to-end. Even with `SLIDEA_MODE=PREMIUM`, premium-routed callsites log a warning and fall back to `DEFAULT_LLM`, which is functionally identical to `SLIDEA_MODE=ECONOMIC`. This is the minimum setup and is sufficient for normal use.
+   - **Only `PREMIUM_LLM` configured (DEFAULT_LLM empty)**: pipeline fails at the first DEFAULT-routed call with `Missing configuration for default_llm`. Not supported.
+   - **Both configured + `SLIDEA_MODE=PREMIUM`**: premium-routed callsites use `PREMIUM_LLM` first with automatic fallback to `DEFAULT_LLM` on error.
+
+   If you want premium-routed callsites to use the premium model first, also fill in `PREMIUM_LLM_API_KEY`. The default `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` is fine; GLM-5.2 is also a recommended option for the premium slot.
+
+   Recommended models:
+
+   - `DEFAULT_LLM_MODEL`: `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
+   - `PREMIUM_LLM_MODEL`: `google/gemini-3.1-pro-preview` or `GLM-5.2` (default is gemini)
+   - `DEFAULT_VLM_MODEL`: `kimi-2.5` or `kimi-2.6`
 
 4. Quick example:
    ```bash

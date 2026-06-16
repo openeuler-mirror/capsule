@@ -112,7 +112,21 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    These settings currently support OpenAI-compatible APIs only.
    If the endpoint is `model_service` and the user wants AgentProfile routing, set `MODEL_INVOKE_HANDOVER=true`; then Slidea ignores `SLIDEA_MODE`, `PREMIUM_LLM_*`, and `DEFAULT_VLM_*`, sends all text and vision requests to `DEFAULT_LLM_API_BASE_URL`, and `DEFAULT_LLM_MODEL` may stay empty. `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` must still be configured.
 
-   Premium mode is optional. If the user wants premium-routed callsites to use the premium model first, keep these fixed defaults and only try to fill in `PREMIUM_LLM_API_KEY`:
+   By default, configuring only `DEFAULT_LLM` is sufficient to run the whole pipeline. `PREMIUM_LLM` is optional and only affects two quality-critical callsites (outline main structure and SVG page generation) under `SLIDEA_MODE=PREMIUM`; premium-routed callsites automatically fall back to `DEFAULT_LLM` when `PREMIUM_LLM_API_KEY` is empty or the call fails. The pipeline cannot run with only `PREMIUM_LLM` configured and `DEFAULT_LLM` empty.
+
+   Three configuration outcomes:
+
+   - **Only `DEFAULT_LLM` configured**: pipeline runs end-to-end; premium-routed callsites fall back to `DEFAULT_LLM`. This is the minimum setup and is sufficient for normal use.
+   - **Only `PREMIUM_LLM` configured (DEFAULT_LLM empty)**: pipeline fails at the first DEFAULT-routed call with `Missing configuration for default_llm`. Not supported.
+   - **Both configured + `SLIDEA_MODE=PREMIUM`**: premium-routed callsites use `PREMIUM_LLM` first with automatic fallback to `DEFAULT_LLM`.
+
+   Recommended models:
+
+   - `DEFAULT_LLM_MODEL` (required): `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
+   - `PREMIUM_LLM_MODEL` (optional): `google/gemini-3.1-pro-preview` or `GLM-5.2`
+   - `DEFAULT_VLM_MODEL` (optional): `kimi-2.5` or `kimi-2.6`
+
+   If the user wants premium-routed callsites to use the premium model first, keep these fixed defaults and only try to fill in `PREMIUM_LLM_API_KEY`:
 
    ```env
    PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview
@@ -120,7 +134,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1
    ```
 
-   Do not change the default `PREMIUM_LLM_MODEL` or `PREMIUM_LLM_API_BASE_URL` unless the user explicitly asks for it. `google/gemini-3.1-pro-preview` is the only recommended premium model at the moment.
+   The default `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` is fine; `GLM-5.2` is also recommended for the premium slot.
 
    Good places to look include common local agent/runtime config files such as:
    - `~/.config/opencode/opencode.json`
@@ -168,7 +182,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
 
    You can also tell the user that they may send you the configuration and you can help fill it in, or they can edit `<SKILLS_DIR>/slidea/.env` manually. After the configuration is updated, they should restart the agent so the skill can take effect.
 
-   Before finishing, explicitly tell the user that the recommended premium model is **Gemini 3.1 Pro Preview**, and that they should usually only need to fill in `PREMIUM_LLM_API_KEY` when enabling premium mode.
+   Before finishing, tell the user that configuring only `DEFAULT_LLM` is sufficient for normal use, then briefly mention the recommended model list: `DEFAULT_LLM` → `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`; `PREMIUM_LLM` → `google/gemini-3.1-pro-preview` or `GLM-5.2` (optional, only used when `SLIDEA_MODE=PREMIUM`); `DEFAULT_VLM` → `kimi-2.5` or `kimi-2.6`. If the user wants premium mode, the recommended premium models are **Gemini 3.1 Pro Preview** or **GLM-5.2** and they should usually only need to fill in `PREMIUM_LLM_API_KEY`.
 
 ## Verify
 
@@ -204,6 +218,7 @@ Inside that final summary block, keep the wording concise and easy to scan. Cove
 
 4. **Required reminders**
    - If you did not help auto-configure the default LLM settings, explicitly tell the user that they still need to fill in `SLIDEA_MODE` and the three `DEFAULT_LLM_*` values.
+   - Tell the user that configuring only `DEFAULT_LLM` is sufficient for normal use, and briefly mention the recommended model list: `DEFAULT_LLM` → `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`; `PREMIUM_LLM` → `google/gemini-3.1-pro-preview` or `GLM-5.2` (optional, only used when `SLIDEA_MODE=PREMIUM`); `DEFAULT_VLM` → `kimi-2.5` or `kimi-2.6`.
    - If the user wants premium mode, explicitly remind them that the recommended premium model is **Gemini 3.1 Pro Preview**, and they should normally only need to fill in `PREMIUM_LLM_API_KEY`.
    - RHEL-family Linux helper script (`extra_install_linux_rhel.sh`) is only required by the optional HTML render route. The default SVG-only install does not run it and does not ask the user to run it. Only mention the helper when the user explicitly opted into the HTML route via `python3 scripts/install/install.py --with-html-route`; in that case, the installer log will surface the exact command to run and you should relay it verbatim.
 
