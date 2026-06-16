@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-MANIFEST_PATH = ROOT_DIR / "skill" / "manifest.json"
+MANIFEST_PATH = ROOT_DIR / "skill" / "slidea" / "manifest.json"
 
 
 def _load_manifest(manifest_path: Path | None = None) -> dict:
@@ -119,8 +119,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--manifest",
-        default="skill/manifest.json",
-        help="Path to skill manifest JSON relative to project root (default: skill/manifest.json).",
+        default="skill/slidea/manifest.json",
+        help="Path to skill manifest JSON relative to project root (default: skill/slidea/manifest.json).",
     )
     return parser
 

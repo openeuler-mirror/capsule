@@ -14,7 +14,7 @@ class PipelineContractTests(unittest.TestCase):
         self.assertIn("final rendered artifacts are written to the render directory recorded in `ppt.json`", content)
 
     def test_skill_describes_actual_ppt_json_location(self):
-        content = (ROOT / "skill/SKILL.md").read_text(encoding="utf-8")
+        content = (ROOT / "skill/slidea/SKILL.md").read_text(encoding="utf-8")
 
         self.assertIn("`ppt.json`", content)
         self.assertIn("stored at `output/<run_id>/ppt.json`", content)

@@ -40,23 +40,35 @@ The system is designed for agent-driven usage. It supports staged execution, res
 - intermediate outputs can be cached, inspected, edited, resumed, or reused.
 
 
-## Quick Start: Install Slidea as a Skill Through an Agent (Recommended)
+## Quick Start: Install Skills Through an Agent (Recommended)
 
-Slidea is primarily intended to be installed as a skill inside an agent environment. If your agent platform supports local skills, you can install Slidea easily. After installation, configure `.env` according to the current two-tier routing setup. In most cases you only need to configure `DEFAULT_LLM` first. If you want to enable `PREMIUM` mode, keep `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` and `PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1` unchanged, and usually only fill in `PREMIUM_LLM_API_KEY`.
+Slidea provides two skills that can be installed as skills inside an agent environment: **Slidea** (PPT generation) and **Deep Research** (deep research). If your agent platform supports local skills, you can install either or both. After installation, configure `.env` according to the current two-tier routing setup.
 
-The Slidea skill currently supports openEuler, Apple Silicon macOS, Windows WSL/PowerShell, and some other Linux environments. It can be installed and run conveniently in mainstream agent environments such as OpenClaw, Codex, and Claude Code.
+Both skills currently support openEuler, Apple Silicon macOS, Windows WSL/PowerShell, and some other Linux environments. They can be installed and run conveniently in mainstream agent environments such as OpenClaw, Codex, and Claude Code.
 
-### Install the Slidea Skill
+### Slidea Skill
+
+Slidea is an AI-driven PPT generation skill. In most cases you only need to configure `DEFAULT_LLM` first. If you want to enable `PREMIUM` mode, keep `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` and `PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1` unchanged, and usually only fill in `PREMIUM_LLM_API_KEY`.
+
+#### Install the Slidea Skill
 
 To install the Slidea skill, you can send the following instruction to your agent:
 
 ```text
-Please fetch and follow the installation instructions for the Slidea skill here: https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/INSTALL.md
+Please fetch and follow the installation instructions for the Slidea skill here: https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/INSTALL.md
 ```
 
 After the model resources are installed and configured for Slidea, restart the agent so it reloads the installed skill. Then invoke Slidea using the skill entry style supported by your agent environment.
 
-### Use the Slidea Skill
+#### Upgrade the Slidea Skill
+
+To upgrade an existing Slidea installation, send the following instruction to your agent:
+
+```text
+Please fetch and follow the update instructions for the Slidea skill here: https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/UPDATE.md
+```
+
+#### Use the Slidea Skill
 
 In an environment like OpenClaw, you might call it like this:
 
@@ -72,20 +84,11 @@ In an environment like Claude Code that supports slash-style skill commands, you
 
 The exact syntax depends on the host agent, but the expected experience is the same: the agent loads the Slidea skill, gathers missing information when needed, and runs the slide generation pipeline to final artifacts.
 
-### Supported Platforms
+### Deep Research Skill
 
-| Platform | Architecture | Support |
-| --- | --- | --- |
-| Linux | x86_64 / ARM64 | openEuler supported |
-| Linux | x86_64 | Ubuntu/Debian supported |
-| Windows | x86_64 / ARM64 | ✅ |
-| macOS | Apple Silicon | ✅ |
+Deep Research is a standalone skill that performs multi-source investigation on a given topic, automatically searching the web, extracting content from relevant pages, and synthesizing findings into a structured research report.
 
-## Deep Research Skill
-
-In addition to the main Slidea PPT generation skill, the repository also includes a standalone **Deep Research** skill that can be installed and used independently. It performs multi-source investigation on a given topic, automatically searching the web, extracting content from relevant pages, and synthesizing findings into a structured research report.
-
-### Install the Deep Research Skill
+#### Install the Deep Research Skill
 
 To install the Deep Research skill, send the following instruction to your agent:
 
@@ -95,7 +98,7 @@ Please fetch and follow the installation instructions for the Deep Research skil
 
 After installation, configure `.env` in the installed skill directory with at least `DEFAULT_LLM_MODEL`, `DEFAULT_LLM_API_KEY`, and `DEFAULT_LLM_API_BASE_URL`. Optionally configure `TAVILY_API_KEYS` for web search capability.
 
-### Upgrade the Deep Research Skill
+#### Upgrade the Deep Research Skill
 
 To upgrade an existing Deep Research installation, send the following instruction to your agent:
 
@@ -103,7 +106,7 @@ To upgrade an existing Deep Research installation, send the following instructio
 Please fetch and follow the update instructions for the Deep Research skill here: https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/deep_research/UPDATE.md
 ```
 
-### Use the Deep Research Skill
+#### Use the Deep Research Skill
 
 In an agent environment, invoke the Deep Research skill with a research topic:
 
@@ -118,6 +121,15 @@ Or in slash-command style:
 ```
 
 The skill will automatically search the web, extract and synthesize information, and produce a structured research report in markdown format. A typical research run takes 10-30 minutes.
+
+### Supported Platforms
+
+| Platform | Architecture | Support |
+| --- | --- | --- |
+| Linux | x86_64 / ARM64 | openEuler supported |
+| Linux | x86_64 | Ubuntu/Debian supported |
+| Windows | x86_64 / ARM64 | ✅ |
+| macOS | Apple Silicon | ✅ |
 
 ### Use from source
 
@@ -213,7 +225,7 @@ LibreOffice (version >= 25.2) can be downloaded and installed from:
 ## Repository Structure
 
 - `scripts/`: user-facing CLI entrypoints, including skill export, the full pipeline, staged execution, patch rendering, and nested installation helpers
-- `skill/`: the exported skill package definition directory, including `SKILL.md`, `INSTALL.md`, and the skill manifest
+- `skill/`: the exported skill package definition directory, including `skill/slidea/` (Slidea PPT generation skill) and `skill/deep_research/` (Deep Research skill), each with `SKILL.md`, `INSTALL.md`, `UPDATE.md`, and a skill manifest
 - `core/`: the main LangGraph applications, including deep research, PPT generation, and shared core utilities
 - `docs/`: public-facing documentation, including quick start, CLI, architecture, and app documentation
 - `tests/`: regression tests for portability, CLI contracts, and runtime behavior
