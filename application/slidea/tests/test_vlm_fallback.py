@@ -34,6 +34,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
         common_module.get_scale_step_value = Mock(return_value=1.0)
         common_module.build_image_url = build_image_url
         common_module.wait_for_page_assets_ready = Mock(return_value=None)
+        common_module.build_remote_asset_request_router = Mock(return_value=lambda _route, _request: None)
         common_module.get_web_images_content = Mock(return_value=("", [], {}))
         common_module.download_image = Mock(return_value="")
         common_module.sanitize_filename = sanitize_filename
@@ -89,6 +90,21 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
         langchain_messages_module.HumanMessage = HumanMessage
         langchain_module.messages = langchain_messages_module
 
+        # Stub core.utils.llm so node.py's `from core.utils.llm import ...`
+        # doesn't drag in langchain_openai → openai → pydantic.VERSION, which
+        # the stubbed pydantic above can't satisfy.
+        llm_module = types.ModuleType("core.utils.llm")
+
+        class ModelRoute:
+            DEFAULT = "default"
+            PREMIUM = "premium"
+
+        llm_module.ModelRoute = ModelRoute
+        llm_module.can_vlm_invoke_route = Mock(return_value=False)
+        llm_module.llm_invoke = AsyncMock(return_value="")
+        llm_module.vlm_invoke = AsyncMock(return_value="")
+        llm_module.vlm_raw_invoke = AsyncMock(return_value="")
+
         aiofiles_module = types.ModuleType("aiofiles")
         aiofiles_os_module = types.ModuleType("aiofiles.os")
         aiofiles_os_module.makedirs = makedirs
@@ -123,6 +139,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             "core.ppt_generator.utils.common": common_module,
             "core.ppt_generator.utils.browser": browser_module,
             "core.utils.tavily_search": tavily_module,
+            "core.utils.llm": llm_module,
             "core.ppt_generator.utils.image": image_module,
             "core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph": make_graph_module(
                 "core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph",
@@ -205,7 +222,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             page_node = self._import_fresh("core.ppt_generator.thought_to_ppt.page_generators.node")
 
             with patch.object(page_node, "can_vlm_invoke_route", return_value=False):
-                result = await page_node.distribute_images_via_vlm(outline)
+                result = await page_node.distribute_images_via_vlm({}, outline, "/tmp/images")
 
         self.assertEqual(result[0].reference_images, ["a.png", "b.png"])
         self.assertEqual(result[1].reference_images, ["a.png", "b.png"])
@@ -275,6 +292,9 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
                     return None
 
             class FakeContext:
+                async def route(self, _pattern, _handler):
+                    return None
+
                 async def new_page(self):
                     return FakePage()
 
@@ -330,7 +350,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(page_node, "can_vlm_invoke_route", return_value=True), \
                  patch.object(page_node, "detect_distribution_mode", return_value="global"), \
                  patch.object(page_node, "_process_global_mode", AsyncMock(return_value=None)) as process_mock:
-                await page_node.distribute_images_via_vlm(outline)
+                await page_node.distribute_images_via_vlm({}, outline, "/tmp/images")
 
         process_mock.assert_awaited_once()
 
