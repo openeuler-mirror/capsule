@@ -10,7 +10,7 @@ from pydantic import TypeAdapter
 from core.utils.logger import logger
 from core.utils.config import app_base_dir, settings
 from core.ppt_generator.utils.common import get_web_images_content, build_image_url
-from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_invoke
+from core.utils.llm import InvokeOptions, ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_invoke
 from core.utils.search import async_search
 from core.ppt_generator.utils.image import generate_ai_image, get_ai_images_content
 from core.ppt_generator.thought_to_ppt.state import PageType
@@ -192,7 +192,11 @@ async def generate_image_queries_node(state: ContentWorkerState):
 # PPT的文字资料
 {relevant_material}
 """
-    response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], pydantic_schema=ImageQueries)
+    response = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        InvokeOptions(pydantic_schema=ImageQueries),
+    )
     if not response:
         return {"need_search_image": [], "need_ai_image": []}
 
@@ -269,7 +273,11 @@ async def get_final_images_node(state: ContentWorkerState):
 每个路径一定要以完整的绝对路径输出！！
 """
     schema = TypeAdapter(List[str]).json_schema()
-    img_list = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)], json_schema=schema)
+    img_list = await llm_invoke(
+        ModelRoute.DEFAULT,
+        [HumanMessage(content=prompt)],
+        InvokeOptions(json_schema=schema),
+    )
     if not img_list:
         img_list = []
     img_list.extend(state["content_page"].reference_images)
@@ -364,7 +372,11 @@ async def get_img_score_node(state: ImgScoreWorkerState):
     )]
 
     try:
-        response_data = await vlm_invoke(ModelRoute.DEFAULT, messages, pydantic_schema=ImageScoreResult)
+        response_data = await vlm_invoke(
+            ModelRoute.DEFAULT,
+            messages,
+            InvokeOptions(pydantic_schema=ImageScoreResult),
+        )
 
         if not response_data or not response_data.img_description or not response_data.score:
             logger.debug(f"Error in get_img_score from img: {image_path}")

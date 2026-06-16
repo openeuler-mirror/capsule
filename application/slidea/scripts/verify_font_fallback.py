@@ -18,6 +18,7 @@ Usage:
 """
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import sys
@@ -29,12 +30,15 @@ OUT = ROOT / "output" / "font_check"
 OUT.mkdir(parents=True, exist_ok=True)
 WORKER = Path(__file__).resolve()
 
+log = logging.getLogger(__name__)
+
 SVG = (
     '<?xml version="1.0" encoding="UTF-8"?>\n'
     '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200" viewBox="0 0 600 200">\n'
     '  <rect width="600" height="200" fill="#fafafa"/>\n'
     '  <text x="40" y="80" font-family="Arial, sans-serif" font-size="48" fill="#111">Hello ABC 123</text>\n'
-    '  <text x="40" y="150" font-family="Microsoft YaHei, Arial, sans-serif" font-size="48" fill="#111">中文测试幻灯片</text>\n'
+    '  <text x="40" y="150" font-family="Microsoft YaHei, Arial, sans-serif" '
+    'font-size="48" fill="#111">中文测试幻灯片</text>\n'
     '</svg>\n'
 ).encode("utf-8")
 
@@ -53,6 +57,7 @@ def write_empty_conf(empty_dir: Path) -> Path:
 
 def render_in_subprocess(mode: str, output: Path) -> None:
     env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     if mode in ("no_fonts", "bundled_fonts"):
         empty_dir = output.parent / f"_empty_fc_{mode}"
         if empty_dir.exists():
@@ -70,7 +75,6 @@ def render_in_subprocess(mode: str, output: Path) -> None:
 
 
 def worker_main(mode: str, output: str) -> None:
-    sys.path.insert(0, str(ROOT))
     import cairosvg
     from core.ppt_generator.utils.screenshot import (
         _bundled_fonts_context,
@@ -78,7 +82,7 @@ def worker_main(mode: str, output: str) -> None:
     )
 
     detected = _detect_system_cjk_fonts(False)
-    print(f"[{mode}] detected CJK fonts:", detected)
+    log.info("[%s] detected CJK fonts: %s", mode, detected)
 
     def render() -> None:
         cairosvg.svg2png(bytestring=SVG, write_to=output, output_width=600, output_height=200)
@@ -91,6 +95,7 @@ def worker_main(mode: str, output: str) -> None:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     targets = {
         "A_baseline_system.png": "baseline",
         "B_no_fonts_tofu.png": "no_fonts",
@@ -98,16 +103,18 @@ def main() -> None:
     }
     for filename, mode in targets.items():
         out = OUT / filename
-        print(f"=== rendering {filename} (mode={mode}) ===")
+        log.info("=== rendering %s (mode=%s) ===", filename, mode)
         render_in_subprocess(mode, out)
-        print(f"  -> {out}")
-    print("\nDone. Compare:")
+        log.info("  -> %s", out)
+    log.info("")
+    log.info("Done. Compare:")
     for filename in targets:
-        print(f"  {OUT}/{filename}")
+        log.info("  %s/%s", OUT, filename)
 
 
 if __name__ == "__main__":
     if len(sys.argv) >= 4 and sys.argv[1] == "--worker":
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
         worker_main(sys.argv[2], sys.argv[3])
     else:
         main()

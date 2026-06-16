@@ -101,6 +101,13 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
 
         llm_module.ModelRoute = ModelRoute
         llm_module.can_vlm_invoke_route = Mock(return_value=False)
+
+        class InvokeOptions:
+            def __init__(self, **kwargs):
+                for key, value in kwargs.items():
+                    setattr(self, key, value)
+
+        llm_module.InvokeOptions = InvokeOptions
         llm_module.llm_invoke = AsyncMock(return_value="")
         llm_module.vlm_invoke = AsyncMock(return_value="")
         llm_module.vlm_raw_invoke = AsyncMock(return_value="")

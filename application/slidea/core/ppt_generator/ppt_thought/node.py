@@ -10,7 +10,7 @@ from langgraph.types import interrupt, StreamWriter
 from langchain_core.runnables import RunnableConfig
 
 from core.ppt_generator.ppt_thought.state import ThoughtState, ParseQuery, ResearchMode
-from core.utils.llm import ModelRoute, llm_invoke
+from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
 from core.utils.crawl import get_content
 from core.utils.search import tavily_search
 from core.utils.interrupt import InterruptType
@@ -80,8 +80,7 @@ async def parse_query_node(state: ThoughtState, config: RunnableConfig | None = 
     result = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        pydantic_schema=ParseQuery,
-        work_node="parse_query",
+        InvokeOptions(pydantic_schema=ParseQuery, work_node="parse_query"),
     )
     logger.info(f"parsed_requirements: {result}")
     if run_dir and result:
@@ -146,7 +145,7 @@ no: 用户确认不需要进行深入洞察
     need = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        work_node="check_research_mode",
+        InvokeOptions(work_node="check_research_mode"),
     )
     if need.lower() not in ["y", "yes"]:
         logger.info(f"user don't need deep research")
@@ -204,8 +203,7 @@ async def gather_content_router_node(state: ThoughtState):
     result = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        pydantic_schema=ResearchMode,
-        work_node="content_router",
+        InvokeOptions(pydantic_schema=ResearchMode, work_node="content_router"),
     )
     logger.info(f"research mode: {result}")
     if not result:
@@ -311,8 +309,7 @@ P受众信息：{requirement.audience}，演讲目标为：{requirement.goal}，
     thought = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        config=run_config,
-        work_node="generate_thought",
+        InvokeOptions(config=run_config, work_node="generate_thought"),
     )
 
     run_dir = run_dir_from_config(config, str(app_base_dir))

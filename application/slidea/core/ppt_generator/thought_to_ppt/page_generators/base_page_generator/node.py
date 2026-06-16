@@ -9,7 +9,7 @@ from langchain.messages import HumanMessage
 
 from core.utils.logger import logger
 from core.utils.config import settings, app_base_dir
-from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
+from core.utils.llm import InvokeOptions, ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
 from core.ppt_generator.utils.common import (
     build_remote_asset_request_router,
     get_scale_step_value,
@@ -80,7 +80,7 @@ async def generate_ppt_page_node(state: PPTWorkerState):
     response = await llm_invoke(
         ModelRoute.PREMIUM,
         [HumanMessage(content=state["generate_ppt_prompt"])],
-        work_node="generate_ppt_page",
+        InvokeOptions(work_node="generate_ppt_page"),
     )
     html_content = extract_html_content_regex(response)
 
@@ -131,7 +131,7 @@ async def modify_ppt_page_node(state: PPTWorkerState):
     summarized_html = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=summary_prompt)],
-        work_node="html_summary",
+        InvokeOptions(work_node="html_summary"),
     )
     if not summarized_html:
         summarized_html = state["content"]

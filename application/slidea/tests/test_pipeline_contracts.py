@@ -108,7 +108,11 @@ class PipelineContractTests(unittest.TestCase):
         self.assertIn("def _resolve_save_dir(out_dir: str, topic: str):", source)
         self.assertIn("def _resolve_target_indices(args, save_dir: str, outline):", source)
         self.assertIn("async def _patch_render(context: PatchRenderContext):", source)
-        self.assertIn("render_mode = getattr(context.args, \"render_mode\", None) or _read_render_mode(context.out_dir)", source)
+        self.assertIn(
+            "render_mode = getattr(context.args, \"render_mode\", None) "
+            "or _read_render_mode(context.out_dir)",
+            source,
+        )
 
 
 if __name__ == "__main__":

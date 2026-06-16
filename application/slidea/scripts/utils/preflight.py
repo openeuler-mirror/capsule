@@ -309,7 +309,8 @@ def run_preflight(
                 _result(
                     "default_vlm",
                     "warning",
-                    "Default VLM settings are not configured, so PPT reflection will be skipped, may increase layout anomalies.",
+                    "Default VLM settings are not configured, so PPT reflection "
+                    "will be skipped, may increase layout anomalies.",
                 )
             )
         else:

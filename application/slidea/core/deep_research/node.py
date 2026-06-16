@@ -20,7 +20,7 @@ from core.deep_research.state import (
     ResearchState, TaskStatus, TaskNode, ChapterItem,
     DecomposeItem, DecisionItem, SearchItem
 )
-from core.utils.llm import ModelRoute, get_llm_by_route, llm_invoke
+from core.utils.llm import InvokeOptions, ModelRoute, get_llm_by_route, llm_invoke
 from core.utils.search import tavily_search
 from core.utils.crawl import get_content
 
@@ -146,7 +146,7 @@ async def task_write(state: ResearchState, task: TaskNode):
     result = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        work_node="task_write",
+        InvokeOptions(work_node="task_write"),
     )
     if result:
         return result
@@ -196,8 +196,7 @@ async def review_plan(state: ResearchState, task_node: TaskNode):
     result = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        json_schema=schema,
-        work_node="review_plan",
+        InvokeOptions(json_schema=schema, work_node="review_plan"),
     )
     if not result:
         return []
@@ -264,8 +263,7 @@ async def task_planner(state: ResearchState, review=[]):
     result = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        json_schema=json_schema,
-        work_node="task_planner",
+        InvokeOptions(json_schema=json_schema, work_node="task_planner"),
     )
     if result:
         return result
@@ -368,8 +366,7 @@ async def task_decompose(state: ResearchState, task: TaskNode):
     result = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        json_schema=json_schema,
-        work_node="task_decompose",
+        InvokeOptions(json_schema=json_schema, work_node="task_decompose"),
     )
     if result:
         return result
@@ -446,8 +443,7 @@ reason: str类型，选择当前决策的原因，如果选择decompose，请输
     result = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        json_schema=DecisionItem.model_json_schema(),
-        work_node="task_decision",
+        InvokeOptions(json_schema=DecisionItem.model_json_schema(), work_node="task_decision"),
     )
     if result and result.get("type") in includes:
         return result
@@ -537,8 +533,7 @@ async def research_background(state: ResearchState, queries=[]):
     result = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        pydantic_schema=SearchItem,
-        work_node="research_background",
+        InvokeOptions(pydantic_schema=SearchItem, work_node="research_background"),
     )
     if not result:
         return []
@@ -674,7 +669,7 @@ async def preprocess_node(state: ResearchState, task_node: TaskNode):
     result = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        work_node="preprocess_node",
+        InvokeOptions(work_node="preprocess_node"),
     )
     if result:
         task_node["context"] = result
@@ -792,7 +787,7 @@ async def reporter_node(state: ResearchState, writer: StreamWriter):
     title = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        work_node="report_title",
+        InvokeOptions(work_node="report_title"),
     )
     full_report = f"# {title[:50]}\n" + full_report
 

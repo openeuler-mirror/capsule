@@ -460,8 +460,11 @@ class EnsureDependenciesTests(unittest.TestCase):
 
     def test_resolve_python_install_source_config_uses_official_sources_after_successful_probe(self):
         install.should_use_python_mirrors_by_network.cache_clear()
-        with patch.object(install._common, "can_connect_to_url", return_value=True), \
-            patch.dict("scripts.install.install.os.environ", {}, clear=True):
+        with patch.object(
+            install._common,  # pylint: disable=protected-access
+            "can_connect_to_url",
+            return_value=True,
+        ), patch.dict("scripts.install.install.os.environ", {}, clear=True):
             config = install.resolve_python_install_source_config()
 
         self.assertIsNone(config.env)
@@ -470,8 +473,11 @@ class EnsureDependenciesTests(unittest.TestCase):
 
     def test_resolve_python_install_source_config_uses_mirrors_after_failed_probe(self):
         install.should_use_python_mirrors_by_network.cache_clear()
-        with patch.object(install._common, "can_connect_to_url", side_effect=[False, True]), \
-            patch.dict("scripts.install.install.os.environ", {}, clear=True):
+        with patch.object(
+            install._common,  # pylint: disable=protected-access
+            "can_connect_to_url",
+            side_effect=[False, True],
+        ), patch.dict("scripts.install.install.os.environ", {}, clear=True):
             config = install.resolve_python_install_source_config()
 
         self.assertIsNotNone(config.env)
@@ -501,11 +507,11 @@ class EnsureDependenciesTests(unittest.TestCase):
         )
 
         with patch.object(
-            install._common,
+            install._common,  # pylint: disable=protected-access
             "resolve_python_install_source_config",
             side_effect=[official_config, mirror_config],
         ), patch.object(
-            install._common,
+            install._common,  # pylint: disable=protected-access
             "run_command",
             side_effect=[subprocess.CalledProcessError(1, ["uv"]), None],
         ) as mock_run_command:
@@ -540,8 +546,14 @@ class EnsureDependenciesTests(unittest.TestCase):
         )
 
     def test_ensure_uv_installed_uses_package_index_when_installing_uv(self):
-        with patch.object(install._common, "get_uv_command", side_effect=[None, ["uv"]]), \
-            patch.object(install._common, "run_python_install_command") as mock_run_python_install_command:
+        with patch.object(
+            install._common,  # pylint: disable=protected-access
+            "get_uv_command",
+            side_effect=[None, ["uv"]],
+        ), patch.object(
+            install._common,  # pylint: disable=protected-access
+            "run_python_install_command",
+        ) as mock_run_python_install_command:
             result = install.ensure_uv_installed("python3")
 
         self.assertEqual(result, ["uv"])

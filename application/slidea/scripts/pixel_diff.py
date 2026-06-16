@@ -5,45 +5,73 @@ Expected outcome if the bundled-fonts fallback works:
   - mean_abs_diff(A, C) is much smaller than A-B (both render real glyphs)
   - mean_abs_diff(B, C) is large (tofu vs real glyphs)
 """
+import logging
 import sys
 from pathlib import Path
 
-try:
-    from PIL import Image
-except ImportError:
-    print("Pillow not in this venv. Trying via numpy + cairosvg internals...", file=sys.stderr)
-    sys.exit(2)
-
-import numpy as np
-
 OUT = Path(__file__).resolve().parents[1] / "output" / "font_check"
 
+
 def load_gray(name):
+    from PIL import Image
+    import numpy as np
+
     img = Image.open(OUT / name).convert("L")
     return np.asarray(img, dtype=np.int16)
 
-A = load_gray("A_baseline_system.png")
-B = load_gray("B_no_fonts_tofu.png")
-C = load_gray("C_bundled_fonts.png")
 
 def mean_abs_diff(x, y):
+    import numpy as np
+
     return float(np.abs(x - y).mean())
 
-print(f"shapes: A={A.shape} B={B.shape} C={C.shape}")
-print(f"mean_abs_diff(A, B) = {mean_abs_diff(A, B):.2f}   # baseline vs no-fonts (tofu expected)")
-print(f"mean_abs_diff(A, C) = {mean_abs_diff(A, C):.2f}   # baseline vs bundled (should be small)")
-print(f"mean_abs_diff(B, C) = {mean_abs_diff(B, C):.2f}   # no-fonts vs bundled (tofu expected)")
 
-# Heuristic pass/fail
-ab = mean_abs_diff(A, B)
-ac = mean_abs_diff(A, C)
-bc = mean_abs_diff(B, C)
-print()
-if ac < ab and ac < bc:
-    print(f"PASS: C matches A more than B does. Bundled-font fallback works.")
-    if ac < 5.0:
-        print(f"  (A vs C diff {ac:.2f} is small — glyph shapes are essentially identical)")
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    log = logging.getLogger(__name__)
+
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        log.error("Pillow not in this venv. Trying via numpy + cairosvg internals...")
+        sys.exit(2)
+
+    baseline = load_gray("A_baseline_system.png")
+    no_fonts = load_gray("B_no_fonts_tofu.png")
+    bundled = load_gray("C_bundled_fonts.png")
+
+    log.info(f"shapes: A={baseline.shape} B={no_fonts.shape} C={bundled.shape}")
+    log.info(
+        f"mean_abs_diff(A, B) = {mean_abs_diff(baseline, no_fonts):.2f}   "
+        "# baseline vs no-fonts (tofu expected)"
+    )
+    log.info(
+        f"mean_abs_diff(A, C) = {mean_abs_diff(baseline, bundled):.2f}   "
+        "# baseline vs bundled (should be small)"
+    )
+    log.info(
+        f"mean_abs_diff(B, C) = {mean_abs_diff(no_fonts, bundled):.2f}   "
+        "# no-fonts vs bundled (tofu expected)"
+    )
+
+    ab = mean_abs_diff(baseline, no_fonts)
+    ac = mean_abs_diff(baseline, bundled)
+    bc = mean_abs_diff(no_fonts, bundled)
+    log.info("")
+    if ac < ab and ac < bc:
+        log.info("PASS: C matches A more than B does. Bundled-font fallback works.")
+        if ac < 5.0:
+            log.info(
+                f"  (A vs C diff {ac:.2f} is small — glyph shapes are essentially identical)"
+            )
+        else:
+            log.info(
+                f"  (A vs C diff {ac:.2f} — both render real glyphs but "
+                "metrics/metrics differ slightly, expected)"
+            )
     else:
-        print(f"  (A vs C diff {ac:.2f} — both render real glyphs but metrics/metrics differ slightly, expected)")
-else:
-    print(f"FAIL: C does not match A better than B does. Fallback may not have triggered.")
+        log.info("FAIL: C does not match A better than B does. Fallback may not have triggered.")
+
+
+if __name__ == "__main__":
+    main()

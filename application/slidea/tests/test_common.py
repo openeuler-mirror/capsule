@@ -151,7 +151,7 @@ class CommonUtilsTests(unittest.TestCase):
 
         with patch.object(libreoffice.platform, "system", return_value="Windows"), \
             patch.dict(libreoffice.os.environ, {"ProgramFiles": r"C:\Program Files"}, clear=True):
-            result = libreoffice._get_local_libreoffice_executable()
+            result = libreoffice._get_local_libreoffice_executable()  # pylint: disable=protected-access
 
         self.assertEqual(result, Path(r"C:\Program Files") / "LibreOffice" / "program" / "soffice.com")
 

@@ -212,7 +212,7 @@ class LLMRoutingTests(unittest.IsolatedAsyncioTestCase):
         result = await self.llm_module.llm_invoke(
             default_llm,
             ["text"],
-            pydantic_schema=StructuredResult,
+            self.llm_module.InvokeOptions(pydantic_schema=StructuredResult),
         )
 
         self.assertIsInstance(result, StructuredResult)
@@ -227,7 +227,7 @@ class LLMRoutingTests(unittest.IsolatedAsyncioTestCase):
             text = await self.llm_module.llm_invoke(
                 self.llm_module.ModelRoute.DEFAULT,
                 ["text"],
-                work_node="parse_query",
+                self.llm_module.InvokeOptions(work_node="parse_query"),
             )
 
         self.assertEqual(text, "default-text")
@@ -242,7 +242,7 @@ class LLMRoutingTests(unittest.IsolatedAsyncioTestCase):
             text = await self.llm_module.llm_invoke(
                 self.llm_module.ModelRoute.DEFAULT,
                 ["text"],
-                work_node="parse_query",
+                self.llm_module.InvokeOptions(work_node="parse_query"),
             )
 
         self.assertEqual(text, "default-text")
@@ -266,9 +266,13 @@ class LLMRoutingTests(unittest.IsolatedAsyncioTestCase):
             return default_llm
 
         with patch.object(self.llm_module, "_build_chat_client_for_name", side_effect=fake_build_chat_client_for_name):
-            handle = self.llm_module._ClientHandle("default_llm")
-            first = await self.llm_module.llm_invoke(handle, ["text"], work_node="parse_query")
-            second = await self.llm_module.llm_invoke(handle, ["text"], work_node="other_node")
+            handle = self.llm_module._ClientHandle("default_llm")  # pylint: disable=protected-access
+            first = await self.llm_module.llm_invoke(
+                handle, ["text"], self.llm_module.InvokeOptions(work_node="parse_query"),
+            )
+            second = await self.llm_module.llm_invoke(
+                handle, ["text"], self.llm_module.InvokeOptions(work_node="other_node"),
+            )
 
         self.assertEqual(first, "default-text")
         self.assertEqual(second, "default-text")
@@ -287,10 +291,16 @@ class LLMRoutingTests(unittest.IsolatedAsyncioTestCase):
             })
             return default_llm
 
-        with patch.object(self.llm_module, "_build_chat_client_for_name", side_effect=fake_build_chat_client_for_name), \
-             patch.object(self.llm_module.settings, "MODEL_INVOKE_HANDOVER", True):
-            handle = self.llm_module._ClientHandle("default_llm")
-            response = await self.llm_module.llm_invoke(handle, ["text"], work_node="parse_query")
+        with patch.object(
+            self.llm_module, "_build_chat_client_for_name",
+            side_effect=fake_build_chat_client_for_name,
+        ), patch.object(
+            self.llm_module.settings, "MODEL_INVOKE_HANDOVER", True,
+        ):
+            handle = self.llm_module._ClientHandle("default_llm")  # pylint: disable=protected-access
+            response = await self.llm_module.llm_invoke(
+                handle, ["text"], self.llm_module.InvokeOptions(work_node="parse_query"),
+            )
 
         self.assertEqual(response, "default-text")
         self.assertEqual(len(build_calls), 1)
@@ -317,12 +327,12 @@ class LLMRoutingTests(unittest.IsolatedAsyncioTestCase):
             text = await self.llm_module.llm_invoke(
                 self.llm_module.ModelRoute.PREMIUM,
                 ["text"],
-                work_node="generate_ppt_page",
+                self.llm_module.InvokeOptions(work_node="generate_ppt_page"),
             )
             vision = await self.llm_module.vlm_invoke(
                 self.llm_module.ModelRoute.PREMIUM,
                 ["image"],
-                work_node="get_img_score",
+                self.llm_module.InvokeOptions(work_node="get_img_score"),
             )
 
         self.assertEqual(text, "handover")
@@ -362,8 +372,8 @@ class LLMRoutingTests(unittest.IsolatedAsyncioTestCase):
              patch.object(self.llm_module.settings, "PREMIUM_LLM_API_BASE_URL", "https://openrouter.example/v1"), \
              patch.object(self.llm_module.settings, "DEFAULT_VLM_API_KEY", "vlm-key"), \
              patch.object(self.llm_module.settings, "DEFAULT_VLM_API_BASE_URL", "https://vlm.example/v1"):
-            self.llm_module._build_chat_client_for_name("premium_llm")
-            self.llm_module._build_chat_client_for_name("default_vlm")
+            self.llm_module._build_chat_client_for_name("premium_llm")  # pylint: disable=protected-access
+            self.llm_module._build_chat_client_for_name("default_vlm")  # pylint: disable=protected-access
 
         self.assertEqual(
             [

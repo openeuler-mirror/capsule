@@ -68,6 +68,14 @@ class _RouteResolution:
     warning: str = ""
 
 
+@dataclass
+class InvokeOptions:
+    config: Any = None
+    pydantic_schema: Any = None
+    json_schema: Any = None
+    work_node: str | None = None
+
+
 def _infer_llm_error_hint(error: Exception) -> str:
     message = str(error).lower()
     if any(token in message for token in ["insufficient_quota", "quota", "billing", "余额", "欠费", "payment", "402"]):
@@ -602,12 +610,11 @@ def get_llm_by_route(route: ModelRoute | str):
 async def llm_invoke(
     route_or_client,
     args,
-    config=None,
-    pydantic_schema=None,
-    json_schema=None,
-    work_node=None,
+    options: InvokeOptions | None = None,
 ):
     """统一的文本模型调用接口。"""
+
+    opts = options or InvokeOptions()
 
     if isinstance(route_or_client, (ModelRoute, str)):
         return await _execute_routed_invoke(
@@ -616,33 +623,32 @@ async def llm_invoke(
             invoke_func=_invoke_with_retries,
             invoke_kwargs={
                 "args": args,
-                "config": config,
-                "pydantic_schema": pydantic_schema,
-                "json_schema": json_schema,
-                "work_node": work_node,
+                "config": opts.config,
+                "pydantic_schema": opts.pydantic_schema,
+                "json_schema": opts.json_schema,
+                "work_node": opts.work_node,
             },
         )
 
     return await _invoke_with_retries(
         route_or_client,
         args,
-        config=config,
-        pydantic_schema=pydantic_schema,
-        json_schema=json_schema,
+        config=opts.config,
+        pydantic_schema=opts.pydantic_schema,
+        json_schema=opts.json_schema,
         kind=ModelKind.LLM,
-        work_node=work_node,
+        work_node=opts.work_node,
     )
 
 
 async def vlm_invoke(
     route_or_client,
     args,
-    config=None,
-    pydantic_schema=None,
-    json_schema=None,
-    work_node=None,
+    options: InvokeOptions | None = None,
 ):
     """统一的视觉模型调用接口。"""
+
+    opts = options or InvokeOptions()
 
     if isinstance(route_or_client, (ModelRoute, str)):
         return await _execute_routed_invoke(
@@ -651,21 +657,21 @@ async def vlm_invoke(
             invoke_func=_invoke_with_retries,
             invoke_kwargs={
                 "args": args,
-                "config": config,
-                "pydantic_schema": pydantic_schema,
-                "json_schema": json_schema,
-                "work_node": work_node,
+                "config": opts.config,
+                "pydantic_schema": opts.pydantic_schema,
+                "json_schema": opts.json_schema,
+                "work_node": opts.work_node,
             },
         )
 
     return await _invoke_with_retries(
         route_or_client,
         args,
-        config=config,
-        pydantic_schema=pydantic_schema,
-        json_schema=json_schema,
+        config=opts.config,
+        pydantic_schema=opts.pydantic_schema,
+        json_schema=opts.json_schema,
         kind=ModelKind.VLM,
-        work_node=work_node,
+        work_node=opts.work_node,
     )
 
 

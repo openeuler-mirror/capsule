@@ -7,7 +7,7 @@ from langchain.messages import HumanMessage
 from core.utils.logger import logger
 from core.utils.config import settings
 from core.ppt_generator.utils.common import download_image
-from core.utils.llm import ModelRoute, llm_invoke
+from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
 
 
 async def generate_ai_image(image_prompt: str, save_dir: str | None = None):
@@ -146,7 +146,7 @@ async def generate_ai_image(image_prompt: str, save_dir: str | None = None):
     response = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        work_node="ai_image_prompt_optimization",
+        InvokeOptions(work_node="ai_image_prompt_optimization"),
     )
     prompt = response + "生成朴素、简洁、AI味少的图片。"
     logger.info(f"图片生成提示词: {prompt}")

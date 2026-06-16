@@ -127,6 +127,13 @@ def _install_test_stubs():
         return False
 
     llm_module.ModelRoute = ModelRoute
+
+    class InvokeOptions:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    llm_module.InvokeOptions = InvokeOptions
     llm_module.can_vlm_invoke_route = can_vlm_invoke_route
     llm_module.llm_invoke = llm_invoke
     llm_module.raw_ainvoke = llm_invoke

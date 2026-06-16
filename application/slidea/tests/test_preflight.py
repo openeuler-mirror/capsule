@@ -229,10 +229,17 @@ class PreflightTests(unittest.TestCase):
     def test_render_stage_preflight_skips_html_only_checks_on_default_svg_route(self):
         from scripts.utils.preflight import run_preflight
 
-        with patch("scripts.utils.preflight.check_env_setup", return_value={"name": "env_setup", "status": "ok", "message": "ok"}), \
-             patch("scripts.utils.preflight.check_runtime_python", return_value={"name": "runtime_python", "status": "ok", "message": "ok"}), \
-             patch("scripts.utils.preflight.check_browser_runtime") as browser_check, \
-             patch("scripts.utils.preflight.check_libreoffice_runtime") as libreoffice_check:
+        with patch(
+            "scripts.utils.preflight.check_env_setup",
+            return_value={"name": "env_setup", "status": "ok", "message": "ok"},
+        ), patch(
+            "scripts.utils.preflight.check_runtime_python",
+            return_value={"name": "runtime_python", "status": "ok", "message": "ok"},
+        ), patch(
+            "scripts.utils.preflight.check_browser_runtime"
+        ) as browser_check, patch(
+            "scripts.utils.preflight.check_libreoffice_runtime"
+        ) as libreoffice_check:
             result = run_preflight(
                 Settings(
                     SLIDEA_MODE="ECONOMIC",
