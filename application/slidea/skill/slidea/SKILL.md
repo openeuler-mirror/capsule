@@ -15,18 +15,11 @@ Use the directory containing this SKILL.md as the Slidea skill directory (referr
 - Unix-like example: `.venv/bin/python`
 - Windows example: `.venv/Scripts/python.exe`
 
-## Render Route Selection
+## Render Route
 
-Slidea supports two render routes:
+Slidea renders slides as SVG and exports native editable PPTX. The SVG route is the default and only render route exposed to skill consumers; no `--render-mode` flag is needed. Do not pass `--render-mode` and do not mention any alternative render route when invoking this skill.
 
-- HTML route: default route for generated HTML/PDF/PPTX artifacts.
-- SVG route: optional route for SVG-generated PPTX output.
-
-Use the HTML route by default. Do not add `--render-mode` unless the user explicitly asks for the SVG route.
-
-Only use `--render-mode svg` when the user clearly requests SVG-generated PPTX output.
-
-Do not proactively mention the SVG route, recommend it, or ask the user whether they want to use it. If the user only asks for a PPT, deck, slide deck, presentation, PDF, PPTX, or normal generation, keep the default HTML route.
+If a host agent or end user wants the legacy HTML→PDF→PPTX route, they must opt in outside of this skill (see the repository README's "HTML Render Route (Optional)" section). Do not enable it on the user's behalf.
 
 ## Workflow Overview
 
@@ -53,8 +46,28 @@ run the PPT pipeline to generate the final presentation.
 
 Before starting, if no other slidea task is currently executing, clean up the `<SLIDEA_DIR>/output/db_data` directory.
 
-> **Important**: The PPT pipeline may take a long time to complete. If the runtime environment supports it, execute the pipeline with timeout set to 60 minutes.
+### Pre-run user reminder (mandatory)
 
+Before invoking the pipeline, you **must** send a short message to the user explaining that the run will take a while and asking them to be patient. Example:
+
+> Starting PPT generation. This typically takes 15-30 minutes (research, outline, rendering, PPTX export) and involves many model calls. Please be patient — I'll report back when generation completes.
+
+Do not silently start the pipeline. The user must know up front that this is a long-running operation.
+
+### Timeout requirement (mandatory)
+
+The PPT pipeline makes many sequential LLM calls (parsing, research routing, thought, outline, per-page SVG generation, quality checks, optional VLM review). End-to-end generation takes 15-30 minutes. Long runs are normal, not a sign of failure.
+
+When invoking the pipeline through a shell tool that accepts a timeout:
+
+- **Hard minimum: 15 minutes** (`timeout 15m` or equivalent). Never use anything below 15 minutes — the run will be killed mid-generation and leave a half-written cache.
+- **Hard maximum: 30 minutes** (`timeout 30m`). Do not exceed 30 minutes; if the run has not finished by then, something is wrong and you should investigate rather than wait longer.
+- **Recommended default: 30 minutes** (`timeout 30m`).
+- If the host tool does not accept a timeout flag, run the command in background mode and poll for completion instead of relying on a default short timeout.
+
+This rule applies to **every** command in this section: full pipeline, resume, and staged execution.
+
+### Commands
 
 **Full pipeline**:
 ```bash
@@ -100,7 +113,7 @@ The `run_id` parameter must be obtained from the output of a Full pipeline and m
   - `thought/thought.md`
   - `ppt.json` stored at `output/<run_id>/ppt.json` with `run_id`, `topic`, `render_dir`, `pdf_path`, and `pptx_path`
 
-Final HTML/PDF/PPTX files are written to the render output directory referenced by `ppt.json`. That render directory is separate from `output/<run_id>/` and is reused on patch render when available.
+Final SVG and PPTX artifacts are written to the render output directory referenced by `ppt.json`. That render directory is separate from `output/<run_id>/` and is reused on patch render when available.
 
 ## Run Logs
 - Logs are stored in `logs/app_{time:YYYY-MM-DD}.log`
@@ -134,7 +147,7 @@ If you want to set `--research-mode` to `simple` or `deep`, you must explicitly 
 - `--resume "<user reply>"`: continue an interrupted LangGraph run using the user's answer, selection, or edited text
 - `--session-id <id>`: session / thread id, default `local`
 - `--stages <comma-separated>`: stage selection, default `all`; supported values are `all`, `parse`, `research`, `outline`, `render`
-- `--render-mode {html|svg}`: render route, default is `html`; omit this unless the user explicitly requested the SVG route
+- `--render-mode {html|svg}`: render route, default is `svg`; do not pass this flag unless you have an explicit reason (the default SVG route is what the skill advertises)
 - `--research-mode {skip|simple|deep}`: force research mode, skip means no research, simple means shallow research, deep means deep research, default is ''
 - `--image-search {on|off}`: toggle web image search
 - `--run-id <run_id>`: reuse or pin a run id
@@ -147,7 +160,10 @@ If you want to set `--research-mode` to `simple` or `deep`, you must explicitly 
 - `--indices "0,1,2"`: optional comma-separated slide indices to regenerate
 
 ## Patch render (missing/target pages)
-Use when HTML pages are missing or you want to re-render specific page indices without full rerun.
+Use when slide pages are missing or you want to re-render specific page indices without full rerun.
+
+Patch render also makes LLM calls (one per regenerated page plus quality check and PPTX export) and can take several minutes. Apply the same **timeout ≥ 15 minutes** rule as the full pipeline, and remind the user that patching takes a few minutes before invoking.
+
 ```bash
 .venv/bin/python scripts/patch_render_missing.py \
   --run-id <run_id> \
@@ -193,4 +209,5 @@ The update script only reinstalls dependencies if `requirements.txt` has changed
 ## Notes
 - Keep all paths relative to the working directory unless the user explicitly asks for something else.
 - Once bootstrap is complete, all runtime commands must go through the Python interpreter inside `.venv`.
-- If `SLIDEA_MODE`, `DEFAULT_LLM_MODEL`, `DEFAULT_LLM_API_KEY`, or `DEFAULT_LLM_API_BASE_URL` is empty, do not attempt to run the pipeline.
+- `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` must be configured before running the pipeline.
+- If `MODEL_INVOKE_HANDOVER` is not `true`, `DEFAULT_LLM_MODEL` must also be configured, and `SLIDEA_MODE` should be `ECONOMIC` or `PREMIUM`.

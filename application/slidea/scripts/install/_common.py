@@ -94,10 +94,11 @@ def record_step_skip(issues: list[StepIssue], step_no: int, title: str, reason: 
     issues.append(StepIssue(step_no=step_no, title=title, status="skipped", message=reason))
 
 
-def get_venv_python_path() -> Path:
+def get_venv_python_path(venv_dir: Path | None = None) -> Path:
+    base = venv_dir if venv_dir is not None else VENV_DIR
     if sys.platform.startswith("win"):
-        return VENV_DIR / "Scripts" / "python.exe"
-    return VENV_DIR / "bin" / "python"
+        return base / "Scripts" / "python.exe"
+    return base / "bin" / "python"
 
 
 def get_bootstrap_python_command() -> str:

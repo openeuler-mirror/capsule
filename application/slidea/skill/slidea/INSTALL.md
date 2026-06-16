@@ -87,13 +87,13 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
 7. **What the installer does:**
    - Detects `uv` and installs it when missing
    - Creates `.venv` with `uv venv --python 3.11 --seed`
-   - Installs `requirements.txt`
-   - Installs Playwright Chromium
-   - Detects whether a usable LibreOffice installation is already available
-   - If LibreOffice is missing, installs a local copy on supported platforms, or prints manual installation guidance
-   - On RHEL-family Linux x86_64 and arm64, follow the final `install.py` log output and explicitly tell the user to run `extra_install_linux_rhel.sh` manually when the installer asks for it
+   - Installs `requirements.txt` (SVG render route dependencies only)
+   - Skips Playwright Chromium and LibreOffice by default — they are only needed by the optional HTML render route
+   - Verifies the bundled CJK fonts under `assets/fonts/` — used as a fallback so the SVG-route PNG snapshot renders Chinese correctly even on hosts without system CJK fonts
    - Creates `.env` from `.env.example` when needed
    - Writes `SETUP_COMPLETED=true` after the base Python/bootstrap dependencies are installed
+
+   The default SVG render route does not need Playwright or LibreOffice. If the user explicitly asks for the HTML render route, point them to the repository README's "HTML Render Route (Optional)" section, which describes how to run `python3 scripts/install/install.py --with-html-route` and what extra dependencies it installs.
 
 8. **Try to populate the default LLM settings, the premium API key when needed, and Tavily search keys in `.env`.**
 
@@ -101,6 +101,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
 
    ```env
    SLIDEA_MODE=ECONOMIC
+   MODEL_INVOKE_HANDOVER=false
    DEFAULT_LLM_MODEL=
    DEFAULT_LLM_API_KEY=
    DEFAULT_LLM_API_BASE_URL=
@@ -109,8 +110,23 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    PPT generation will not work properly until these values are configured.
 
    These settings currently support OpenAI-compatible APIs only.
+   If the endpoint is `model_service` and the user wants AgentProfile routing, set `MODEL_INVOKE_HANDOVER=true`; then Slidea ignores `SLIDEA_MODE`, `PREMIUM_LLM_*`, and `DEFAULT_VLM_*`, sends all text and vision requests to `DEFAULT_LLM_API_BASE_URL`, and `DEFAULT_LLM_MODEL` may stay empty. `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` must still be configured.
 
-   Premium mode is optional. If the user wants premium-routed callsites to use the premium model first, keep these fixed defaults and only try to fill in `PREMIUM_LLM_API_KEY`:
+   By default, configuring only `DEFAULT_LLM` is sufficient to run the whole pipeline. `PREMIUM_LLM` is optional and only affects two quality-critical callsites (outline main structure and SVG page generation) under `SLIDEA_MODE=PREMIUM`; premium-routed callsites automatically fall back to `DEFAULT_LLM` when `PREMIUM_LLM_API_KEY` is empty or the call fails. The pipeline cannot run with only `PREMIUM_LLM` configured and `DEFAULT_LLM` empty.
+
+   Three configuration outcomes:
+
+   - **Only `DEFAULT_LLM` configured**: pipeline runs end-to-end; premium-routed callsites fall back to `DEFAULT_LLM`. This is the minimum setup and is sufficient for normal use.
+   - **Only `PREMIUM_LLM` configured (DEFAULT_LLM empty)**: pipeline fails at the first DEFAULT-routed call with `Missing configuration for default_llm`. Not supported.
+   - **Both configured + `SLIDEA_MODE=PREMIUM`**: premium-routed callsites use `PREMIUM_LLM` first with automatic fallback to `DEFAULT_LLM`.
+
+   Recommended models:
+
+   - `DEFAULT_LLM_MODEL` (required): `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
+   - `PREMIUM_LLM_MODEL` (optional): `google/gemini-3.1-pro-preview` or `GLM-5.2`
+   - `DEFAULT_VLM_MODEL` (optional): `kimi-2.5` or `kimi-2.6`
+
+   If the user wants premium-routed callsites to use the premium model first, keep these fixed defaults and only try to fill in `PREMIUM_LLM_API_KEY`:
 
    ```env
    PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview
@@ -118,7 +134,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1
    ```
 
-   Do not change the default `PREMIUM_LLM_MODEL` or `PREMIUM_LLM_API_BASE_URL` unless the user explicitly asks for it. `google/gemini-3.1-pro-preview` is the only recommended premium model at the moment.
+   The default `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` is fine; `GLM-5.2` is also recommended for the premium slot.
 
    Good places to look include common local agent/runtime config files such as:
    - `~/.config/opencode/opencode.json`
@@ -166,7 +182,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
 
    You can also tell the user that they may send you the configuration and you can help fill it in, or they can edit `<SKILLS_DIR>/slidea/.env` manually. After the configuration is updated, they should restart the agent so the skill can take effect.
 
-   Before finishing, explicitly tell the user that the recommended premium model is **Gemini 3.1 Pro Preview**, and that they should usually only need to fill in `PREMIUM_LLM_API_KEY` when enabling premium mode.
+   Before finishing, tell the user that configuring only `DEFAULT_LLM` is sufficient for normal use, then briefly mention the recommended model list: `DEFAULT_LLM` → `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`; `PREMIUM_LLM` → `google/gemini-3.1-pro-preview` or `GLM-5.2` (optional, only used when `SLIDEA_MODE=PREMIUM`); `DEFAULT_VLM` → `kimi-2.5` or `kimi-2.6`. If the user wants premium mode, the recommended premium models are **Gemini 3.1 Pro Preview** or **GLM-5.2** and they should usually only need to fill in `PREMIUM_LLM_API_KEY`.
 
 ## Verify
 
@@ -174,8 +190,8 @@ Check `<SKILLS_DIR>/slidea/.env`.
 
 - If `.env` does not exist, installation is not complete.
 - If `SETUP_COMPLETED` is not `true`, installation is not complete.
-- If `SETUP_COMPLETED=true`, treat the base Python/bootstrap dependencies as complete.
-- `SETUP_COMPLETED=true` does not guarantee PPTX export on every platform. PPTX export still requires a usable LibreOffice installation for the PDF-to-PPTX conversion step.
+- If `SETUP_COMPLETED=true`, treat the base Python/bootstrap dependencies as complete. The default SVG render route can produce PPTX with no extra system dependencies.
+- `SETUP_COMPLETED=true` does not imply that the optional HTML render route is ready. HTML route requires Playwright Chromium and LibreOffice, which are not installed by default.
 
 ## Report Result
 
@@ -202,13 +218,14 @@ Inside that final summary block, keep the wording concise and easy to scan. Cove
 
 4. **Required reminders**
    - If you did not help auto-configure the default LLM settings, explicitly tell the user that they still need to fill in `SLIDEA_MODE` and the three `DEFAULT_LLM_*` values.
+   - Tell the user that configuring only `DEFAULT_LLM` is sufficient for normal use, and briefly mention the recommended model list: `DEFAULT_LLM` → `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`; `PREMIUM_LLM` → `google/gemini-3.1-pro-preview` or `GLM-5.2` (optional, only used when `SLIDEA_MODE=PREMIUM`); `DEFAULT_VLM` → `kimi-2.5` or `kimi-2.6`.
    - If the user wants premium mode, explicitly remind them that the recommended premium model is **Gemini 3.1 Pro Preview**, and they should normally only need to fill in `PREMIUM_LLM_API_KEY`.
-   - If the platform is RHEL-family Linux, you must explicitly show the full command the user needs to run next. The command must be complete and directly copyable.
+   - RHEL-family Linux helper script (`extra_install_linux_rhel.sh`) is only required by the optional HTML render route. The default SVG-only install does not run it and does not ask the user to run it. Only mention the helper when the user explicitly opted into the HTML route via `python3 scripts/install/install.py --with-html-route`; in that case, the installer log will surface the exact command to run and you should relay it verbatim.
 
 5. **What the user should do next**
    - Ask the user to send their LLM API key / base URL / model information if they want help filling the remaining `.env` settings.
    - Offer to help them finish any remaining optional configuration.
 
-When the platform is RHEL-family Linux, the final summary block should include the exact command from the installer result, not an abbreviated filename-only reference.
+The RHEL-family helper command, if it was actually requested by an `install.py --with-html-route` run, must be relayed to the user verbatim in the final summary block — do not abbreviate it to a filename-only reference.
 
 During the whole installation flow, including progress updates, warnings, final result summaries, and follow-up questions, always reply in the same language the user is currently using.

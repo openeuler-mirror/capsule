@@ -9,6 +9,10 @@
       "to": "docs"
     },
     {
+      "from": "assets",
+      "to": "assets"
+    },
+    {
       "from": "requirements.txt",
       "to": "requirements.txt"
     },

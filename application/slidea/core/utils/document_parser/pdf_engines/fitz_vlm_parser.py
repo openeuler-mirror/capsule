@@ -124,7 +124,8 @@ class FitzVLMPDFParser(FitzPDFParser):
                 base64_image = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
             prompt = "请简要描述这张图片的内容，用一句话概括。"
-            response = await vlm_raw_invoke(ModelRoute.PREMIUM,
+            response = await vlm_raw_invoke(
+                ModelRoute.PREMIUM,
                 [
                     HumanMessage(
                         content=[
@@ -137,7 +138,8 @@ class FitzVLMPDFParser(FitzPDFParser):
                             },
                         ]
                     )
-                ]
+                ],
+                work_node="document_image_description",
             )
             return response.content
         except Exception as e:
@@ -165,7 +167,8 @@ class FitzVLMPDFParser(FitzPDFParser):
 }}
 """
         try:
-            response = await vlm_raw_invoke(ModelRoute.PREMIUM,
+            response = await vlm_raw_invoke(
+                ModelRoute.PREMIUM,
                 [
                     HumanMessage(
                         content=[
@@ -178,7 +181,8 @@ class FitzVLMPDFParser(FitzPDFParser):
                             },
                         ]
                     )
-                ]
+                ],
+                work_node="document_vector_chart_classification",
             )
             content = response.content
             logger.debug("Fitz-VLM 引擎分类矢量图 {}: {}", page_num, content)

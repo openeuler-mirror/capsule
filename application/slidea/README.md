@@ -32,7 +32,7 @@ Given a request such as "create a 10-slide PPT about AI Agents for product, engi
 - collect source material from user input, URLs, and optional search,
 - generate the writing direction for the full deck,
 - turn that writing direction into a slide outline,
-- render each slide as HTML, merge and export PDF, and finally export PPTX.
+- render each slide as SVG and export a native editable PPTX.
 
 The system is designed for agent-driven usage. It supports staged execution, resuming after interruptions, and other flexible workflows. This staged design exists mainly for two reasons:
 
@@ -142,7 +142,7 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
    ```
 
 2. Use the script to automatically create the virtual environment and install the required dependencies.
-   This step automatically handles Python dependencies, the Playwright browser, and LibreOffice-related setup.
+   This step installs the Python dependencies needed by the SVG render route and prepares `.env`.
    ```bash
    python3 scripts/install/install.py
    ```
@@ -159,8 +159,22 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
    - `DEFAULT_LLM_API_BASE_URL`
    These settings currently support OpenAI-compatible APIs only.
    The minimum runnable setup is `SLIDEA_MODE=ECONOMIC` plus the three `DEFAULT_LLM_*` values.
-   If you want premium-routed callsites to use the premium model first, also fill in `PREMIUM_LLM_API_KEY`.
-   `PREMIUM_LLM_MODEL` and `PREMIUM_LLM_API_BASE_URL` already have fixed recommended defaults and should usually not be changed. The only recommended premium model right now is `google/gemini-3.1-pro-preview`.
+   If Slidea connects to `model_service` and you want `model_service` to choose models through AgentProfile routing, set `MODEL_INVOKE_HANDOVER=true`. Slidea will ignore `SLIDEA_MODE`, `PREMIUM_LLM_*`, and `DEFAULT_VLM_*`; all text and vision requests go to `DEFAULT_LLM_API_BASE_URL` with an empty request model name and AgentProfile headers. `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` are still required, but `DEFAULT_LLM_MODEL` is no longer required.
+   Slidea uses two-tier model routing. `DEFAULT_LLM` is required — most pipeline callsites (parsing, deep research, outline default branches, page generation, HTML visual review) always use it; without it the pipeline cannot start. `PREMIUM_LLM` is optional — under `SLIDEA_MODE=PREMIUM` it powers two quality-critical callsites (outline main structure and SVG page generation); on error it automatically falls back to `DEFAULT_LLM`.
+
+   Three configuration outcomes:
+
+   - **Only `DEFAULT_LLM` configured**: pipeline runs end-to-end. Even with `SLIDEA_MODE=PREMIUM`, premium-routed callsites log a warning and fall back to `DEFAULT_LLM`, which is functionally identical to `SLIDEA_MODE=ECONOMIC`. This is the minimum setup and is sufficient for normal use.
+   - **Only `PREMIUM_LLM` configured (DEFAULT_LLM empty)**: pipeline fails at the first DEFAULT-routed call with `Missing configuration for default_llm`. Not supported.
+   - **Both configured + `SLIDEA_MODE=PREMIUM`**: premium-routed callsites use `PREMIUM_LLM` first with automatic fallback to `DEFAULT_LLM` on error.
+
+   If you want premium-routed callsites to use the premium model first, also fill in `PREMIUM_LLM_API_KEY`. The default `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` is fine; GLM-5.2 is also a recommended option for the premium slot.
+
+   Recommended models:
+
+   - `DEFAULT_LLM_MODEL`: `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
+   - `PREMIUM_LLM_MODEL`: `google/gemini-3.1-pro-preview` or `GLM-5.2` (default is gemini)
+   - `DEFAULT_VLM_MODEL`: `kimi-2.5` or `kimi-2.6`
 
 4. Quick example:
    ```bash
@@ -216,11 +230,7 @@ If you do not want to use the installer in step 2 to prepare the runtime automat
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-python -m playwright install chromium
 ```
-
-LibreOffice (version >= 25.2) can be downloaded and installed from:
-`https://www.libreoffice.org/download/download-libreoffice/`
 
 ## Repository Structure
 
@@ -240,19 +250,16 @@ It turns source material into:
 
 - a writing direction for the presentation,
 - a slide outline,
-- page-level renders,
-- and final PDF / PPTX artifacts.
+- per-page SVG renders,
+- and a final native editable PPTX artifact.
 
 This subsystem is split out to separate "how to think about the deck" from "how to render the deck".
-
-Slidea supports two render routes: HTML and SVG. The HTML route is the default route for normal PPT generation, and the SVG route is optional.
 
 Example:
 
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \
-  --text "Generate a 10-page PPT about AI Agent for technical audiences, without deep research, covering Agent technology trends" \
-  --render-mode svg
+  --text "Generate a 10-page PPT about AI Agent for technical audiences, without deep research, covering Agent technology trends"
 ```
 
 During PPT rendering, Slidea uses a few-shot approach to keep generated layouts visually consistent.
@@ -291,7 +298,7 @@ Typical cached files include:
 - `outline/outline.json`
 - `ppt.json`
 
-The final rendered artifacts are written to the render directory recorded in `ppt.json`. In typical runs, this includes the generated HTML, PDF, and PPTX files. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
+The final rendered artifacts are written to the render directory recorded in `ppt.json`. The SVG render route produces `svg_output/*.svg` (raw LLM output), `svg_final/*.svg` (finalized with embedded images), and a native editable `*.pptx`. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
 
 ## Runtime Degradation Behavior
 
@@ -299,7 +306,6 @@ The runtime is configuration-driven. When optional services are unavailable, the
 
 - no Tavily configuration: skip web search
 - embedding disabled or unconfigured: skip embedding-based ranking
-- no LibreOffice conversion available: keep HTML/PDF outputs and skip PPTX conversion
 - no VLM configuration: skip VLM-based image scoring and distribution features
 
 ## Documentation
@@ -333,6 +339,73 @@ Contributions are most valuable in the following areas:
 - public-facing documentation
 
 If you change behavior, update the corresponding docs under `docs/` in the same change.
+
+## HTML Render Route (Optional)
+
+The SVG route described above is the default and is the only route advertised through `skill/SKILL.md`. Slidea also preserves an alternative HTML render route for users who need HTML/CSS expressiveness and the HTML→PDF→PPTX conversion flow. It is **opt-in** and requires extra system dependencies.
+
+The HTML route renders each slide as HTML/CSS via a headless Chromium browser, merges the per-page PDFs, and converts the merged PDF into PPTX via LibreOffice. It is fully implemented in the codebase (`core/ppt_generator/thought_to_ppt/page_generators/` and `core/ppt_generator/utils/browser.py`) but is not installed and not advertised by default.
+
+### When to use the HTML route
+
+Pick the HTML route only when one of the following is true:
+
+- you specifically need the HTML/CSS visual model (e.g. exotic CSS layouts that SVG cannot express);
+- you want a PDF intermediate artifact alongside the PPTX;
+- you are debugging the legacy pipeline.
+
+For all other use cases, prefer the default SVG route — it produces editable native PPTX with no Playwright or LibreOffice dependency.
+
+### 1. Install the extra dependencies
+
+From the skill directory:
+
+```bash
+.venv/bin/pip install playwright PyPDF2
+.venv/bin/python -m playwright install chromium
+```
+
+You will also need LibreOffice (≥ 25.2). Download it from `https://www.libreoffice.org/download/download-libreoffice/` or install via your system package manager.
+
+### 2. Re-run the installer with HTML route enabled (optional)
+
+If you want the installer to set up Playwright Chromium and a bundled LibreOffice copy for you, run:
+
+```bash
+python3 scripts/install/install.py --with-html-route
+```
+
+`--with-html-route` re-enables the Playwright Chromium install step and the bundled LibreOffice download that the default SVG-only install skips.
+
+### 3. Run the pipeline with `--render-mode html`
+
+```bash
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --text "<request>" \
+  --render-mode html
+```
+
+### What the HTML route produces
+
+The HTML route writes additional artifacts into the render directory:
+
+- per-page `*.html` files (one per slide),
+- a merged `*.pdf`,
+- the final `*.pptx` produced by LibreOffice's PDF-to-PPTX conversion.
+
+The `ppt.json` for an HTML run records `render_mode: "html"` and the `pdf_path` / `pptx_path` accordingly.
+
+### HTML-route-only degradation
+
+When the HTML route is in use, an extra degradation rule applies:
+
+- no usable LibreOffice conversion available: keep the HTML/PDF outputs and skip PPTX conversion. (The default SVG route does not depend on LibreOffice and is unaffected by this rule.)
+
+### Notes
+
+- `--render-mode html` is **not** advertised to host agents through `skill/SKILL.md`. When an agent uses the Slidea skill, it always runs the default SVG route unless you explicitly hand it the HTML-route command.
+- `scripts/html_to_pptx.py` (a standalone HTML→PPTX converter) and `scripts/patch_render_missing.py` (when `ppt.json` records `render_mode: "html"`) still work once the extra dependencies are in place.
+- If you previously installed Playwright / PyPDF2 / LibreOffice manually and then run an update that changes `requirements.txt`, those packages are not auto-uninstalled from `.venv`. The HTML route typically keeps working; if it stops, re-run the steps above.
 
 ## Third-party Notices
 

@@ -21,7 +21,7 @@ from core.ppt_generator.utils.common import (
     download_image,
     build_image_url,
 )
-from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
+from core.utils.llm import InvokeOptions, ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
 from core.ppt_generator.thought_to_ppt.state import PPTState, PageType, PPTPage
 from core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph import (
     generate_cover_thanks_pages_app,
@@ -103,6 +103,7 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter)
     response = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=f"根据'{state['query']}'确定使用的语言,只回答'中文'、'英文'等结果。")],
+        InvokeOptions(work_node="language_detection"),
     )
 
     # 下载outline中的图片
@@ -151,7 +152,7 @@ async def select_ppt_template(query, outline):
     response = await llm_invoke(
         ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        pydantic_schema=TemplateResult,
+        InvokeOptions(pydantic_schema=TemplateResult, work_node="template_selection"),
     )
     template = response.name
     valid_template_names = {item["name"] for item in template_desc}
@@ -373,12 +374,16 @@ PPT页面大纲：
 """
 
     try:
-        response = await vlm_raw_invoke(ModelRoute.DEFAULT, [HumanMessage(
-            content=[
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": b64_img}},
-            ]
-        )])
+        response = await vlm_raw_invoke(
+            ModelRoute.DEFAULT,
+            [HumanMessage(
+                content=[
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": b64_img}},
+                ]
+            )],
+            work_node="image_assignment",
+        )
 
         idx = json.loads(repair_json(response.content)).get("page_index")
 

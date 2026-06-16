@@ -10,6 +10,13 @@ from unittest.mock import patch, Mock
 
 
 def _install_test_stubs():
+    """Install lightweight stubs for langchain/langgraph/aiofiles/etc.
+
+    Returns the dict of stub modules so the caller can scope the mutation.
+    Tests in this file only need these stubs while ``page_node`` is being
+    imported; afterwards the stubs must be removed so other test modules in
+    the same pytest session see the real packages.
+    """
     class HumanMessage:
         def __init__(self, content):
             self.content = content
@@ -120,6 +127,13 @@ def _install_test_stubs():
         return False
 
     llm_module.ModelRoute = ModelRoute
+
+    class InvokeOptions:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    llm_module.InvokeOptions = InvokeOptions
     llm_module.can_vlm_invoke_route = can_vlm_invoke_route
     llm_module.llm_invoke = llm_invoke
     llm_module.raw_ainvoke = llm_invoke
@@ -131,6 +145,27 @@ def _install_test_stubs():
         setattr(module, export_name, object())
         return module
 
+    stub_keys = (
+        "langchain",
+        "langchain.messages",
+        "aiofiles",
+        "aiofiles.os",
+        "json_repair",
+        "langgraph",
+        "langgraph.graph",
+        "langgraph.types",
+        "langchain_core",
+        "langchain_core.runnables",
+        "core.ppt_generator.utils.common",
+        "core.ppt_generator.thought_to_ppt.state",
+        "core.ppt_generator.thought_to_ppt.page_generators.state",
+        "core.utils.llm",
+        "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph",
+        "core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.graph",
+        "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph",
+        "core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph",
+        "core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.graph",
+    )
     sys.modules.update(
         {
             "langchain": langchain_module,
@@ -169,16 +204,21 @@ def _install_test_stubs():
             ),
         }
     )
+    return stub_keys
 
 
-_install_test_stubs()
+_stub_keys = _install_test_stubs()
 
 from core.ppt_generator.thought_to_ppt.page_generators.state import TemplateResult
 
 page_node = importlib.import_module("core.ppt_generator.thought_to_ppt.page_generators.node")
-sys.modules.pop("core.utils.llm", None)
-sys.modules.pop("core.ppt_generator.thought_to_ppt.state", None)
-sys.modules.pop("core.ppt_generator.thought_to_ppt.page_generators.state", None)
+# page_node's globals now reference the stub objects directly (via `from X import Y`
+# bindings). It is safe to drop the stubs from sys.modules — page_node keeps working
+# because it doesn't re-import — and doing so lets later test modules in the same
+# pytest session see the real langchain / langgraph / etc. again.
+for _key in _stub_keys:
+    sys.modules.pop(_key, None)
+del _stub_keys
 
 
 class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):
@@ -192,8 +232,8 @@ class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(selected, "common_dark")
         prompt = llm_mock.await_args.args[1][0].content
-        self.assertIn("'name': 'academic'", prompt)
-        self.assertIn("适用于市场调研、技术洞察等专业分享场合所需的PPT，深色风格", prompt)
+        self.assertIn("'name': 'common_light'", prompt)
+        self.assertIn("适用于市场调研、技术洞察等专业分享场合，深色风格", prompt)
         self.assertNotIn("<!DOCTYPE html>", prompt)
 
     async def test_select_ppt_template_falls_back_to_first_style_entry_when_llm_name_invalid(self):
@@ -204,7 +244,7 @@ class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):
         ):
             selected = await page_node.select_ppt_template("任意主题", "任意大纲")
 
-        self.assertEqual(selected, "academic")
+        self.assertEqual(selected, "common_light")
 
     async def test_prepare_generation_context_node_reads_html_file_directly(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -213,7 +253,7 @@ class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):
                 "topic": "Template Demo",
                 "outline": [],
                 "save_dir": str(Path(tmp_dir) / "output"),
-                "template_name": "cute",
+                "template_name": "cute_colorful",
             }
             writer_calls = []
 
@@ -224,7 +264,7 @@ class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):
             ):
                 result = await page_node.prepare_generation_context_node(state, writer_calls.append)
 
-        self.assertEqual(result["template_name"], "cute")
+        self.assertEqual(result["template_name"], "cute_colorful")
         self.assertIn("<!DOCTYPE html>", result["template"])
         self.assertIn("可爱风格PPT", result["template"])
         self.assertEqual(result["outline"], [])

@@ -45,6 +45,20 @@ def assign_img_score_workers(state: ContentWorkerState):
     if not reference_images:
         return "extend_relevant_material"
 
+    # 每页只提示一次：VLM 未配置时下游 worker 会走兜底打分（不调 VLM API）。
+    # 仍然需要 worker 来收集图片尺寸、路径和上游传来的描述（Tavily 搜图描述 / AI 生图 prompt），
+    # 下游 extend_relevant_material_node 据此把可用图片告诉生图 LLM，所以不能整段跳过。
+    # 真正缺失的是 VLM 看图打分能力——所有候选图都给固定 5.0 分，排序退化为按原顺序取前 N。
+    from core.utils.logger import logger
+    from core.utils.llm import ModelRoute, can_vlm_invoke_route
+    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
+        n_images = len(reference_images)
+        logger.info(
+            f"VLM not configured; {n_images} reference image(s) will skip VLM scoring. "
+            "Each image gets a fixed score of 5.0; path/dimensions/upstream descriptions are still collected. "
+            "Ranking falls back to original order."
+        )
+
     return [Send("img_scoring_worker",
                  {
                      "relevant_material": state["relevant_material"],

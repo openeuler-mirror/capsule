@@ -15,15 +15,24 @@ from contextlib import suppress
 from pathlib import Path
 
 try:
+    from . import _common
     from ._common import (
+        MAINLAND_CHINA_PYPI_INDEX,
+        MAINLAND_CHINA_UV_PYTHON_INSTALL_MIRROR,
+        PIP_NETWORK_RETRIES,
+        PIP_NETWORK_TIMEOUT_SECONDS,
+        PythonInstallSourceConfig,
         REQUIREMENTS_FILE,
         ROOT_DIR,
         StepIssue,
         VENV_DIR,
+        can_connect_to_url,
         ensure_uv_installed,
         format_duration,
         format_exception_message,
         get_bootstrap_python_command,
+        get_python_source_override,
+        get_uv_command,
         get_venv_python_path,
         log_info,
         log_step,
@@ -31,20 +40,31 @@ try:
         log_warning,
         record_step_failure,
         record_step_skip,
+        resolve_python_install_source_config,
         run_command,
         run_python_install_command,
+        should_use_python_mirrors_by_network,
         update_install_state,
     )
 except ImportError:  # pragma: no cover - support direct script execution
+    import _common  # type: ignore
     from _common import (
+        MAINLAND_CHINA_PYPI_INDEX,
+        MAINLAND_CHINA_UV_PYTHON_INSTALL_MIRROR,
+        PIP_NETWORK_RETRIES,
+        PIP_NETWORK_TIMEOUT_SECONDS,
+        PythonInstallSourceConfig,
         REQUIREMENTS_FILE,
         ROOT_DIR,
         StepIssue,
         VENV_DIR,
+        can_connect_to_url,
         ensure_uv_installed,
         format_duration,
         format_exception_message,
         get_bootstrap_python_command,
+        get_python_source_override,
+        get_uv_command,
         get_venv_python_path,
         log_info,
         log_step,
@@ -52,8 +72,10 @@ except ImportError:  # pragma: no cover - support direct script execution
         log_warning,
         record_step_failure,
         record_step_skip,
+        resolve_python_install_source_config,
         run_command,
         run_python_install_command,
+        should_use_python_mirrors_by_network,
         update_install_state,
     )
 
@@ -227,12 +249,30 @@ def print_post_install_summary(
 ) -> None:
     print("\n" + "=" * 52)
     status_line = status_line_override or "The Slidea skill has been installed successfully."
-    if issues and show_issue_summary:
+    failed_issues = [issue for issue in issues if issue.status == "failed"]
+    skipped_issues = [issue for issue in issues if issue.status == "skipped"]
+    if failed_issues and show_issue_summary:
         if status_line_override is None:
             status_line = "The Slidea skill installation did not complete successfully."
         issue_heading = step_issue_heading or "The following steps failed or were skipped:"
+        visible_issues = failed_issues + skipped_issues
         step_issue_lines = "\n".join(
-            f"- [{issue.status.upper()}] Step {issue.step_no} ({issue.title}): {issue.message}" for issue in issues
+            f"- [{issue.status.upper()}] Step {issue.step_no} ({issue.title}): {issue.message}"
+            for issue in visible_issues
+        )
+        step_issue_summary = f"""
+
+{issue_heading}
+{step_issue_lines}
+"""
+    elif skipped_issues and show_issue_summary:
+        # Skipped steps are intentional (e.g. SVG-only default skips Playwright
+        # and LibreOffice). Surface them for visibility, but keep the success
+        # status line.
+        issue_heading = step_issue_heading or "The following optional steps were skipped:"
+        step_issue_lines = "\n".join(
+            f"- [{issue.status.upper()}] Step {issue.step_no} ({issue.title}): {issue.message}"
+            for issue in skipped_issues
         )
         step_issue_summary = f"""
 
@@ -305,7 +345,7 @@ def create_virtualenv(bootstrap_python_cmd: str) -> Path:
         cleanup_before_retry=lambda: shutil.rmtree(VENV_DIR, ignore_errors=True) if VENV_DIR.exists() else None,
     )
 
-    python_path = get_venv_python_path()
+    python_path = get_venv_python_path(VENV_DIR)
     if not python_path.exists():
         raise FileNotFoundError(f"virtual environment python not found: {python_path}")
     return python_path
@@ -599,7 +639,42 @@ def install_libreoffice_to_local_dir() -> None:
     raise RuntimeError(f"Unsupported operating system: {os_type}")
 
 
-def main(*, skip_playwright: bool = False, skip_libreoffice: bool = False) -> int:
+def check_bundled_fonts() -> None:
+    """Sanity-check the bundled CJK fonts under ``assets/fonts/``.
+
+    These fonts back the SVG-route PNG fallback on hosts without system CJK fonts
+    (see ``core/ppt_generator/utils/screenshot.py:_bundled_fonts_context``). Missing
+    fonts are not fatal — the SVG route still works if the host has its own CJK
+    fonts — so this only emits a warning to surface the gap.
+    """
+    fonts_dir = ROOT_DIR / "assets" / "fonts"
+    font_exts = (".otf", ".ttf", ".ttc")
+    found = [
+        p for p in sorted(fonts_dir.glob("*"))
+        if p.is_file() and p.suffix.lower() in font_exts
+    ] if fonts_dir.exists() else []
+    if not found:
+        log_warning(
+            "No bundled CJK fonts under assets/fonts/. SVG-route PNG fallback "
+            "will rely on the host's own CJK fonts; if the host has none, Chinese "
+            "characters may render as tofu in the fallback PNG (the editable "
+            "PPTX itself is unaffected). Re-export the skill from a clean checkout "
+            "to restore them."
+        )
+        return
+    names = ", ".join(p.name for p in found)
+    log_success(f"Bundled CJK fonts present ({names}).")
+
+
+def main(*, skip_playwright: bool = True, skip_libreoffice: bool = True) -> int:
+    """Install slidea runtime.
+
+    By default only the SVG render route dependencies are prepared
+    (Python venv + requirements.txt). Playwright Chromium and LibreOffice
+    are skipped because they are only needed by the optional HTML render
+    route. Pass ``--with-html-route`` on the CLI (or call with
+    ``skip_playwright=False, skip_libreoffice=False``) to enable them.
+    """
     issues: list[StepIssue] = []
     setup_completed = (
         read_env_value(ENV_FILE, "SETUP_COMPLETED") or ""
@@ -609,7 +684,7 @@ def main(*, skip_playwright: bool = False, skip_libreoffice: bool = False) -> in
     playwright_runtime_ready = True if skip_playwright else (
         verify_playwright_installation(venv_python, log_output=False) if venv_python is not None else False
     )
-    libreoffice_ready = verify_libreoffice_installation()
+    libreoffice_ready = verify_libreoffice_installation() if not skip_libreoffice else False
     requirements_available = REQUIREMENTS_FILE.exists()
 
     step_start = time.perf_counter()
@@ -690,7 +765,13 @@ def main(*, skip_playwright: bool = False, skip_libreoffice: bool = False) -> in
         step_start = time.perf_counter()
         log_step(3, "Install Playwright Chromium")
         if skip_playwright:
-            record_step_skip(issues, 3, "Install Playwright Chromium", "skipped via --skip-playwright")
+            record_step_skip(
+                issues,
+                3,
+                "Install Playwright Chromium",
+                "HTML render route is not enabled (SVG is the default). "
+                "Run with --with-html-route to install Playwright for the HTML route.",
+            )
             playwright_ready = True
         elif not python_runtime_ready or venv_python is None:
             record_step_skip(
@@ -857,7 +938,24 @@ def main(*, skip_playwright: bool = False, skip_libreoffice: bool = False) -> in
         except Exception as exc:
             record_step_failure(issues, 4, "Check LibreOffice", exc)
     else:
-        record_step_skip(issues, 4, "Check LibreOffice", "skipped via --skip-libreoffice")
+        # SVG 默认路线不需要 LibreOffice，也不需要 RHEL helper 脚本（那个脚本
+        # 仅为 HTML 路线准备 Playwright 系统依赖 + ARM64 LibreOffice）。
+        # 在 RHEL 系系统上显式说明，避免用户/agent 误以为漏了步骤。
+        if platform.system() == "Linux":
+            os_release = read_linux_os_release()
+            if is_linux_rhel_family(os_release):
+                log_info(
+                    f"Detected {LINUX_RHEL_FAMILY_DISTRO_LABEL} Linux. The RHEL helper script "
+                    "(extra_install_linux_rhel.sh) is not required for the default SVG render "
+                    "route; it is only needed when the optional HTML route is enabled. Skipping."
+                )
+        record_step_skip(
+            issues,
+            4,
+            "Check LibreOffice",
+            "HTML render route is not enabled (SVG is the default). "
+            "Run with --with-html-route to install LibreOffice for the HTML route.",
+        )
         libreoffice_step_ready = True
 
     step_start = time.perf_counter()
@@ -902,6 +1000,8 @@ def main(*, skip_playwright: bool = False, skip_libreoffice: bool = False) -> in
         except Exception as exc:
             record_step_failure(issues, 6, "Update Install State", exc)
 
+    check_bundled_fonts()
+
     print_post_install_summary(
         issues,
         libreoffice_guidance,
@@ -909,12 +1009,42 @@ def main(*, skip_playwright: bool = False, skip_libreoffice: bool = False) -> in
         step_issue_heading=step_issue_heading,
         show_issue_summary=show_issue_summary,
     )
-    return 0 if not any(issue.status in {"failed", "skipped"} for issue in issues) else 1
+    # Skipped steps are intentional (e.g. SVG-only default install skips
+    # Playwright and LibreOffice on purpose). Only actual failures cause a
+    # non-zero exit.
+    return 0 if not any(issue.status == "failed" for issue in issues) else 1
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--skip-playwright", action="store_true", help="Skip Playwright Chromium installation")
-    parser.add_argument("--skip-libreoffice", action="store_true", help="Skip LibreOffice check and installation")
+    parser.add_argument(
+        "--with-html-route",
+        action="store_true",
+        help=(
+            "Also prepare the optional HTML render route dependencies: "
+            "Playwright Chromium and a bundled LibreOffice. "
+            "By default only the SVG render route (the default) is installed."
+        ),
+    )
+    parser.add_argument(
+        "--skip-playwright",
+        action="store_true",
+        help=(
+            "Skip Playwright Chromium installation. Implied unless --with-html-route is set. "
+            "Kept for backward compatibility."
+        ),
+    )
+    parser.add_argument(
+        "--skip-libreoffice",
+        action="store_true",
+        help=(
+            "Skip LibreOffice check and installation. Implied unless --with-html-route is set. "
+            "Kept for backward compatibility."
+        ),
+    )
     args = parser.parse_args()
-    raise SystemExit(main(skip_playwright=args.skip_playwright, skip_libreoffice=args.skip_libreoffice))
+    # Default is SVG-only. --with-html-route opts in to Playwright + LibreOffice.
+    # --skip-* still wins if explicitly passed (preserves prior CLI contract).
+    skip_playwright = (not args.with_html_route) or args.skip_playwright
+    skip_libreoffice = (not args.with_html_route) or args.skip_libreoffice
+    raise SystemExit(main(skip_playwright=skip_playwright, skip_libreoffice=skip_libreoffice))

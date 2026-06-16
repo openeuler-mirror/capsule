@@ -53,6 +53,56 @@ class PreflightTests(unittest.TestCase):
 
         self.assertFalse(settings.has_default_vlm_config())
 
+    def test_model_handover_uses_default_llm_endpoint_without_other_model_settings(self):
+        settings = Settings(
+            MODEL_INVOKE_HANDOVER=True,
+            DEFAULT_LLM_MODEL="",
+            DEFAULT_LLM_API_KEY="key",
+            DEFAULT_LLM_API_BASE_URL="https://example.com/v1",
+            PREMIUM_LLM_MODEL="",
+            PREMIUM_LLM_API_KEY="",
+            PREMIUM_LLM_API_BASE_URL="",
+            DEFAULT_VLM_MODEL="",
+            DEFAULT_VLM_API_KEY="",
+            DEFAULT_VLM_API_BASE_URL="",
+        )
+
+        self.assertEqual(settings.missing_default_llm_settings(), [])
+        self.assertEqual(settings.missing_premium_llm_settings(), [])
+        self.assertFalse(settings.has_default_vlm_config())
+
+    def test_model_handover_preflight_ignores_premium_mode(self):
+        from scripts.utils.preflight import run_preflight
+
+        result = run_preflight(
+            Settings(
+                MODEL_INVOKE_HANDOVER=True,
+                SLIDEA_MODE="PREMIUM",
+                DEFAULT_LLM_MODEL="",
+                DEFAULT_LLM_API_KEY="key",
+                DEFAULT_LLM_API_BASE_URL="https://example.com/v1",
+                PREMIUM_LLM_MODEL="",
+                PREMIUM_LLM_API_KEY="",
+                PREMIUM_LLM_API_BASE_URL="",
+                DISABLE_EMBEDDING=True,
+            ),
+            stages=["outline"],
+            dry_run=True,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in result["checks"] if item["name"] == "premium_llm"],
+            [],
+        )
+        default_checks = [item for item in result["checks"] if item["name"] == "default_llm"]
+        self.assertEqual(default_checks[0]["status"], "ok")
+        self.assertEqual(
+            [item["name"] for item in result["checks"] if item["name"] == "default_vlm"],
+            [],
+        )
+        handover_checks = [item for item in result["checks"] if item["name"] == "model_handover"]
+        self.assertEqual(handover_checks[0]["status"], "ok")
+
     def test_browser_preflight_reports_missing_playwright(self):
         from scripts.utils.preflight import check_browser_runtime
 
@@ -169,11 +219,45 @@ class PreflightTests(unittest.TestCase):
                 ),
                 stages=["render"],
                 dry_run=False,
+                render_mode="html",
             )
 
         libreoffice_checks = [item for item in result["checks"] if item["name"] == "libreoffice"]
         self.assertEqual(len(libreoffice_checks), 1)
         self.assertEqual(libreoffice_checks[0]["status"], "warning")
+
+    def test_render_stage_preflight_skips_html_only_checks_on_default_svg_route(self):
+        from scripts.utils.preflight import run_preflight
+
+        with patch(
+            "scripts.utils.preflight.check_env_setup",
+            return_value={"name": "env_setup", "status": "ok", "message": "ok"},
+        ), patch(
+            "scripts.utils.preflight.check_runtime_python",
+            return_value={"name": "runtime_python", "status": "ok", "message": "ok"},
+        ), patch(
+            "scripts.utils.preflight.check_browser_runtime"
+        ) as browser_check, patch(
+            "scripts.utils.preflight.check_libreoffice_runtime"
+        ) as libreoffice_check:
+            result = run_preflight(
+                Settings(
+                    SLIDEA_MODE="ECONOMIC",
+                    DEFAULT_LLM_MODEL="demo",
+                    DEFAULT_LLM_API_KEY="key",
+                    DEFAULT_LLM_API_BASE_URL="https://example.com",
+                    DISABLE_EMBEDDING=True,
+                ),
+                stages=["render"],
+                dry_run=False,
+                # default render_mode="svg"
+            )
+
+        check_names = [item["name"] for item in result["checks"]]
+        self.assertNotIn("browser", check_names)
+        self.assertNotIn("libreoffice", check_names)
+        browser_check.assert_not_called()
+        libreoffice_check.assert_not_called()
 
     def test_libreoffice_preflight_checks_environment_command_on_windows(self):
         from scripts.utils.preflight import _iter_libreoffice_candidates
@@ -203,6 +287,7 @@ class PreflightTests(unittest.TestCase):
                 ),
                 stages=["render"],
                 dry_run=False,
+                render_mode="html",
             )
 
         self.assertEqual(

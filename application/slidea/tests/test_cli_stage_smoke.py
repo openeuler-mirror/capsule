@@ -164,7 +164,7 @@ class CliStageSmokeTests(unittest.TestCase):
         self.assertEqual(run_payload["run_id"], run_id)
         self.assertEqual(run_payload["session_id"], "local")
         self.assertEqual(run_payload["stages"], "outline")
-        self.assertEqual(run_payload["render_mode"], "html")
+        self.assertEqual(run_payload["render_mode"], "svg")
         self.assertEqual(run_payload["text"], "demo")
         self.assertFalse(run_payload["resume"])
 

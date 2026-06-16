@@ -460,8 +460,11 @@ class EnsureDependenciesTests(unittest.TestCase):
 
     def test_resolve_python_install_source_config_uses_official_sources_after_successful_probe(self):
         install.should_use_python_mirrors_by_network.cache_clear()
-        with patch.object(install, "can_connect_to_url", return_value=True), \
-            patch.dict("scripts.install.install.os.environ", {}, clear=True):
+        with patch.object(
+            install._common,  # pylint: disable=protected-access
+            "can_connect_to_url",
+            return_value=True,
+        ), patch.dict("scripts.install.install.os.environ", {}, clear=True):
             config = install.resolve_python_install_source_config()
 
         self.assertIsNone(config.env)
@@ -470,8 +473,11 @@ class EnsureDependenciesTests(unittest.TestCase):
 
     def test_resolve_python_install_source_config_uses_mirrors_after_failed_probe(self):
         install.should_use_python_mirrors_by_network.cache_clear()
-        with patch.object(install, "can_connect_to_url", side_effect=[False, True]), \
-            patch.dict("scripts.install.install.os.environ", {}, clear=True):
+        with patch.object(
+            install._common,  # pylint: disable=protected-access
+            "can_connect_to_url",
+            side_effect=[False, True],
+        ), patch.dict("scripts.install.install.os.environ", {}, clear=True):
             config = install.resolve_python_install_source_config()
 
         self.assertIsNotNone(config.env)
@@ -501,11 +507,11 @@ class EnsureDependenciesTests(unittest.TestCase):
         )
 
         with patch.object(
-            install,
+            install._common,  # pylint: disable=protected-access
             "resolve_python_install_source_config",
             side_effect=[official_config, mirror_config],
         ), patch.object(
-            install,
+            install._common,  # pylint: disable=protected-access
             "run_command",
             side_effect=[subprocess.CalledProcessError(1, ["uv"]), None],
         ) as mock_run_command:
@@ -540,8 +546,14 @@ class EnsureDependenciesTests(unittest.TestCase):
         )
 
     def test_ensure_uv_installed_uses_package_index_when_installing_uv(self):
-        with patch.object(install, "get_uv_command", side_effect=[None, ["uv"]]), \
-            patch.object(install, "run_python_install_command") as mock_run_python_install_command:
+        with patch.object(
+            install._common,  # pylint: disable=protected-access
+            "get_uv_command",
+            side_effect=[None, ["uv"]],
+        ), patch.object(
+            install._common,  # pylint: disable=protected-access
+            "run_python_install_command",
+        ) as mock_run_python_install_command:
             result = install.ensure_uv_installed("python3")
 
         self.assertEqual(result, ["uv"])
@@ -561,6 +573,9 @@ class EnsureDependenciesTests(unittest.TestCase):
         )
 
     def test_main_bootstrap_flow_writes_setup_completed_and_logs_steps(self):
+        # Default install now prepares only the SVG render route (no Playwright,
+        # no LibreOffice). Verify the default flow skips both and still writes
+        # SETUP_COMPLETED=true.
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
             env_file = root_dir / ".env"
@@ -570,7 +585,7 @@ class EnsureDependenciesTests(unittest.TestCase):
             venv_python = venv_dir / "bin" / "python"
 
             env_example.write_text("SLIDEA_MODE=ECONOMIC\nDEFAULT_LLM_MODEL=\n", encoding="utf-8")
-            requirements.write_text("playwright\n", encoding="utf-8")
+            requirements.write_text("cairosvg\n", encoding="utf-8")
             venv_python.parent.mkdir(parents=True, exist_ok=True)
             venv_python.write_text("", encoding="utf-8")
 
@@ -580,14 +595,11 @@ class EnsureDependenciesTests(unittest.TestCase):
                 patch.object(install, "ENV_EXAMPLE_FILE", env_example), \
                 patch.object(install, "REQUIREMENTS_FILE", requirements), \
                 patch.object(install, "VENV_DIR", venv_dir), \
-                patch.object(install, "verify_playwright_installation", return_value=False), \
                 patch.object(install, "get_bootstrap_python_command", return_value="python3"), \
                 patch.object(install, "ensure_uv_installed", return_value=["uv"]), \
                 patch.object(install, "create_virtualenv", return_value=venv_python), \
                 patch.object(install, "run_python_install_command") as mock_run_python_install_command, \
                 patch.object(install, "run_command") as mock_run_command, \
-                patch.object(install, "verify_libreoffice_installation", side_effect=[False, False, True, True]), \
-                patch.object(install, "install_libreoffice_to_local_dir") as mock_install_libreoffice, \
                 patch.object(install, "is_linux_arm64", return_value=False), \
                 redirect_stdout(buffer):
                 result = install.main()
@@ -597,6 +609,7 @@ class EnsureDependenciesTests(unittest.TestCase):
             self.assertIn("Step 1", output)
             self.assertIn("Step 2", output)
             self.assertIn("Step 3", output)
+            self.assertIn("HTML render route is not enabled", output)
             self.assertIn("Step 4", output)
             self.assertIn("Step 5", output)
             self.assertIn("The Slidea skill has been installed successfully.", output)
@@ -612,16 +625,109 @@ class EnsureDependenciesTests(unittest.TestCase):
                 ],
                 step_name="Install Python dependencies",
             )
-            mock_run_command.assert_called_once_with(
-                [str(venv_python), "-m", "playwright", "install", "chromium"]
-            )
-            mock_install_libreoffice.assert_called_once()
+            # Playwright Chromium install must NOT run by default
+            mock_run_command.assert_not_called()
             self.assertEqual(
                 install.read_env_value(env_file, "SETUP_COMPLETED"),
                 "true",
             )
 
+    def test_main_bootstrap_flow_with_html_route_installs_playwright_and_libreoffice(self):
+        # When --with-html-route is opted in, Playwright Chromium install and
+        # LibreOffice check run as part of the bootstrap.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            env_file = root_dir / ".env"
+            env_example = root_dir / ".env.example"
+            requirements = root_dir / "requirements.txt"
+            venv_dir = root_dir / ".venv"
+            venv_python = venv_dir / "bin" / "python"
+
+            env_example.write_text("SLIDEA_MODE=ECONOMIC\nDEFAULT_LLM_MODEL=\n", encoding="utf-8")
+            requirements.write_text("playwright\nPyPDF2\n", encoding="utf-8")
+            venv_python.parent.mkdir(parents=True, exist_ok=True)
+            venv_python.write_text("", encoding="utf-8")
+
+            buffer = io.StringIO()
+            with patch.object(install, "ROOT_DIR", root_dir), \
+                patch.object(install, "ENV_FILE", env_file), \
+                patch.object(install, "ENV_EXAMPLE_FILE", env_example), \
+                patch.object(install, "REQUIREMENTS_FILE", requirements), \
+                patch.object(install, "VENV_DIR", venv_dir), \
+                patch.object(install, "verify_playwright_installation", return_value=False), \
+                patch.object(install, "get_bootstrap_python_command", return_value="python3"), \
+                patch.object(install, "ensure_uv_installed", return_value=["uv"]), \
+                patch.object(install, "create_virtualenv", return_value=venv_python), \
+                patch.object(install, "run_python_install_command"), \
+                patch.object(install, "run_command") as mock_run_command, \
+                patch.object(install, "verify_libreoffice_installation", side_effect=[False, False, True, True]), \
+                patch.object(install, "install_libreoffice_to_local_dir") as mock_install_libreoffice, \
+                patch.object(install, "is_linux_arm64", return_value=False), \
+                redirect_stdout(buffer):
+                result = install.main(skip_playwright=False, skip_libreoffice=False)
+
+            output = buffer.getvalue()
+            self.assertEqual(result, 0)
+            self.assertIn("Step 3", output)
+            self.assertIn("Step 4", output)
+            mock_run_command.assert_called_once_with(
+                [str(venv_python), "-m", "playwright", "install", "chromium"]
+            )
+            mock_install_libreoffice.assert_called_once()
+
+    def test_main_svg_default_on_rhel_does_not_request_helper_script(self):
+        # SVG-only install on RHEL-family Linux must NOT ask the user to run the
+        # RHEL helper script. The helper is only needed by the HTML route
+        # (Playwright system deps + ARM64 LibreOffice). The installer should
+        # emit an explicit INFO log explaining the skip, and the bootstrap
+        # must still succeed.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            env_file = root_dir / ".env"
+            env_example = root_dir / ".env.example"
+            requirements = root_dir / "requirements.txt"
+            venv_dir = root_dir / ".venv"
+            venv_python = venv_dir / "bin" / "python"
+
+            env_example.write_text("SLIDEA_MODE=ECONOMIC\nDEFAULT_LLM_MODEL=\n", encoding="utf-8")
+            requirements.write_text("cairosvg\n", encoding="utf-8")
+            venv_python.parent.mkdir(parents=True, exist_ok=True)
+            venv_python.write_text("", encoding="utf-8")
+
+            buffer = io.StringIO()
+            with patch.object(install, "ROOT_DIR", root_dir), \
+                patch.object(install, "ENV_FILE", env_file), \
+                patch.object(install, "ENV_EXAMPLE_FILE", env_example), \
+                patch.object(install, "REQUIREMENTS_FILE", requirements), \
+                patch.object(install, "VENV_DIR", venv_dir), \
+                patch.object(install, "get_bootstrap_python_command", return_value="python3"), \
+                patch.object(install, "ensure_uv_installed", return_value=["uv"]), \
+                patch.object(install, "create_virtualenv", return_value=venv_python), \
+                patch.object(install, "run_python_install_command"), \
+                patch.object(install, "run_command") as mock_run_command, \
+                patch("scripts.install.install.platform.system", return_value="Linux"), \
+                patch.object(
+                    install,
+                    "read_linux_os_release",
+                    return_value={"ID": "openeuler", "ID_LIKE": "rhel fedora", "NAME": "openEuler"},
+                ), \
+                patch.object(install, "is_linux_rhel_family", return_value=True), \
+                patch.object(install, "is_linux_arm64", return_value=False), \
+                redirect_stdout(buffer):
+                result = install.main()
+
+            output = buffer.getvalue()
+            self.assertEqual(result, 0)
+            self.assertIn("Detected RHEL family Linux", output)
+            self.assertIn("not required for the default SVG render route", output)
+            # No playwright install, no libreoffice download on SVG-only path
+            mock_run_command.assert_not_called()
+            self.assertEqual(install.read_env_value(env_file, "SETUP_COMPLETED"), "true")
+
     def test_main_when_setup_done_but_missing_libreoffice_installs_local_copy(self):
+        # HTML route path: when setup is done but LibreOffice is missing, the
+        # installer downloads a local copy. Only relevant when --with-html-route
+        # is opted in.
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
             env_file = root_dir / ".env"
@@ -645,7 +751,7 @@ class EnsureDependenciesTests(unittest.TestCase):
                 patch.object(install, "is_linux_arm64", return_value=False), \
                 patch.object(install, "run_command") as mock_run_command, \
                 redirect_stdout(buffer):
-                result = install.main()
+                result = install.main(skip_playwright=False, skip_libreoffice=False)
 
             output = buffer.getvalue()
             self.assertEqual(result, 0)
@@ -686,7 +792,7 @@ class EnsureDependenciesTests(unittest.TestCase):
                 patch.object(install, "verify_libreoffice_installation", side_effect=[True, True]), \
                 patch.object(install, "is_linux_arm64", return_value=False), \
                 redirect_stdout(buffer):
-                result = install.main()
+                result = install.main(skip_playwright=False, skip_libreoffice=False)
 
             output = buffer.getvalue()
             self.assertEqual(result, 0)
@@ -736,7 +842,7 @@ class EnsureDependenciesTests(unittest.TestCase):
                     return_value={"ID": "openeuler", "ID_LIKE": "rhel fedora", "NAME": "openEuler"},
                 ), \
                 redirect_stdout(buffer):
-                result = install.main()
+                result = install.main(skip_playwright=False, skip_libreoffice=False)
 
             output = buffer.getvalue()
             self.assertEqual(result, 0)
@@ -772,12 +878,13 @@ class EnsureDependenciesTests(unittest.TestCase):
                 patch.object(install, "get_bootstrap_python_command", return_value="python3"), \
                 patch.object(install, "ensure_uv_installed", return_value=["uv"]), \
                 patch.object(install, "create_virtualenv", return_value=venv_python), \
+                patch.object(install, "run_python_install_command"), \
                 patch.object(install, "run_command"), \
                 patch.object(install, "verify_libreoffice_installation", return_value=False), \
                 patch.object(install, "install_libreoffice_to_local_dir") as mock_install_libreoffice, \
                 patch.object(install, "is_linux_arm64", return_value=True), \
                 redirect_stdout(buffer):
-                result = install.main()
+                result = install.main(skip_playwright=False, skip_libreoffice=False)
 
             output = buffer.getvalue()
             self.assertEqual(result, 0)
@@ -809,6 +916,7 @@ class EnsureDependenciesTests(unittest.TestCase):
                 patch.object(install, "get_bootstrap_python_command", return_value="python3"), \
                 patch.object(install, "ensure_uv_installed", return_value=["uv"]), \
                 patch.object(install, "create_virtualenv", return_value=venv_python), \
+                patch.object(install, "run_python_install_command"), \
                 patch.object(install, "run_command"), \
                 patch.object(install, "verify_libreoffice_installation", return_value=False), \
                 patch.object(install, "install_libreoffice_to_local_dir") as mock_install_libreoffice, \
@@ -819,7 +927,7 @@ class EnsureDependenciesTests(unittest.TestCase):
                     side_effect=FileNotFoundError("missing helper script"),
                 ), \
                 redirect_stdout(buffer):
-                result = install.main()
+                result = install.main(skip_playwright=False, skip_libreoffice=False)
 
             output = buffer.getvalue()
             self.assertEqual(result, 0)

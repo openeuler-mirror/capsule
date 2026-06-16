@@ -1,5 +1,6 @@
 import asyncio
 import json
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -29,6 +30,9 @@ from core.utils.config import settings
 
 MAX_INVOKE_ATTEMPTS = 5
 RETRY_SLEEP_SECONDS = 10
+SLIDEA_AGENT_ID = "slidea"
+AGENT_PROFILE_AGENT_HEADER = "X-Agent-Id"
+AGENT_PROFILE_WORK_NODE_HEADER = "X-Work-Node"
 
 
 class LLMInvokeError(RuntimeError):
@@ -43,6 +47,33 @@ class ModelRoute(str, Enum):
 class ModelKind(str, Enum):
     LLM = "llm"
     VLM = "vlm"
+
+
+@dataclass(frozen=True)
+class _ChatClientConfig:
+    display_model_name: str
+    request_model_name: str
+    api_key: str
+    base_url: str
+    timeout: int
+    max_retries: int
+    streaming: bool
+    missing_settings: list[str]
+
+
+@dataclass(frozen=True)
+class _RouteResolution:
+    client_name: str
+    fallback_client_name: str | None = None
+    warning: str = ""
+
+
+@dataclass
+class InvokeOptions:
+    config: Any = None
+    pydantic_schema: Any = None
+    json_schema: Any = None
+    work_node: str | None = None
 
 
 def _infer_llm_error_hint(error: Exception) -> str:
@@ -109,6 +140,25 @@ class MissingConfigClient:
         return self
 
 
+class _RequestHeaderClient:
+    def __init__(self, client: Any, headers: dict[str, str]):
+        self._client = client
+        self._headers = headers
+        self.model_name = _client_model_name(client)
+        self.model = self.model_name
+
+    async def ainvoke(self, *args, **kwargs):
+        extra_headers = kwargs.pop("extra_headers", None) or {}
+        headers = {**self._headers, **extra_headers}
+        return await self._client.ainvoke(*args, **kwargs, extra_headers=headers)
+
+    def with_structured_output(self, *args, **kwargs):
+        return _RequestHeaderClient(
+            self._client.with_structured_output(*args, **kwargs),
+            self._headers,
+        )
+
+
 class _ClientHandle:
     def __init__(self, client_name: str):
         self.client_name = client_name
@@ -137,19 +187,69 @@ class _ClientHandle:
 
 
 def _configured_model_name(client_name: str) -> str:
-    if client_name == "premium_llm":
-        return settings.PREMIUM_LLM_MODEL or "unconfigured:premium_llm"
-    if client_name == "default_vlm":
-        return settings.DEFAULT_VLM_MODEL or "unconfigured:default_vlm"
-    return settings.DEFAULT_LLM_MODEL or "unconfigured:default_llm"
+    return _resolve_chat_client_config(client_name).display_model_name
 
 
-def _missing_client_config(client_name: str) -> list[str]:
+def _resolve_handover_chat_client_config() -> _ChatClientConfig | None:
+    if not settings.should_handover_model_routing():
+        return None
+
+    return _ChatClientConfig(
+        display_model_name="model_service:auto",
+        request_model_name="",
+        api_key=settings.DEFAULT_LLM_API_KEY,
+        base_url=settings.DEFAULT_LLM_API_BASE_URL,
+        timeout=600,
+        max_retries=5,
+        streaming=False,
+        missing_settings=settings.missing_default_llm_settings(),
+    )
+
+
+def _has_handover_chat_client_config() -> bool:
+    handover_config = _resolve_handover_chat_client_config()
+    return handover_config is not None and not handover_config.missing_settings
+
+
+def _resolve_chat_client_config(client_name: str) -> _ChatClientConfig:
+    handover_config = _resolve_handover_chat_client_config()
+    if handover_config is not None:
+        return handover_config
+
     if client_name == "premium_llm":
-        return settings.missing_premium_llm_settings()
+        return _ChatClientConfig(
+            display_model_name=settings.PREMIUM_LLM_MODEL or "unconfigured:premium_llm",
+            request_model_name=settings.PREMIUM_LLM_MODEL,
+            api_key=settings.PREMIUM_LLM_API_KEY,
+            base_url=settings.PREMIUM_LLM_API_BASE_URL,
+            timeout=600,
+            max_retries=5,
+            streaming=False,
+            missing_settings=settings.missing_premium_llm_settings(),
+        )
+
     if client_name == "default_vlm":
-        return settings.missing_default_vlm_settings()
-    return settings.missing_default_llm_settings()
+        return _ChatClientConfig(
+            display_model_name=settings.DEFAULT_VLM_MODEL or "unconfigured:default_vlm",
+            request_model_name=settings.DEFAULT_VLM_MODEL,
+            api_key=settings.DEFAULT_VLM_API_KEY,
+            base_url=settings.DEFAULT_VLM_API_BASE_URL,
+            timeout=300,
+            max_retries=5,
+            streaming=False,
+            missing_settings=settings.missing_default_vlm_settings(),
+        )
+
+    return _ChatClientConfig(
+        display_model_name=settings.DEFAULT_LLM_MODEL or "unconfigured:default_llm",
+        request_model_name=settings.DEFAULT_LLM_MODEL,
+        api_key=settings.DEFAULT_LLM_API_KEY,
+        base_url=settings.DEFAULT_LLM_API_BASE_URL,
+        timeout=600,
+        max_retries=5,
+        streaming=False,
+        missing_settings=settings.missing_default_llm_settings(),
+    )
 
 
 def _build_chat_client(
@@ -160,6 +260,7 @@ def _build_chat_client(
     timeout: int,
     max_retries: int,
     streaming: bool = False,
+    default_headers: dict[str, str] | None = None,
 ):
     return ChatOpenAI(
         model=model,
@@ -168,44 +269,26 @@ def _build_chat_client(
         timeout=timeout,
         max_retries=max_retries,
         streaming=streaming,
+        default_headers=default_headers,
     )
 
 
-def _build_chat_client_for_name(client_name: str):
+def _build_chat_client_for_name(client_name: str, default_headers: dict[str, str] | None = None):
     if ChatOpenAI is None:
         return MissingDependencyClient("langchain_openai")
 
-    missing_settings = _missing_client_config(client_name)
-    if missing_settings:
-        return MissingConfigClient(client_name, missing_settings, _configured_model_name(client_name))
-
-    if client_name == "premium_llm":
-        return _build_chat_client(
-            model=settings.PREMIUM_LLM_MODEL,
-            api_key=settings.PREMIUM_LLM_API_KEY,
-            base_url=settings.PREMIUM_LLM_API_BASE_URL,
-            timeout=600,
-            max_retries=5,
-            streaming=False,
-        )
-
-    if client_name == "default_vlm":
-        return _build_chat_client(
-            model=settings.DEFAULT_VLM_MODEL,
-            api_key=settings.DEFAULT_VLM_API_KEY,
-            base_url=settings.DEFAULT_VLM_API_BASE_URL,
-            timeout=300,
-            max_retries=5,
-            streaming=False,
-        )
+    client_config = _resolve_chat_client_config(client_name)
+    if client_config.missing_settings:
+        return MissingConfigClient(client_name, client_config.missing_settings, client_config.display_model_name)
 
     return _build_chat_client(
-        model=settings.DEFAULT_LLM_MODEL,
-        api_key=settings.DEFAULT_LLM_API_KEY,
-        base_url=settings.DEFAULT_LLM_API_BASE_URL,
-        timeout=600,
-        max_retries=5,
-        streaming=False,
+        model=client_config.request_model_name,
+        api_key=client_config.api_key,
+        base_url=client_config.base_url,
+        timeout=client_config.timeout,
+        max_retries=client_config.max_retries,
+        streaming=client_config.streaming,
+        default_headers=default_headers,
     )
 
 
@@ -214,18 +297,77 @@ default_llm = _ClientHandle("default_llm")
 default_vlm = _ClientHandle("default_vlm")
 
 
+def _build_handover_work_node_headers(work_node: str | None) -> dict[str, str]:
+    if _resolve_handover_chat_client_config() is None or work_node is None:
+        return {}
+    normalized_work_node = str(work_node).strip()
+    if not normalized_work_node:
+        return {}
+    return {
+        AGENT_PROFILE_AGENT_HEADER: SLIDEA_AGENT_ID,
+        AGENT_PROFILE_WORK_NODE_HEADER: normalized_work_node,
+    }
+
+
+def _build_model_invoke_headers(client: Any, work_node: str | None) -> dict[str, str]:
+    return _build_handover_work_node_headers(work_node)
+
+
+def _with_model_request_headers(client: Any, work_node: str | None):
+    headers = _build_model_invoke_headers(client, work_node)
+    if not headers:
+        return client
+
+    if isinstance(client, _ClientHandle):
+        return _RequestHeaderClient(client, headers)
+
+    bind = getattr(client, "bind", None)
+    if callable(bind):
+        return bind(extra_headers=headers)
+
+    return _RequestHeaderClient(client, headers)
+
+
 def _build_invoke_error(model_name: str, schema_name: str, last_error: Exception | None) -> LLMInvokeError:
+    schema_detail = f", schema={schema_name}" if schema_name else ""
     if last_error is None:
         return LLMInvokeError(
-            f"LLM invoke failed for model={model_name}, schema={schema_name or 'plain_text'}: unknown error"
+            f"LLM invoke failed for model={model_name}{schema_detail}: unknown error"
         )
 
     hint = _infer_llm_error_hint(last_error)
     detail = f" {hint}" if hint else ""
     return LLMInvokeError(
-        f"LLM invoke exhausted retries for model={model_name}, schema={schema_name or 'plain_text'}: "
+        f"LLM invoke exhausted retries for model={model_name}{schema_detail}: "
         f"{last_error}.{detail}"
     )
+
+
+def _response_content(response: Any) -> Any:
+    return response.content if hasattr(response, "content") else response
+
+
+def _schema_json(pydantic_schema: Any) -> Any:
+    if hasattr(pydantic_schema, "model_json_schema"):
+        return pydantic_schema.model_json_schema()
+    return None
+
+
+def _validate_pydantic_schema(pydantic_schema: Any, json_info: Any):
+    if hasattr(pydantic_schema, "model_validate"):
+        return pydantic_schema.model_validate(json_info)
+    return pydantic_schema(**json_info)
+
+
+def _parse_json_response_content(content: Any, json_schema: Any = None) -> Any:
+    if isinstance(content, (dict, list)):
+        json_info = content
+    else:
+        json_info = repair_json(str(content), ensure_ascii=False, return_objects=True)
+    if json_schema:
+        validate(instance=json_info, schema=json_schema)
+    logger.debug(json.dumps(json_info, indent=4, ensure_ascii=False, default=str))
+    return json_info
 
 
 async def _invoke_with_retries(
@@ -237,73 +379,39 @@ async def _invoke_with_retries(
     json_schema: Any = None,
     schema_name: str = "",
     kind: ModelKind = ModelKind.LLM,
+    work_node: str | None = None,
 ):
-    llm = raw_client
-    effective_schema_name = schema_name
+    llm = _with_model_request_headers(raw_client, work_node)
     if pydantic_schema:
-        json_schema = pydantic_schema.model_json_schema()
-        effective_schema_name = getattr(pydantic_schema, "__name__", str(pydantic_schema))
-        llm = llm.with_structured_output(
-            pydantic_schema, include_raw=True, method="json_schema"
-        )
-    elif json_schema:
-        effective_schema_name = "json_schema"
+        json_schema = _schema_json(pydantic_schema)
 
     model_name = _client_model_name(raw_client)
     last_error: Exception | None = None
     for attempt in range(1, MAX_INVOKE_ATTEMPTS + 1):
         try:
             response = await llm.ainvoke(args, config=config)
+            content = _response_content(response)
             if pydantic_schema:
-                if not response["parsing_error"]:
-                    logger.debug(response["parsed"])
-                    return response["parsed"]
-
-                raw_msg = response.get("raw")
-                content = raw_msg.content if hasattr(raw_msg, "content") else str(raw_msg)
-                json_info = repair_json(
-                    content, ensure_ascii=False, return_objects=True
-                )
-                logger.debug(json.dumps(json_info, indent=4, ensure_ascii=False))
-                validate(instance=json_info, schema=json_schema)
-                return pydantic_schema(**json_info)
+                json_info = _parse_json_response_content(content, json_schema)
+                return _validate_pydantic_schema(pydantic_schema, json_info)
 
             if json_schema:
-                json_info = repair_json(
-                    response.content, ensure_ascii=False, return_objects=True
-                )
-                validate(instance=json_info, schema=json_schema)
-                logger.debug(json.dumps(json_info, indent=4, ensure_ascii=False))
-                return json_info
+                return _parse_json_response_content(content, json_schema)
 
-            return response.content
+            return content
         except Exception as error:
             last_error = error
-            if pydantic_schema:
-                err_text = str(error).lower()
-                if "response_format" in err_text or "json_schema" in err_text or "invalid_request_error" in err_text:
-                    try:
-                        response = await raw_client.ainvoke(args, config=config)
-                        json_info = repair_json(
-                            response.content, ensure_ascii=False, return_objects=True
-                        )
-                        validate(instance=json_info, schema=json_schema)
-                        logger.debug(json.dumps(json_info, indent=4, ensure_ascii=False))
-                        return pydantic_schema(**json_info)
-                    except Exception:
-                        pass
-
             import traceback
 
             logger.debug(
                 f"{_kind_display_name(kind)} invoke attempt {attempt}/{MAX_INVOKE_ATTEMPTS} "
-                f"failed for model={model_name}, schema={effective_schema_name or 'plain_text'}: {error}"
+                f"failed for model={model_name}: {error}"
             )
             logger.debug(traceback.format_exc())
             if attempt < MAX_INVOKE_ATTEMPTS:
                 await asyncio.sleep(RETRY_SLEEP_SECONDS)
 
-    invoke_error = _build_invoke_error(model_name, effective_schema_name, last_error)
+    invoke_error = _build_invoke_error(model_name, schema_name, last_error)
     logger.error(str(invoke_error))
     raise invoke_error
 
@@ -315,12 +423,14 @@ async def _raw_ainvoke_with_retries(
     config: Any = None,
     schema_name: str = "plain_text",
     kind: ModelKind = ModelKind.LLM,
+    work_node: str | None = None,
 ):
     model_name = _client_model_name(raw_client)
+    client = _with_model_request_headers(raw_client, work_node)
     last_error: Exception | None = None
     for attempt in range(1, MAX_INVOKE_ATTEMPTS + 1):
         try:
-            response = await raw_client.ainvoke(args, config=config)
+            response = await client.ainvoke(args, config=config)
             return response
         except Exception as error:
             last_error = error
@@ -339,51 +449,83 @@ async def _raw_ainvoke_with_retries(
     raise invoke_error
 
 
-def _resolve_routed_client(kind: ModelKind, route: ModelRoute) -> dict[str, Any]:
+def _default_client_name(kind: ModelKind) -> str:
+    return "default_vlm" if kind == ModelKind.VLM else "default_llm"
+
+
+def _client_handle_for_name(client_name: str):
+    if client_name == "premium_llm":
+        return premium_llm
+    if client_name == "default_vlm":
+        return default_vlm
+    return default_llm
+
+
+def _resolve_route_resolution(kind: ModelKind, route: ModelRoute) -> _RouteResolution:
+    if _resolve_handover_chat_client_config() is not None:
+        return _RouteResolution(client_name="default_llm")
+
     mode = settings.get_slidea_mode()
-    default_client = default_llm if kind == ModelKind.LLM else default_vlm
+    default_client_name = _default_client_name(kind)
+    default_client = _client_handle_for_name(default_client_name)
     default_model_name = _client_model_name(default_client)
 
-    resolution = {
-        "client": default_client,
-        "primary_model": default_model_name,
-        "fallback_client": None,
-        "fallback_model": "",
-        "warning": "",
-    }
-
     if mode == "ECONOMIC" or route == ModelRoute.DEFAULT:
-        return resolution
+        return _RouteResolution(client_name=default_client_name)
 
-    premium_model_name = _client_model_name(premium_llm)
     if not settings.has_premium_llm_api_key():
-        resolution["warning"] = (
-            f"SLIDEA_MODE=PREMIUM but PREMIUM_LLM_API_KEY is empty. "
-            f"Falling back to ECONOMIC mode for {_kind_display_name(kind)} calls and using {default_model_name}."
+        return _RouteResolution(
+            client_name=default_client_name,
+            warning=(
+                f"SLIDEA_MODE=PREMIUM but PREMIUM_LLM_API_KEY is empty. "
+                f"Falling back to ECONOMIC mode for {_kind_display_name(kind)} calls and using {default_model_name}."
+            ),
         )
-        return resolution
 
     if not settings.has_premium_llm_config():
-        resolution["warning"] = (
-            f"SLIDEA_MODE=PREMIUM but PREMIUM_LLM settings are incomplete. "
-            f"Falling back to ECONOMIC mode for {_kind_display_name(kind)} calls and using {default_model_name}."
+        return _RouteResolution(
+            client_name=default_client_name,
+            warning=(
+                f"SLIDEA_MODE=PREMIUM but PREMIUM_LLM settings are incomplete. "
+                f"Falling back to ECONOMIC mode for {_kind_display_name(kind)} calls and using {default_model_name}."
+            ),
         )
-        return resolution
 
-    resolution["client"] = premium_llm
-    resolution["primary_model"] = premium_model_name
-    resolution["fallback_client"] = default_client
-    resolution["fallback_model"] = default_model_name
-    return resolution
+    return _RouteResolution(
+        client_name="premium_llm",
+        fallback_client_name=default_client_name,
+    )
+
+
+def _resolve_routed_client(kind: ModelKind, route: ModelRoute) -> dict[str, Any]:
+    route_resolution = _resolve_route_resolution(kind, route)
+    client = _client_handle_for_name(route_resolution.client_name)
+    fallback_client = (
+        _client_handle_for_name(route_resolution.fallback_client_name)
+        if route_resolution.fallback_client_name
+        else None
+    )
+    return {
+        "client": client,
+        "primary_model": _client_model_name(client),
+        "fallback_client": fallback_client,
+        "fallback_model": _client_model_name(fallback_client) if fallback_client else "",
+        "warning": route_resolution.warning,
+    }
 
 
 def _has_default_client_config(kind: ModelKind) -> bool:
+    if _resolve_handover_chat_client_config() is not None:
+        return _has_handover_chat_client_config()
     if kind == ModelKind.VLM:
         return settings.has_default_vlm_config()
     return settings.has_default_llm_config()
 
 
 def can_invoke_route(kind: ModelKind, route: ModelRoute | str) -> bool:
+    if _resolve_handover_chat_client_config() is not None:
+        return _has_handover_chat_client_config()
+
     normalized_route = _normalize_model_route(route)
     if settings.get_slidea_mode() == "ECONOMIC" or normalized_route == ModelRoute.DEFAULT:
         return _has_default_client_config(kind)
@@ -445,6 +587,7 @@ async def _raw_ainvoke_routed_client(
     *,
     config: Any = None,
     schema_name: str = "plain_text",
+    work_node: str | None = None,
 ):
     return await _execute_routed_invoke(
         kind,
@@ -454,6 +597,7 @@ async def _raw_ainvoke_routed_client(
             "args": args,
             "config": config,
             "schema_name": schema_name,
+            "work_node": work_node,
         },
     )
 
@@ -463,8 +607,14 @@ def get_llm_by_route(route: ModelRoute | str):
     return _resolve_routed_client(ModelKind.LLM, normalized_route)["client"]
 
 
-async def llm_invoke(route_or_client, args, config=None, pydantic_schema=None, json_schema=None):
+async def llm_invoke(
+    route_or_client,
+    args,
+    options: InvokeOptions | None = None,
+):
     """统一的文本模型调用接口。"""
+
+    opts = options or InvokeOptions()
 
     if isinstance(route_or_client, (ModelRoute, str)):
         return await _execute_routed_invoke(
@@ -473,24 +623,32 @@ async def llm_invoke(route_or_client, args, config=None, pydantic_schema=None, j
             invoke_func=_invoke_with_retries,
             invoke_kwargs={
                 "args": args,
-                "config": config,
-                "pydantic_schema": pydantic_schema,
-                "json_schema": json_schema,
+                "config": opts.config,
+                "pydantic_schema": opts.pydantic_schema,
+                "json_schema": opts.json_schema,
+                "work_node": opts.work_node,
             },
         )
 
     return await _invoke_with_retries(
         route_or_client,
         args,
-        config=config,
-        pydantic_schema=pydantic_schema,
-        json_schema=json_schema,
+        config=opts.config,
+        pydantic_schema=opts.pydantic_schema,
+        json_schema=opts.json_schema,
         kind=ModelKind.LLM,
+        work_node=opts.work_node,
     )
 
 
-async def vlm_invoke(route_or_client, args, config=None, pydantic_schema=None, json_schema=None):
+async def vlm_invoke(
+    route_or_client,
+    args,
+    options: InvokeOptions | None = None,
+):
     """统一的视觉模型调用接口。"""
+
+    opts = options or InvokeOptions()
 
     if isinstance(route_or_client, (ModelRoute, str)):
         return await _execute_routed_invoke(
@@ -499,23 +657,31 @@ async def vlm_invoke(route_or_client, args, config=None, pydantic_schema=None, j
             invoke_func=_invoke_with_retries,
             invoke_kwargs={
                 "args": args,
-                "config": config,
-                "pydantic_schema": pydantic_schema,
-                "json_schema": json_schema,
+                "config": opts.config,
+                "pydantic_schema": opts.pydantic_schema,
+                "json_schema": opts.json_schema,
+                "work_node": opts.work_node,
             },
         )
 
     return await _invoke_with_retries(
         route_or_client,
         args,
-        config=config,
-        pydantic_schema=pydantic_schema,
-        json_schema=json_schema,
+        config=opts.config,
+        pydantic_schema=opts.pydantic_schema,
+        json_schema=opts.json_schema,
         kind=ModelKind.VLM,
+        work_node=opts.work_node,
     )
 
 
-async def vlm_raw_invoke(route: ModelRoute | str, args, config=None, schema_name="plain_text"):
+async def vlm_raw_invoke(
+    route: ModelRoute | str,
+    args,
+    config=None,
+    schema_name="plain_text",
+    work_node=None,
+):
     """视觉模型原始调用接口。"""
 
     return await _raw_ainvoke_routed_client(
@@ -524,4 +690,5 @@ async def vlm_raw_invoke(route: ModelRoute | str, args, config=None, schema_name
         args,
         config=config,
         schema_name=schema_name,
+        work_node=work_node,
     )

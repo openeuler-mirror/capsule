@@ -13,6 +13,40 @@ def _stub_module(name: str, **attrs):
     return module
 
 
+def _load_libreoffice_module():
+    """Load core/utils/libreoffice.py in isolation for unit tests.
+
+    LibreOffice helpers used to live in common.py and were extracted into their
+    own module. The stub mirrors common's stubs closely enough that we can lean
+    on the same minimal logger/config surface.
+    """
+    libreoffice_path = Path(__file__).resolve().parents[1] / "core" / "utils" / "libreoffice.py"
+    spec = importlib.util.spec_from_file_location("test_libreoffice_isolated_module", libreoffice_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+
+    stubbed_modules = {
+        "core.utils.logger": _stub_module(
+            "core.utils.logger",
+            logger=type(
+                "Logger",
+                (),
+                {
+                    "debug": lambda *args, **kwargs: None,
+                    "info": lambda *args, **kwargs: None,
+                    "warning": lambda *args, **kwargs: None,
+                    "error": lambda *args, **kwargs: None,
+                },
+            )(),
+        ),
+        "core.utils.config": _stub_module("core.utils.config", app_base_dir="/tmp"),
+    }
+
+    with patch.dict(sys.modules, stubbed_modules, clear=False):
+        spec.loader.exec_module(module)
+    return module
+
+
 def _load_common_module():
     common_path = Path(__file__).resolve().parents[1] / "core" / "ppt_generator" / "utils" / "common.py"
     spec = importlib.util.spec_from_file_location("test_common_isolated_module", common_path)
@@ -42,6 +76,14 @@ def _load_common_module():
         "core.ppt_generator.utils.browser": _stub_module(
             "core.ppt_generator.utils.browser",
             BrowserManager=type("BrowserManager", (), {}),
+        ),
+        # common.py now imports pptx_postprocess at module load; stub it so the
+        # stubbed flat "pptx" module above doesn't trip its `from pptx.dml.color
+        # import RGBColor` import.
+        "core.ppt_generator.utils.pptx_postprocess": _stub_module(
+            "core.ppt_generator.utils.pptx_postprocess",
+            remove_full_slide_solid_backdrops=lambda *_args, **_kwargs: None,
+            flatten_all_groups=lambda *_args, **_kwargs: None,
         ),
     }
 
@@ -77,39 +119,39 @@ class CommonUtilsTests(unittest.TestCase):
         )
 
     def test_get_available_libreoffice_executable_prefers_system_binary(self):
-        common = _load_common_module()
+        libreoffice = _load_libreoffice_module()
 
-        with patch.object(common, "_get_local_libreoffice_executable", return_value=Path("/tmp/local-app-run")), \
+        with patch.object(libreoffice, "_get_local_libreoffice_executable", return_value=Path("/tmp/local-app-run")), \
             patch.object(
-                common.shutil,
+                libreoffice.shutil,
                 "which",
                 side_effect=lambda candidate: "/usr/bin/libreoffice26.2" if candidate == "libreoffice26.2" else None,
             ), \
-            patch.object(common.platform, "system", return_value="Linux"):
-            result = common._get_available_libreoffice_executable()
+            patch.object(libreoffice.platform, "system", return_value="Linux"):
+            result = libreoffice.get_available_libreoffice_executable()
 
         self.assertEqual(result, Path("/usr/bin/libreoffice26.2"))
 
     def test_get_available_libreoffice_executable_prefers_system_binary_on_macos(self):
-        common = _load_common_module()
+        libreoffice = _load_libreoffice_module()
 
-        with patch.object(common, "_get_local_libreoffice_executable", return_value=Path("/tmp/local-app-run")), \
+        with patch.object(libreoffice, "_get_local_libreoffice_executable", return_value=Path("/tmp/local-app-run")), \
             patch.object(
-                common.shutil,
+                libreoffice.shutil,
                 "which",
                 side_effect=lambda candidate: "/usr/local/bin/soffice" if candidate == "soffice" else None,
             ), \
-            patch.object(common.platform, "system", return_value="Darwin"):
-            result = common._get_available_libreoffice_executable()
+            patch.object(libreoffice.platform, "system", return_value="Darwin"):
+            result = libreoffice.get_available_libreoffice_executable()
 
         self.assertEqual(result, Path("/usr/local/bin/soffice"))
 
     def test_get_local_libreoffice_executable_for_windows_uses_soffice_com(self):
-        common = _load_common_module()
+        libreoffice = _load_libreoffice_module()
 
-        with patch.object(common.platform, "system", return_value="Windows"), \
-            patch.dict(common.os.environ, {"ProgramFiles": r"C:\Program Files"}, clear=True):
-            result = common._get_local_libreoffice_executable()
+        with patch.object(libreoffice.platform, "system", return_value="Windows"), \
+            patch.dict(libreoffice.os.environ, {"ProgramFiles": r"C:\Program Files"}, clear=True):
+            result = libreoffice._get_local_libreoffice_executable()  # pylint: disable=protected-access
 
         self.assertEqual(result, Path(r"C:\Program Files") / "LibreOffice" / "program" / "soffice.com")
 

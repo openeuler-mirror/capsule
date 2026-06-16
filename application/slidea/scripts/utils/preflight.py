@@ -227,14 +227,23 @@ def run_preflight(
     *,
     stages: list[str] | None = None,
     dry_run: bool = False,
+    render_mode: str = "svg",
 ) -> dict:
+    """Run readiness checks.
+
+    ``render_mode`` controls whether HTML-route-only runtime checks
+    (Playwright/Chromium for HTML-to-PDF, LibreOffice for PDF-to-PPTX) are
+    included. The SVG render route (the default) does not need either of
+    them, so by default these checks are skipped. Pass ``render_mode="html"``
+    to enable them.
+    """
     settings = settings or Settings()
     stages = stages or ["all"]
     checks = []
 
     checks.append(check_env_setup(settings))
     checks.append(check_runtime_python())
-    if "all" in stages or "render" in stages:
+    if render_mode == "html" and ("all" in stages or "render" in stages):
         checks.append(check_browser_runtime())
 
     missing_llm = settings.missing_default_llm_settings()
@@ -249,7 +258,7 @@ def run_preflight(
     else:
         checks.append(_result("default_llm", "ok", "Default LLM settings are configured."))
 
-    if settings.get_slidea_mode() == "PREMIUM":
+    if not settings.should_handover_model_routing() and settings.get_slidea_mode() == "PREMIUM":
         if not settings.has_premium_llm_api_key():
             checks.append(
                 _result(
@@ -285,17 +294,27 @@ def run_preflight(
             )
         )
 
-    missing_vlm = settings.missing_default_vlm_settings()
-    if missing_vlm:
+    if settings.should_handover_model_routing():
         checks.append(
             _result(
-                "default_vlm",
-                "warning",
-                "Default VLM settings are not configured, so PPT reflection will be skipped, may increase layout anomalies.",
+                "model_handover",
+                "ok",
+                "Model handover is enabled; text and vision requests use the DEFAULT_LLM endpoint.",
             )
         )
     else:
-        checks.append(_result("default_vlm", "ok", "Default VLM settings are configured."))
+        missing_vlm = settings.missing_default_vlm_settings()
+        if missing_vlm:
+            checks.append(
+                _result(
+                    "default_vlm",
+                    "warning",
+                    "Default VLM settings are not configured, so PPT reflection "
+                    "will be skipped, may increase layout anomalies.",
+                )
+            )
+        else:
+            checks.append(_result("default_vlm", "ok", "Default VLM settings are configured."))
 
     if settings.DISABLE_EMBEDDING:
         checks.append(
@@ -316,7 +335,7 @@ def run_preflight(
     else:
         checks.append(_result("embedding", "ok", "Embedding settings are configured."))
 
-    if "all" in stages or "render" in stages:
+    if render_mode == "html" and ("all" in stages or "render" in stages):
         checks.append(check_libreoffice_runtime())
 
     status = "ok"

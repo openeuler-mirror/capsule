@@ -15,7 +15,7 @@ from langchain_openai import ChatOpenAI
 
 
 from core.utils.config import settings, app_base_dir
-from core.utils.llm import default_llm, llm_invoke
+from core.utils.llm import InvokeOptions, default_llm, llm_invoke
 
 
 @dataclass
@@ -193,7 +193,7 @@ class PatchReviewer:
         return await llm_invoke(
             self.llm,
             [{"role": "user", "content": prompt}],
-            json_schema=CODE_QUALITY_REVIEW_SCHEMA
+            InvokeOptions(json_schema=CODE_QUALITY_REVIEW_SCHEMA),
         )
 
     async def review_architecture(self) -> Dict:
@@ -234,7 +234,7 @@ class PatchReviewer:
         return await llm_invoke(
             self.llm,
             [{"role": "user", "content": prompt}],
-            json_schema=ARCHITECTURE_REVIEW_SCHEMA
+            InvokeOptions(json_schema=ARCHITECTURE_REVIEW_SCHEMA),
         )
 
 
