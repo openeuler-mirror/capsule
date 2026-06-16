@@ -15,15 +15,24 @@ from contextlib import suppress
 from pathlib import Path
 
 try:
+    from . import _common
     from ._common import (
+        MAINLAND_CHINA_PYPI_INDEX,
+        MAINLAND_CHINA_UV_PYTHON_INSTALL_MIRROR,
+        PIP_NETWORK_RETRIES,
+        PIP_NETWORK_TIMEOUT_SECONDS,
+        PythonInstallSourceConfig,
         REQUIREMENTS_FILE,
         ROOT_DIR,
         StepIssue,
         VENV_DIR,
+        can_connect_to_url,
         ensure_uv_installed,
         format_duration,
         format_exception_message,
         get_bootstrap_python_command,
+        get_python_source_override,
+        get_uv_command,
         get_venv_python_path,
         log_info,
         log_step,
@@ -31,20 +40,31 @@ try:
         log_warning,
         record_step_failure,
         record_step_skip,
+        resolve_python_install_source_config,
         run_command,
         run_python_install_command,
+        should_use_python_mirrors_by_network,
         update_install_state,
     )
 except ImportError:  # pragma: no cover - support direct script execution
+    import _common  # type: ignore
     from _common import (
+        MAINLAND_CHINA_PYPI_INDEX,
+        MAINLAND_CHINA_UV_PYTHON_INSTALL_MIRROR,
+        PIP_NETWORK_RETRIES,
+        PIP_NETWORK_TIMEOUT_SECONDS,
+        PythonInstallSourceConfig,
         REQUIREMENTS_FILE,
         ROOT_DIR,
         StepIssue,
         VENV_DIR,
+        can_connect_to_url,
         ensure_uv_installed,
         format_duration,
         format_exception_message,
         get_bootstrap_python_command,
+        get_python_source_override,
+        get_uv_command,
         get_venv_python_path,
         log_info,
         log_step,
@@ -52,8 +72,10 @@ except ImportError:  # pragma: no cover - support direct script execution
         log_warning,
         record_step_failure,
         record_step_skip,
+        resolve_python_install_source_config,
         run_command,
         run_python_install_command,
+        should_use_python_mirrors_by_network,
         update_install_state,
     )
 
@@ -323,7 +345,7 @@ def create_virtualenv(bootstrap_python_cmd: str) -> Path:
         cleanup_before_retry=lambda: shutil.rmtree(VENV_DIR, ignore_errors=True) if VENV_DIR.exists() else None,
     )
 
-    python_path = get_venv_python_path()
+    python_path = get_venv_python_path(VENV_DIR)
     if not python_path.exists():
         raise FileNotFoundError(f"virtual environment python not found: {python_path}")
     return python_path
