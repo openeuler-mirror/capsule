@@ -138,7 +138,7 @@ Deep Research 是一个可独立安装和使用的深度研究 skill。它可以
    ```
 
 2. 使用脚本自动创建虚拟环境并安装相关依赖：
-   这一步会自动安装 Python 依赖、Playwright 浏览器以及 LibreOffice。
+   这一步会安装 SVG 渲染路线所需的 Python 依赖并准备 `.env`。
    ```bash
    python3 scripts/install/install.py
    ```
@@ -211,19 +211,12 @@ Deep Research 是一个可独立安装和使用的深度研究 skill。它可以
 更多命令可以参考 `docs/cli.md`。
 
 如果你不想使用步骤2中的安装脚本自动准备运行环境，也可以手动完成，步骤如下：
-   ```bash
-   python3 -m venv .venv
-   . .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-   以上即可使用默认 SVG 路线。如果你还需要可选的 HTML 路线，请额外执行：
-   ```bash
-   pip install playwright PyPDF2
-   python -m playwright install chromium
-   ```
-   LibreOffice（版本要求>=25.2）可以从这里下载并安装，再按系统方式配置环境：
-   `https://www.libreoffice.org/download/download-libreoffice/`
-   （LibreOffice 仅在可选 HTML 路线下需要，默认 SVG 路线不需要。）
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+```
 
 ## 仓库结构
 
@@ -243,60 +236,17 @@ Deep Research 是一个可独立安装和使用的深度研究 skill。它可以
 
 - 演示文稿的写作思路，
 - 幻灯片大纲，
-- 页级渲染结果，
-- 以及最终的 PDF / PPTX 产物。
+- 每页 SVG 渲染结果，
+- 以及最终可编辑的原生 PPTX 产物。
 
 这个子系统被拆分出来，是为了把“如何思考这份 deck”与“如何把 deck 渲染出来”这两类问题分开处理。
 
-Slidea 支持 SVG 和 HTML 两条渲染路线：
-
-- SVG 路线：默认路线。每一页直接渲染为 SVG，并导出为可编辑的原生 PPTX，无需 Playwright 或 LibreOffice。
-- HTML 路线：可选的旧版备用方案。每一页以 HTML/CSS 形式渲染（需要无头 Chromium 浏览器），再合并为 PDF 并通过 LibreOffice 转为 PPTX。启用方式见下方 [HTML 渲染路线（可选）](#html-渲染路线可选) 一节。
-
-使用示例（默认 SVG 路线）：
+使用示例：
 
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \
   --text "生成一份 10 页的 PPT，介绍 AI Agent，不要深入洞察，面向技术人员介绍 Agent 技术发展趋势"
 ```
-
-## HTML 渲染路线（可选）
-
-默认 SVG 路线在没有额外系统依赖的情况下就能产出可编辑的原生 PPTX。如果你明确需要走 HTML→PDF→PPTX 的旧版路线（通过无头 Chromium 渲染 HTML/CSS，再借助 LibreOffice 把 PDF 转为 PPTX），请按以下步骤启用。
-
-### 1. 安装 HTML 路线额外依赖
-
-在 skill 目录下执行：
-
-```bash
-.venv/bin/pip install playwright PyPDF2
-.venv/bin/python -m playwright install chromium
-```
-
-此外需要安装 LibreOffice（≥ 25.2）。可从 `https://www.libreoffice.org/download/download-libreoffice/` 下载，或通过系统包管理器安装。
-
-### 2. 使用 `--with-html-route` 让安装脚本一并准备（可选）
-
-如果你希望安装脚本直接帮你装好 Playwright Chromium 以及一份本地 LibreOffice，可以执行：
-
-```bash
-python3 scripts/install/install.py --with-html-route
-```
-
-`--with-html-route` 会重新启用默认 SVG-only 安装所跳过的 Playwright Chromium 安装步骤与 LibreOffice 下载/检查逻辑。
-
-### 3. 以 `--render-mode html` 运行
-
-```bash
-.venv/bin/python scripts/run_ppt_pipeline.py \
-  --text "<请求内容>" \
-  --render-mode html
-```
-
-### 注意事项
-
-- `--render-mode html` **不会**通过 `skill/SKILL.md` 暴露给宿主 agent。agent 使用 Slidea skill 时，始终走默认 SVG 路线，除非你显式把 HTML 路线命令交给它。
-- `scripts/html_to_pptx.py` 以及 `scripts/patch_render_missing.py`（当 `ppt.json` 记录的是 `render_mode: "html"` 时）在补齐 HTML 路线依赖后仍然可用。
 
 在 PPT 渲染过程中，会采用 fewshots 的模式，让模型输出的排版保持一致的风格。
 
@@ -334,7 +284,7 @@ Slidea 主要暴露三个脚本入口：
 - `outline/outline.json`
 - `ppt.json`
 
-最终渲染的 html、pdf、pptx产物将保存在 `ppt.json` 记录的 `render_dir` 路径下。这种分离让系统可以在不重跑全流程的情况下，重新进入某一阶段或执行补渲染。
+最终渲染产物将保存在 `ppt.json` 记录的 `render_dir` 路径下。SVG 渲染路线会产出 `svg_output/*.svg`（LLM 原始输出）、`svg_final/*.svg`（已嵌入图片的最终版）以及一份可编辑的原生 `*.pptx`。这种分离让系统可以在不重跑全流程的情况下，重新进入某一阶段或执行补渲染。
 
 ## 运行时降级行为
 
@@ -343,7 +293,6 @@ Slidea 主要暴露三个脚本入口：
 - 没有 Tavily 配置：跳过网页搜索
 - embedding 被禁用或未配置：跳过基于 embedding 的排序
 - 没有 VLM 配置：跳过基于 VLM 的图片评分与分发能力
-- （仅 HTML 路线）没有可用的 LibreOffice 转换：保留 HTML/PDF 输出，跳过 PPTX 转换。默认 SVG 路线不依赖 LibreOffice。
 
 ## 文档导航
 
@@ -368,6 +317,73 @@ Slidea 主要暴露三个脚本入口：
 - 对外公开文档
 
 如果你修改了行为，请在同一个改动中同步更新 `docs/` 下对应文档。
+
+## HTML 渲染路线（可选）
+
+上文描述的 SVG 路线是默认路线，也是 `skill/SKILL.md` 暴露给宿主 agent 的唯一路线。Slidea 还保留了 HTML 渲染路线作为可选备用方案，适合需要 HTML/CSS 表现力、需要走 HTML→PDF→PPTX 转换流程的用户。该路线为**按需启用**，需要额外系统依赖。
+
+HTML 路线会通过无头 Chromium 浏览器把每一页渲染为 HTML/CSS，合并每页 PDF 后再通过 LibreOffice 转换为 PPTX。它在代码库中完整保留（`core/ppt_generator/thought_to_ppt/page_generators/` 与 `core/ppt_generator/utils/browser.py`），但默认不安装也不暴露。
+
+### 何时使用 HTML 路线
+
+仅在以下任一情况属实时才选择 HTML 路线：
+
+- 你确实需要 HTML/CSS 视觉模型（例如 SVG 无法表达的某些复杂 CSS 布局）；
+- 你希望最终产物中除 PPTX 外还包含 PDF 中间产物；
+- 你在调试旧版流水线。
+
+其他场景下，请优先使用默认的 SVG 路线——它无需 Playwright 或 LibreOffice，可直接产出可编辑的原生 PPTX。
+
+### 1. 安装 HTML 路线额外依赖
+
+在 skill 目录下执行：
+
+```bash
+.venv/bin/pip install playwright PyPDF2
+.venv/bin/python -m playwright install chromium
+```
+
+此外需要安装 LibreOffice（≥ 25.2）。可从 `https://www.libreoffice.org/download/download-libreoffice/` 下载，或通过系统包管理器安装。
+
+### 2. 使用 `--with-html-route` 让安装脚本一并准备（可选）
+
+如果你希望安装脚本直接帮你装好 Playwright Chromium 以及一份本地 LibreOffice，可以执行：
+
+```bash
+python3 scripts/install/install.py --with-html-route
+```
+
+`--with-html-route` 会重新启用默认 SVG-only 安装所跳过的 Playwright Chromium 安装步骤与 LibreOffice 下载/检查逻辑。
+
+### 3. 以 `--render-mode html` 运行
+
+```bash
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --text "<请求内容>" \
+  --render-mode html
+```
+
+### HTML 路线的额外产出
+
+HTML 路线会在渲染目录下额外写出：
+
+- 每页的 `*.html` 文件（一页一份），
+- 合并后的 `*.pdf`，
+- 通过 LibreOffice 把 PDF 转 PPTX 得到的最终 `*.pptx`。
+
+HTML 运行的 `ppt.json` 会记录 `render_mode: "html"`，并相应记录 `pdf_path` 与 `pptx_path`。
+
+### HTML 路线专属的降级行为
+
+启用 HTML 路线时，会多出一条降级规则：
+
+- 没有可用的 LibreOffice 转换：保留 HTML/PDF 输出，跳过 PPTX 转换。（默认 SVG 路线不依赖 LibreOffice，不受此规则影响。）
+
+### 注意事项
+
+- `--render-mode html` **不会**通过 `skill/SKILL.md` 暴露给宿主 agent。agent 使用 Slidea skill 时，始终走默认 SVG 路线，除非你显式把 HTML 路线命令交给它。
+- `scripts/html_to_pptx.py`（独立的 HTML→PPTX 转换器）以及 `scripts/patch_render_missing.py`（当 `ppt.json` 记录的是 `render_mode: "html"` 时）在补齐 HTML 路线依赖后仍然可用。
+- 如果你之前手动安装过 Playwright / PyPDF2 / LibreOffice，之后某次升级改动了 `requirements.txt`，`.venv` 中已装的包不会被自动卸载。HTML 路线通常仍可使用；若失效，按上述步骤重装即可。
 
 ## 第三方声明
 

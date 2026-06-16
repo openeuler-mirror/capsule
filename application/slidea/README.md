@@ -142,7 +142,7 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
    ```
 
 2. Use the script to automatically create the virtual environment and install the required dependencies.
-   This step automatically handles Python dependencies, the Playwright browser, and LibreOffice-related setup.
+   This step installs the Python dependencies needed by the SVG render route and prepares `.env`.
    ```bash
    python3 scripts/install/install.py
    ```
@@ -219,17 +219,6 @@ python3 -m venv .venv
 pip install -r requirements.txt
 ```
 
-That is enough for the default SVG route. If you also want the optional HTML route, additionally run:
-
-```bash
-pip install playwright PyPDF2
-python -m playwright install chromium
-```
-
-LibreOffice (version >= 25.2) can be downloaded and installed from:
-`https://www.libreoffice.org/download/download-libreoffice/`
-(It is only needed by the optional HTML route, not by the default SVG route.)
-
 ## Repository Structure
 
 - `scripts/`: user-facing CLI entrypoints, including skill export, the full pipeline, staged execution, patch rendering, and nested installation helpers
@@ -248,60 +237,17 @@ It turns source material into:
 
 - a writing direction for the presentation,
 - a slide outline,
-- page-level renders,
-- and final PDF / PPTX artifacts.
+- per-page SVG renders,
+- and a final native editable PPTX artifact.
 
 This subsystem is split out to separate "how to think about the deck" from "how to render the deck".
 
-Slidea supports two render routes:
-
-- SVG route: the default. Each slide is generated as SVG and exported into a native editable PPTX (no Playwright or LibreOffice required).
-- HTML route: an optional legacy backend. Each slide is rendered as HTML/CSS via a headless Chromium browser, then merged into PDF and converted to PPTX via LibreOffice. See the [HTML Render Route (Optional)](#html-render-route-optional) section below for how to enable it.
-
-Example (default SVG route):
+Example:
 
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \
   --text "Generate a 10-page PPT about AI Agent for technical audiences, without deep research, covering Agent technology trends"
 ```
-
-## HTML Render Route (Optional)
-
-The default SVG route produces editable native PPTX without extra system dependencies. If you specifically want the legacy HTML→PDF→PPTX route (which renders pages as HTML/CSS via a headless Chromium and converts PDF→PPTX via LibreOffice), follow the steps below.
-
-### 1. Install the extra dependencies
-
-From the skill directory:
-
-```bash
-.venv/bin/pip install playwright PyPDF2
-.venv/bin/python -m playwright install chromium
-```
-
-You will also need LibreOffice (≥ 25.2). Download it from `https://www.libreoffice.org/download/download-libreoffice/` or install via your system package manager.
-
-### 2. Re-run the installer with HTML route enabled (optional)
-
-If you want the installer to set up Playwright Chromium and a bundled LibreOffice copy for you, run:
-
-```bash
-python3 scripts/install/install.py --with-html-route
-```
-
-`--with-html-route` re-enables the Playwright Chromium install step and the bundled LibreOffice download that the default SVG-only install skips.
-
-### 3. Run the pipeline with `--render-mode html`
-
-```bash
-.venv/bin/python scripts/run_ppt_pipeline.py \
-  --text "<request>" \
-  --render-mode html
-```
-
-### Notes
-
-- `--render-mode html` is **not** advertised to host agents through `skill/SKILL.md`. When an agent uses the Slidea skill, it always runs the default SVG route unless you explicitly hand it the HTML-route command.
-- `scripts/html_to_pptx.py` and `scripts/patch_render_missing.py` (when `ppt.json` records `render_mode: "html"`) still work once the extra dependencies are in place.
 
 During PPT rendering, Slidea uses a few-shot approach to keep generated layouts visually consistent.
 
@@ -339,7 +285,7 @@ Typical cached files include:
 - `outline/outline.json`
 - `ppt.json`
 
-The final rendered artifacts are written to the render directory recorded in `ppt.json`. In typical runs, this includes the generated HTML, PDF, and PPTX files. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
+The final rendered artifacts are written to the render directory recorded in `ppt.json`. The SVG render route produces `svg_output/*.svg` (raw LLM output), `svg_final/*.svg` (finalized with embedded images), and a native editable `*.pptx`. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
 
 ## Runtime Degradation Behavior
 
@@ -348,7 +294,6 @@ The runtime is configuration-driven. When optional services are unavailable, the
 - no Tavily configuration: skip web search
 - embedding disabled or unconfigured: skip embedding-based ranking
 - no VLM configuration: skip VLM-based image scoring and distribution features
-- (HTML route only) no LibreOffice conversion available: keep HTML/PDF outputs and skip PPTX conversion. The default SVG route does not depend on LibreOffice.
 
 ## Documentation
 
@@ -381,6 +326,73 @@ Contributions are most valuable in the following areas:
 - public-facing documentation
 
 If you change behavior, update the corresponding docs under `docs/` in the same change.
+
+## HTML Render Route (Optional)
+
+The SVG route described above is the default and is the only route advertised through `skill/SKILL.md`. Slidea also preserves an alternative HTML render route for users who need HTML/CSS expressiveness and the HTML→PDF→PPTX conversion flow. It is **opt-in** and requires extra system dependencies.
+
+The HTML route renders each slide as HTML/CSS via a headless Chromium browser, merges the per-page PDFs, and converts the merged PDF into PPTX via LibreOffice. It is fully implemented in the codebase (`core/ppt_generator/thought_to_ppt/page_generators/` and `core/ppt_generator/utils/browser.py`) but is not installed and not advertised by default.
+
+### When to use the HTML route
+
+Pick the HTML route only when one of the following is true:
+
+- you specifically need the HTML/CSS visual model (e.g. exotic CSS layouts that SVG cannot express);
+- you want a PDF intermediate artifact alongside the PPTX;
+- you are debugging the legacy pipeline.
+
+For all other use cases, prefer the default SVG route — it produces editable native PPTX with no Playwright or LibreOffice dependency.
+
+### 1. Install the extra dependencies
+
+From the skill directory:
+
+```bash
+.venv/bin/pip install playwright PyPDF2
+.venv/bin/python -m playwright install chromium
+```
+
+You will also need LibreOffice (≥ 25.2). Download it from `https://www.libreoffice.org/download/download-libreoffice/` or install via your system package manager.
+
+### 2. Re-run the installer with HTML route enabled (optional)
+
+If you want the installer to set up Playwright Chromium and a bundled LibreOffice copy for you, run:
+
+```bash
+python3 scripts/install/install.py --with-html-route
+```
+
+`--with-html-route` re-enables the Playwright Chromium install step and the bundled LibreOffice download that the default SVG-only install skips.
+
+### 3. Run the pipeline with `--render-mode html`
+
+```bash
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --text "<request>" \
+  --render-mode html
+```
+
+### What the HTML route produces
+
+The HTML route writes additional artifacts into the render directory:
+
+- per-page `*.html` files (one per slide),
+- a merged `*.pdf`,
+- the final `*.pptx` produced by LibreOffice's PDF-to-PPTX conversion.
+
+The `ppt.json` for an HTML run records `render_mode: "html"` and the `pdf_path` / `pptx_path` accordingly.
+
+### HTML-route-only degradation
+
+When the HTML route is in use, an extra degradation rule applies:
+
+- no usable LibreOffice conversion available: keep the HTML/PDF outputs and skip PPTX conversion. (The default SVG route does not depend on LibreOffice and is unaffected by this rule.)
+
+### Notes
+
+- `--render-mode html` is **not** advertised to host agents through `skill/SKILL.md`. When an agent uses the Slidea skill, it always runs the default SVG route unless you explicitly hand it the HTML-route command.
+- `scripts/html_to_pptx.py` (a standalone HTML→PPTX converter) and `scripts/patch_render_missing.py` (when `ppt.json` records `render_mode: "html"`) still work once the extra dependencies are in place.
+- If you previously installed Playwright / PyPDF2 / LibreOffice manually and then run an update that changes `requirements.txt`, those packages are not auto-uninstalled from `.venv`. The HTML route typically keeps working; if it stops, re-run the steps above.
 
 ## Third-party Notices
 
