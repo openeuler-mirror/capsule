@@ -87,13 +87,12 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
 7. **What the installer does:**
    - Detects `uv` and installs it when missing
    - Creates `.venv` with `uv venv --python 3.11 --seed`
-   - Installs `requirements.txt` (SVG render route dependencies only)
-   - Skips Playwright Chromium and LibreOffice by default — they are only needed by the optional HTML render route
+   - Installs `requirements.txt` (default SVG render route dependencies)
    - Verifies the bundled CJK fonts under `assets/fonts/` — used as a fallback so the SVG-route PNG snapshot renders Chinese correctly even on hosts without system CJK fonts
    - Creates `.env` from `.env.example` when needed
    - Writes `SETUP_COMPLETED=true` after the base Python/bootstrap dependencies are installed
 
-   The default SVG render route does not need Playwright or LibreOffice. If the user explicitly asks for the HTML render route, point them to the repository README's "HTML Render Route (Optional)" section, which describes how to run `python3 scripts/install/install.py --with-html-route` and what extra dependencies it installs.
+   Any alternative render route is opt-in and documented only in the repository README. The default install flow does not set it up and you do not need to mention it unless the user explicitly asks.
 
 8. **Try to populate the default LLM settings, the premium API key when needed, and Tavily search keys in `.env`.**
 
@@ -191,7 +190,6 @@ Check `<SKILLS_DIR>/slidea/.env`.
 - If `.env` does not exist, installation is not complete.
 - If `SETUP_COMPLETED` is not `true`, installation is not complete.
 - If `SETUP_COMPLETED=true`, treat the base Python/bootstrap dependencies as complete. The default SVG render route can produce PPTX with no extra system dependencies.
-- `SETUP_COMPLETED=true` does not imply that the optional HTML render route is ready. HTML route requires Playwright Chromium and LibreOffice, which are not installed by default.
 
 ## Report Result
 
@@ -220,12 +218,9 @@ Inside that final summary block, keep the wording concise and easy to scan. Cove
    - If you did not help auto-configure the default LLM settings, explicitly tell the user that they still need to fill in `SLIDEA_MODE` and the three `DEFAULT_LLM_*` values.
    - Tell the user that configuring only `DEFAULT_LLM` is sufficient for normal use, and briefly mention the recommended model list: `DEFAULT_LLM` → `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`; `PREMIUM_LLM` → `google/gemini-3.1-pro-preview` or `GLM-5.2` (optional, only used when `SLIDEA_MODE=PREMIUM`); `DEFAULT_VLM` → `kimi-2.5` or `kimi-2.6`.
    - If the user wants premium mode, explicitly remind them that the recommended premium model is **Gemini 3.1 Pro Preview**, and they should normally only need to fill in `PREMIUM_LLM_API_KEY`.
-   - RHEL-family Linux helper script (`extra_install_linux_rhel.sh`) is only required by the optional HTML render route. The default SVG-only install does not run it and does not ask the user to run it. Only mention the helper when the user explicitly opted into the HTML route via `python3 scripts/install/install.py --with-html-route`; in that case, the installer log will surface the exact command to run and you should relay it verbatim.
 
 5. **What the user should do next**
    - Ask the user to send their LLM API key / base URL / model information if they want help filling the remaining `.env` settings.
    - Offer to help them finish any remaining optional configuration.
-
-The RHEL-family helper command, if it was actually requested by an `install.py --with-html-route` run, must be relayed to the user verbatim in the final summary block — do not abbreviate it to a filename-only reference.
 
 During the whole installation flow, including progress updates, warnings, final result summaries, and follow-up questions, always reply in the same language the user is currently using.

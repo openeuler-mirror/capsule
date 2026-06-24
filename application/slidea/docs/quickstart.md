@@ -46,7 +46,7 @@ From the project root:
 python3 scripts/install/install.py
 ```
 
-The installer creates `.venv`, installs Python dependencies for the default SVG render route, creates `.env` when needed, and writes the setup marker. Playwright Chromium and a bundled LibreOffice are not installed by default — they are only needed by the optional HTML route. See the main README's "HTML Render Route (Optional)" section if you need them.
+The installer creates `.venv`, installs Python dependencies for the default SVG render route, creates `.env` when needed, and writes the setup marker. Any alternative render route is opt-in and documented in the repository README; it is not part of the default install.
 
 ## Configure Environment
 
@@ -218,8 +218,7 @@ If `preflight_failed` is returned:
 
 - check `SLIDEA_MODE` and the three default LLM settings first,
 - if `SLIDEA_MODE=PREMIUM`, also make sure `PREMIUM_LLM_API_KEY` is filled in when you want premium-routed callsites to use the premium model first,
-- make sure the local runtime has been bootstrapped with `scripts/install/install.py`,
-- (HTML route only) ensure Playwright Chromium is available when `render` or `all` is used with `--render-mode html`. The default SVG route does not need Playwright.
+- make sure the local runtime has been bootstrapped with `scripts/install/install.py`.
 
 If search silently skips:
 
@@ -230,10 +229,3 @@ If embedding work fails:
 
 - either configure embedding settings fully,
 - or set `DISABLE_EMBEDDING=true`.
-
-If PPTX is missing but PDF exists (HTML route only):
-
-- the HTML render pipeline likely succeeded,
-- local LibreOffice conversion was skipped or failed,
-- inspect the render/export path in `core/ppt_generator/utils/common.py`.
-- The default SVG route produces PPTX directly without a PDF intermediate, so this symptom is specific to the HTML route.

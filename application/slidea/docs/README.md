@@ -1,13 +1,13 @@
 # Slidea Documentation
 
-This directory contains public-facing documentation for the Slidea skill. The codebase is organized around a LangGraph-driven pipeline that turns a slide request into research material, a writing thought process, a PPT outline, and finally HTML/PDF/PPTX outputs.
+This directory contains public-facing documentation for the Slidea skill. The codebase is organized around a LangGraph-driven pipeline that turns a slide request into research material, a writing thought process, a PPT outline, and finally native editable PPTX outputs.
 
 ## Documentation Map
 
 - [Quickstart](quickstart.md): environment setup, required configuration, and the shortest path to a successful local run
 - [CLI Reference](cli.md): command entrypoints, stage model, arguments, and output contracts
 - [Architecture Overview](architecture.md): end-to-end system design, runtime flow, cache model, and major modules
-- [SVG Render Route](svg-route.md): default SVG-to-native-PPTX backend, quality gates, patch render, and manual QA checklist. The optional HTML route is documented in the main README.
+- [SVG Render Route](svg-route.md): default SVG-to-native-PPTX backend, quality gates, patch render, and manual QA checklist.
 - [App Overview](core/README.md): index of the `core/` package and how its subgraphs fit together
 - [Deep Research App](core/deep-research.md): recursive research/writing graph used for deep insight mode
 - [PPT Generator App](core/ppt-generator.md): thought generation, outline generation, and page rendering internals
@@ -35,6 +35,6 @@ The project is built around one primary workflow:
 2. Collect references from user-provided URLs and optional search/deep research.
 3. Generate a PPT writing thought process.
 4. Convert that thought plus source material into a slide outline.
-5. Render each slide as SVG by default and synthesize final artifacts. An optional HTML route is documented in the main README; the SVG route is what the skill advertises.
+5. Render each slide as SVG by default and synthesize final artifacts.
 
 The docs below mirror that runtime model, so reading them in order is the fastest way to understand the system.

@@ -80,7 +80,7 @@ This is the `<SKILLS_DIR>/slidea` directory where you originally installed the s
    - Reinstalls Python dependencies if `requirements.txt` has changed
    - Updates `.install_state.json` with new hashes
 
-   If you previously enabled the optional HTML render route by installing Playwright, PyPDF2, or LibreOffice manually, an update that changes the default `requirements.txt` may remove those packages from the declared dependency list. Already-installed packages in `.venv` are not automatically uninstalled, so the HTML route typically keeps working. If it stops working, follow the repository README's "HTML Render Route (Optional)" section again to reinstall the extra dependencies and rerun `python3 scripts/install/install.py --with-html-route`.
+   Any opt-in alternative render route lives outside the default dependency set. If you had previously set one up manually, re-follow the relevant section in the repository README after the update.
 
 ## What Gets Preserved
 

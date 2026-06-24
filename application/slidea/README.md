@@ -356,28 +356,38 @@ Pick the HTML route only when one of the following is true:
 
 For all other use cases, prefer the default SVG route — it produces editable native PPTX with no Playwright or LibreOffice dependency.
 
-### 1. Install the extra dependencies
+### Install the extra dependencies
 
-From the skill directory:
-
-```bash
-.venv/bin/pip install playwright PyPDF2
-.venv/bin/python -m playwright install chromium
-```
-
-You will also need LibreOffice (≥ 25.2). Download it from `https://www.libreoffice.org/download/download-libreoffice/` or install via your system package manager.
-
-### 2. Re-run the installer with HTML route enabled (optional)
-
-If you want the installer to set up Playwright Chromium and a bundled LibreOffice copy for you, run:
+Easiest path — let the installer handle it:
 
 ```bash
 python3 scripts/install/install.py --with-html-route
 ```
 
-`--with-html-route` re-enables the Playwright Chromium install step and the bundled LibreOffice download that the default SVG-only install skips.
+What this does per platform:
 
-### 3. Run the pipeline with `--render-mode html`
+| Platform | LibreOffice setup |
+| --- | --- |
+| Linux x86_64 | Downloads AppImage into `libreoffice/`. |
+| Linux ARM64 | Skips auto-install; prints your distro's package-manager command. RHEL-family also gets the helper script (see below). |
+| macOS (Apple Silicon) | Downloads DMG, copies `LibreOffice.app` into `libreoffice/`, removes quarantine. |
+| Windows (x86_64 / ARM64) | Runs the matching MSI into `libreoffice/`. |
+
+Playwright Chromium is installed into `.venv` on every platform.
+
+Manual alternative if the script does not fit your environment:
+
+```bash
+.venv/bin/pip install playwright PyPDF2
+.venv/bin/python -m playwright install chromium
+# then install LibreOffice (≥ 25.2) via your system package manager
+```
+
+### RHEL-family Linux: extra helper step
+
+On RHEL / CentOS / Fedora / openEuler / Rocky / Alma, Playwright's Chromium needs system libraries that the installer cannot auto-install. The `--with-html-route` log prints an exact `bash "..."` command pointing at `scripts/install/extra_install_linux_rhel.sh` — run that command manually (it needs `sudo`). Without it, the HTML route produces PDF but PPTX export fails.
+
+### Run the pipeline with `--render-mode html`
 
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \

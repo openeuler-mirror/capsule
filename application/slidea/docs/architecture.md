@@ -114,7 +114,7 @@ The `thought_to_ppt` subgraph:
 - transforms thought + source material into an outline
 - classifies pages by type
 - renders cover / toc / separator / content pages
-- synthesizes HTML outputs into PDF/PPTX deliverables
+- exports each page SVG into a native editable PPTX
 
 ## Data Persistence Model
 
@@ -164,7 +164,7 @@ Why SVG first:
 
 - the LLM can directly produce vector layout code,
 - SVG maps cleanly onto editable DrawingML inside the PPTX,
-- no Playwright/Chromium or LibreOffice runtime is needed for the default route,
+- the default route has minimal runtime dependencies (no headless browser or office suite required),
 - the intermediate artifact stays inspectable and patchable.
 
 Render pipeline (default SVG route):
@@ -177,11 +177,7 @@ Render pipeline (default SVG route):
 6. finalize SVG files (embed local images, copy into `svg_final/`),
 7. export native editable PPTX.
 
-An alternative HTML render route is preserved in the codebase for users who
-need HTML/CSS expressiveness. It is not enabled by default and is not
-advertised through `skill/SKILL.md`. The repository README documents how to
-install its extra dependencies (Playwright, PyPDF2, LibreOffice) and how to
-invoke the pipeline with `--render-mode html`.
+Any alternative render route is opt-in, not advertised through `skill/SKILL.md`, and documented only in the repository README.
 
 ## Reliability and Degradation Strategy
 
@@ -192,7 +188,6 @@ Examples:
 - no Tavily: search is skipped
 - no embeddings: ranking falls back or can be disabled explicitly
 - no VLM: image scoring/distribution features are limited
-- (HTML route only) no local LibreOffice: PDF can still be produced even if PPTX is absent. The default SVG route does not depend on LibreOffice.
 
 This makes the project portable across environments with very different capabilities.
 

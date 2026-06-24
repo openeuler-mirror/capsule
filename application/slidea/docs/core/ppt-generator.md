@@ -65,7 +65,7 @@ This layer matters because it discretizes continuous source text into pages, whi
 
 The third layer is the visual implementation layer.
 
-Its job is not to rethink content. Its job is to turn an already-defined page structure into stable rendered artifacts. The default backend renders each page as SVG and exports native editable PPTX through the SVG-to-DrawingML converter. An optional HTML backend is preserved in the codebase for users who want HTML/CSS expressiveness; it is not enabled by default and is documented in the repository README's "HTML Render Route (Optional)" section.
+Its job is not to rethink content. Its job is to turn an already-defined page structure into stable rendered artifacts. The default backend renders each page as SVG and exports native editable PPTX through the SVG-to-DrawingML converter. Any alternative backend is opt-in and documented in the repository README; it is not part of the default skill flow.
 
 In code, this lives in `thought_to_ppt/page_generators/` plus `utils/common.py` and `utils/browser.py`.
 
@@ -93,10 +93,6 @@ This is the most important idea in the entire system.
 The pipeline does not go directly from user request to final pages. It keeps generating progressively more concrete intermediate representations:
 
 user request -> writing thought -> slide outline -> page SVG -> native PPTX
-
-or, when the optional HTML route is explicitly enabled:
-
-user request -> writing thought -> slide outline -> page HTML -> PDF/PPTX
 
 This has major engineering benefits:
 
@@ -180,12 +176,10 @@ The default route does not ask the LLM to produce binary PPTX directly. It gener
 
 - SVG is vector and declarative, which makes it a clean source for DrawingML conversion.
 - SVG is easier to patch locally than a binary PPTX file.
-- The SVG → DrawingML path does not require Playwright/Chromium or LibreOffice at runtime.
+- The SVG → DrawingML path has minimal runtime dependencies — no headless browser or office suite required.
 - The intermediate artifact stays inspectable, which is critical for the generate-check-repair loop.
 
 So in practice, this is closer to "vector-native slide generation" than direct binary presentation generation. PPTX is the export target, not the primary internal representation.
-
-The optional HTML route is a parallel backend for cases where HTML/CSS expressiveness matters more than native PPTX editability. It uses Playwright and LibreOffice at runtime, is documented in the repository README, and is not advertised through `skill/SKILL.md`.
 
 ## Main Internal Subsystems
 
@@ -222,7 +216,7 @@ With the architectural model established, the file mapping is simple:
 | `thought_to_ppt/` | Structure layer and rendering layer |
 | `svg_pipeline/` | SVG quality checking, finalization, templates, and spec locking |
 | `svg_to_pptx/` | Native editable PPTX export from SVG pages |
-| `utils/` | SVG / PPTX helpers, image handling, and render support (HTML-route-only browser helpers are isolated under `utils/browser.py` and `utils/common.py`) |
+| `utils/` | SVG / PPTX helpers, image handling, and render support |
 | `assets/` | templates and shared prompt assets |
 
 ## Source-Level Reading Guide
@@ -256,6 +250,6 @@ When modifying this package, the most important thing to preserve is not any ind
 
 - the content-planning layer and rendering layer should stay separated,
 - `PPTPage` should remain the stable boundary between structure and rendering,
-- SVG should remain the default rendering intermediate; the HTML backend is opt-in and must not become the default again without explicit user action,
+- SVG should remain the default rendering intermediate; alternative backends are opt-in and must not become the default again without explicit user action,
 - page-type specialization should not collapse into one generic generation path,
 - render-result feedback should stay intact, or output quality will degrade quickly.
