@@ -347,28 +347,38 @@ HTML 路线会通过无头 Chromium 浏览器把每一页渲染为 HTML/CSS，�
 
 其他场景下，请优先使用默认的 SVG 路线——它无需 Playwright 或 LibreOffice，可直接产出可编辑的原生 PPTX。
 
-### 1. 安装 HTML 路线额外依赖
+### 安装额外依赖
 
-在 skill 目录下执行：
-
-```bash
-.venv/bin/pip install playwright PyPDF2
-.venv/bin/python -m playwright install chromium
-```
-
-此外需要安装 LibreOffice（≥ 25.2）。可从 `https://www.libreoffice.org/download/download-libreoffice/` 下载，或通过系统包管理器安装。
-
-### 2. 使用 `--with-html-route` 让安装脚本一并准备（可选）
-
-如果你希望安装脚本直接帮你装好 Playwright Chromium 以及一份本地 LibreOffice，可以执行：
+最简单的做法 —— 让安装脚本处理：
 
 ```bash
 python3 scripts/install/install.py --with-html-route
 ```
 
-`--with-html-route` 会重新启用默认 SVG-only 安装所跳过的 Playwright Chromium 安装步骤与 LibreOffice 下载/检查逻辑。
+各平台行为：
 
-### 3. 以 `--render-mode html` 运行
+| 平台 | LibreOffice 处理 |
+| --- | --- |
+| Linux x86_64 | 下载 AppImage 到 `libreoffice/`。 |
+| Linux ARM64 | 不自动安装，打印发行版包管理器命令让你手动执行；RHEL 系还会准备 helper 脚本（见下）。 |
+| macOS（Apple Silicon） | 下载 DMG，把 `LibreOffice.app` 拷到 `libreoffice/`，去除隔离属性。 |
+| Windows（x86_64 / ARM64） | 运行对应 MSI 到 `libreoffice/`。 |
+
+Playwright Chromium 在所有平台上都会装进 `.venv`。
+
+手动兜底（脚本不适用时）：
+
+```bash
+.venv/bin/pip install playwright PyPDF2
+.venv/bin/python -m playwright install chromium
+# 然后用系统包管理器装 LibreOffice（≥ 25.2）
+```
+
+### RHEL 系 Linux：额外的 helper 步骤
+
+在 RHEL / CentOS / Fedora / openEuler / Rocky / Alma 上，Playwright 的 Chromium 需要一些安装脚本无法自动装的系统库。`--with-html-route` 的日志会打出一条精确的 `bash "..."` 命令，指向 `scripts/install/extra_install_linux_rhel.sh` —— 这条命令需要你手动执行（需要 `sudo`）。不跑这一步，HTML 路线只能产出 PDF，PPTX 导出会失败。
+
+### 以 `--render-mode html` 运行
 
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \

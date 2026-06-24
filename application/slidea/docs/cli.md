@@ -45,13 +45,14 @@ python3 scripts/run_ppt_pipeline.py --text "<request>"
 | `--resume` | No* | Resume payload for an interrupted full-graph run |
 | `--session-id` | No | LangGraph thread/session identifier, default `local` |
 | `--stages` | No | Comma-separated stage list, default `all` |
-| `--render-mode` | No | Render backend, `svg` by default; `html` is supported only after the optional HTML route is enabled (see README) |
 | `--research-mode` | No | Runtime override for research routing: `skip`, `simple`, `deep` |
 | `--use-cache` | No | String boolean controlling cache-backed reuse |
 | `--image-search` | No | String boolean override for web image search |
 | `--run-id` | No | Existing or explicit run id |
 | `--recursion-limit` | No | LangGraph recursion limit, default `500` |
 | `--dry-run` | No | Run preflight only and skip generation |
+
+Any additional render-backend flag is intentionally not advertised here. The default and only route exposed through this doc is SVG; alternative backends are opt-in and documented only in the repository README.
 
 At least one of `--text` or `--resume` is required.
 
@@ -102,21 +103,19 @@ Preflight checks include:
 - `.env` existence in the skill root,
 - `SETUP_COMPLETED=true` in that `.env`,
 - use of the project `.venv` Python interpreter,
-- (HTML route only) Playwright/browser runtime for HTML-to-PDF during `render` and `all`, including a Chromium launchability smoke check. The default SVG route does not require Playwright, so this check is skipped unless `render_mode="html"` is detected.
 - default LLM settings,
 - premium LLM settings when `SLIDEA_MODE=PREMIUM`,
 - Tavily availability for web search and image search,
 - default VLM settings,
-- embedding configuration for deep research,
-- (HTML route only) LibreOffice availability for PDF-to-PPTX during `render` and `all`. Skipped on the default SVG route.
+- embedding configuration for deep research.
 
 The CLI also prints a human-readable preflight summary with warning/error lines before the terminal JSON payload.
 
 Blocking vs advisory behavior:
 
 - `env_setup` when `.env` is missing, and `default_llm`, are blocking checks.
-- `premium_llm`, `tavily`, `default_vlm`, `embedding`, and `libreoffice` are advisory warnings for agents.
-- `runtime_python`, `browser`, and incomplete `SETUP_COMPLETED` are advisory warnings and should not stop execution on their own.
+- `premium_llm`, `tavily`, `default_vlm`, and `embedding` are advisory warnings for agents.
+- `runtime_python` and incomplete `SETUP_COMPLETED` are advisory warnings and should not stop execution on their own.
 
 Possible top-level outcomes:
 
@@ -238,18 +237,6 @@ Render from a cached outline:
 python3 scripts/run_ppt_pipeline.py --text "..." --stages render --run-id <run_id>
 ```
 
-Render through the SVG backend (default; no flag needed):
-
-```bash
-python3 scripts/run_ppt_pipeline.py --text "..."
-```
-
-Render through the HTML backend (only after enabling the optional HTML route — see README):
-
-```bash
-python3 scripts/run_ppt_pipeline.py --text "..." --render-mode html
-```
-
 Resume an interrupted run:
 
 ```bash
@@ -295,10 +282,10 @@ The command:
 2. resolves the render directory from `ppt.json` or derives one from the topic,
 3. chooses target indices,
 4. regenerates only the needed page types,
-5. rebuilds the merged PDF / PPTX (HTML route) or the native PPTX (SVG route),
+5. rebuilds the native PPTX from the regenerated SVG pages,
 6. updates `ppt.json`.
 
-If `--indices` is omitted, it computes missing pages by comparing outline indices with existing `*.html` files.
+If `--indices` is omitted, it computes missing pages by comparing outline indices against existing render outputs in the render directory.
 
 ### Structured outcomes
 
@@ -328,15 +315,12 @@ This is the local bootstrap and environment-installation CLI.
 ### Purpose
 
 - create or rebuild the local Python virtual environment,
-- install Python dependencies (SVG route only by default),
+- install Python dependencies for the default SVG route,
 - ensure `.env` exists,
 - write `SETUP_COMPLETED=true`,
 - print post-install guidance about model configuration.
 
-By default Playwright Chromium and the bundled LibreOffice copy are not
-installed, because only the optional HTML route needs them. Pass
-`--with-html-route` to opt in; legacy `--skip-playwright` / `--skip-libreoffice`
-flags are still respected for backward compatibility.
+The installer sets up only what the default SVG route needs. Any additional opt-in route is documented separately in the repository README and is not part of this CLI's default surface.
 
 ### Basic usage
 
@@ -346,11 +330,7 @@ python3 scripts/install/install.py
 
 ### Arguments
 
-| Argument | Required | Description |
-| --- | --- | --- |
-| `--with-html-route` | No | Also prepare Playwright Chromium and a local LibreOffice copy for the optional HTML render route. Default SVG route does not need them. |
-| `--skip-playwright` | No | Skip Playwright Chromium installation. Implied unless `--with-html-route` is set. |
-| `--skip-libreoffice` | No | Skip LibreOffice check and installation. Implied unless `--with-html-route` is set. |
+This CLI takes no advertised flags for the default SVG install flow.
 
 ### Main step flow
 
@@ -358,27 +338,19 @@ The current implementation runs the following observable steps:
 
 1. check or create the Python virtual environment,
 2. install Python dependencies from `requirements.txt`,
-3. install Playwright Chromium (skipped unless `--with-html-route`),
-4. check or install local LibreOffice (skipped unless `--with-html-route`),
-5. ensure `.env` exists and write `SETUP_COMPLETED=true`,
-6. print post-install guidance for required model service configuration.
+3. ensure `.env` exists and write `SETUP_COMPLETED=true`,
+4. print post-install guidance for required model service configuration.
 
 ### Idempotent behavior
 
 The installer is partially idempotent:
 
 - if `SETUP_COMPLETED=true` and the virtual environment already exists, it skips venv recreation and dependency installation,
-- (HTML route only) if a usable LibreOffice installation is already available, it reuses it,
-- (HTML route only) if LibreOffice is missing, installs a local copy on supported platforms, or prints manual installation guidance,
 - it always re-checks and rewrites the setup marker in `.env`.
 
 ### Platform behavior
 
-LibreOffice installation (only run when `--with-html-route` is passed) is platform-specific:
-
-- Linux: download AppImage, or prints manual installation guidance
-- macOS: download DMG, mount it, copy `LibreOffice.app`, remove quarantine attributes when possible
-- Windows: download the portable installer and run it into the local directory
+The default install flow is platform-agnostic for SVG-only setups; no platform-specific helper is invoked.
 
 ### Output style
 
@@ -394,14 +366,13 @@ Unlike the generation CLIs, this script does not emit JSON. It prints step-orien
 It may create or modify:
 
 - `.venv/`
-- `libreoffice/` (only when `--with-html-route` is passed)
 - `.env`
 
 It also requires:
 
 - `requirements.txt`
 - a usable system Python bootstrap interpreter
-- network access for dependency downloads and, when `--with-html-route` is passed, bundled LibreOffice downloads
+- network access for dependency downloads
 
 ## 4. `scripts/export_skill.py`
 
@@ -436,7 +407,7 @@ The exporter reads `skill/slidea/manifest.json` and assembles a skill package th
 - `core/`,
 - runtime `scripts/`,
 - `scripts/install/install.py`,
-- the Linux ARM64 LibreOffice helper script under `scripts/install/`.
+- platform helper scripts under `scripts/install/` used only by opt-in flows documented in the repository README.
 
 The exporter intentionally excludes `scripts/export_skill.py` from the exported skill package.
 

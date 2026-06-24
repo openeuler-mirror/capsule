@@ -573,9 +573,11 @@ class EnsureDependenciesTests(unittest.TestCase):
         )
 
     def test_main_bootstrap_flow_writes_setup_completed_and_logs_steps(self):
-        # Default install now prepares only the SVG render route (no Playwright,
-        # no LibreOffice). Verify the default flow skips both and still writes
-        # SETUP_COMPLETED=true.
+        # Default install prepares only the SVG render route. The installer log
+        # must not even mention Playwright, LibreOffice, or any alternative
+        # render route — agents read this log and treat any mention as relevant.
+        # Verify Steps 1/2/5 run, Steps 3/4 are silent, and SETUP_COMPLETED=true
+        # is still written.
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
             env_file = root_dir / ".env"
@@ -608,10 +610,12 @@ class EnsureDependenciesTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertIn("Step 1", output)
             self.assertIn("Step 2", output)
-            self.assertIn("Step 3", output)
-            self.assertIn("HTML render route is not enabled", output)
-            self.assertIn("Step 4", output)
             self.assertIn("Step 5", output)
+            self.assertNotIn("Step 3", output)
+            self.assertNotIn("Step 4", output)
+            self.assertNotIn("Playwright", output)
+            self.assertNotIn("LibreOffice", output)
+            self.assertNotIn("HTML render route", output)
             self.assertIn("The Slidea skill has been installed successfully.", output)
             mock_run_python_install_command.assert_called_once_with(
                 [
@@ -676,11 +680,10 @@ class EnsureDependenciesTests(unittest.TestCase):
             mock_install_libreoffice.assert_called_once()
 
     def test_main_svg_default_on_rhel_does_not_request_helper_script(self):
-        # SVG-only install on RHEL-family Linux must NOT ask the user to run the
-        # RHEL helper script. The helper is only needed by the HTML route
-        # (Playwright system deps + ARM64 LibreOffice). The installer should
-        # emit an explicit INFO log explaining the skip, and the bootstrap
-        # must still succeed.
+        # SVG-only install on RHEL-family Linux must NOT mention the RHEL helper
+        # script, Playwright, LibreOffice, or any alternative render route in
+        # its log output. The helper only matters for the opt-in HTML route,
+        # which is not part of the default install.
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
             env_file = root_dir / ".env"
@@ -718,8 +721,11 @@ class EnsureDependenciesTests(unittest.TestCase):
 
             output = buffer.getvalue()
             self.assertEqual(result, 0)
-            self.assertIn("Detected RHEL family Linux", output)
-            self.assertIn("not required for the default SVG render route", output)
+            self.assertNotIn("RHEL", output)
+            self.assertNotIn("helper", output)
+            self.assertNotIn("Playwright", output)
+            self.assertNotIn("LibreOffice", output)
+            self.assertNotIn("HTML render route", output)
             # No playwright install, no libreoffice download on SVG-only path
             mock_run_command.assert_not_called()
             self.assertEqual(install.read_env_value(env_file, "SETUP_COMPLETED"), "true")

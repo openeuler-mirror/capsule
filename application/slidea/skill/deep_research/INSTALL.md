@@ -78,12 +78,12 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    **After each step is completed, or at least every 30 seconds, report the installation progress to the user so they do not think the script has failed.**
 
    ```bash
-   python3 scripts/install/install.py --skip-playwright --skip-libreoffice
+   python3 scripts/install/install.py
    ```
 
    **Windows (PowerShell):**
    ```powershell
-   python scripts/install/install.py --skip-playwright --skip-libreoffice
+   python scripts/install/install.py
    ```
 
 7. **What the installer does:**

@@ -6,7 +6,7 @@ Slidea renders slides as SVG and exports native editable PPTX. The SVG route is 
 python3 scripts/run_ppt_pipeline.py --text "<request>"
 ```
 
-The optional HTML render route is preserved in the codebase but is not advertised to host agents. See the repository README's "HTML Render Route (Optional)" section if you need it.
+This is the only render route advertised through `skill/SKILL.md`. Any alternative render route is opt-in and documented in the repository README; it is not part of this doc.
 
 ## Runtime Flow
 
@@ -42,7 +42,7 @@ python3 scripts/patch_render_missing.py --run-id <run_id>
 python3 scripts/patch_render_missing.py --run-id <run_id> --indices 0,3,5
 ```
 
-`patch_render_missing.py` reads `ppt.json` and chooses the SVG or HTML patch path automatically based on the recorded `render_mode`.
+`patch_render_missing.py` reads `ppt.json` and uses the recorded `render_mode` to pick the matching patch path automatically.
 
 ## Quality Gates
 
@@ -68,7 +68,7 @@ Use this checklist before treating a new SVG-route change as production-ready:
 1. Generate a small deck with the default SVG route (no `--render-mode` flag needed).
 2. Confirm `ppt.json` contains `render_mode: "svg"` and non-empty `svg_output_dir`, `svg_final_dir`, and `pptx_path`.
 3. Inspect `svg_output/` and `svg_final/`; page count should match the outline.
-4. Open the generated PPTX in PowerPoint or LibreOffice.
+4. Open the generated PPTX in PowerPoint or another PPTX viewer.
 5. Confirm text boxes and basic shapes are editable, not flattened screenshots.
 6. Confirm images display and keep reasonable aspect ratios.
 7. Compare several PPTX pages against matching `svg_final/*.svg` files.

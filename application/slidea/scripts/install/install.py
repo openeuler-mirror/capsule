@@ -762,40 +762,35 @@ def main(*, skip_playwright: bool = True, skip_libreoffice: bool = True) -> int:
             except Exception as exc:
                 record_step_failure(issues, 2, "Install Python dependencies", exc)
 
-        step_start = time.perf_counter()
-        log_step(3, "Install Playwright Chromium")
-        if skip_playwright:
-            record_step_skip(
-                issues,
-                3,
-                "Install Playwright Chromium",
-                "HTML render route is not enabled (SVG is the default). "
-                "Run with --with-html-route to install Playwright for the HTML route.",
-            )
-            playwright_ready = True
-        elif not python_runtime_ready or venv_python is None:
-            record_step_skip(
-                issues,
-                3,
-                "Install Playwright Chromium",
-                "the Python virtual environment is not ready",
-            )
-        elif not dependencies_ready:
-            record_step_skip(
-                issues,
-                3,
-                "Install Playwright Chromium",
-                "Python dependencies were not installed successfully",
-            )
-        else:
-            try:
-                run_command([str(venv_python), "-m", "playwright", "install", "chromium"])
-                playwright_ready = True
-                log_success(
-                    f"Playwright Chromium installation completed. Duration: {format_duration(time.perf_counter() - step_start)}"
+        if not skip_playwright:
+            step_start = time.perf_counter()
+            log_step(3, "Install Playwright Chromium")
+            if not python_runtime_ready or venv_python is None:
+                record_step_skip(
+                    issues,
+                    3,
+                    "Install Playwright Chromium",
+                    "the Python virtual environment is not ready",
                 )
-            except Exception as exc:
-                record_step_failure(issues, 3, "Install Playwright Chromium", exc)
+            elif not dependencies_ready:
+                record_step_skip(
+                    issues,
+                    3,
+                    "Install Playwright Chromium",
+                    "Python dependencies were not installed successfully",
+                )
+            else:
+                try:
+                    run_command([str(venv_python), "-m", "playwright", "install", "chromium"])
+                    playwright_ready = True
+                    duration = format_duration(time.perf_counter() - step_start)
+                    log_success(
+                        f"Playwright Chromium installation completed. Duration: {duration}"
+                    )
+                except Exception as exc:
+                    record_step_failure(issues, 3, "Install Playwright Chromium", exc)
+        else:
+            playwright_ready = True
 
     if not skip_libreoffice:
         step_start = time.perf_counter()
@@ -938,24 +933,6 @@ def main(*, skip_playwright: bool = True, skip_libreoffice: bool = True) -> int:
         except Exception as exc:
             record_step_failure(issues, 4, "Check LibreOffice", exc)
     else:
-        # SVG 默认路线不需要 LibreOffice，也不需要 RHEL helper 脚本（那个脚本
-        # 仅为 HTML 路线准备 Playwright 系统依赖 + ARM64 LibreOffice）。
-        # 在 RHEL 系系统上显式说明，避免用户/agent 误以为漏了步骤。
-        if platform.system() == "Linux":
-            os_release = read_linux_os_release()
-            if is_linux_rhel_family(os_release):
-                log_info(
-                    f"Detected {LINUX_RHEL_FAMILY_DISTRO_LABEL} Linux. The RHEL helper script "
-                    "(extra_install_linux_rhel.sh) is not required for the default SVG render "
-                    "route; it is only needed when the optional HTML route is enabled. Skipping."
-                )
-        record_step_skip(
-            issues,
-            4,
-            "Check LibreOffice",
-            "HTML render route is not enabled (SVG is the default). "
-            "Run with --with-html-route to install LibreOffice for the HTML route.",
-        )
         libreoffice_step_ready = True
 
     step_start = time.perf_counter()
