@@ -19,5 +19,4 @@ PyMuPDF
 python-pptx
 python-docx
 cairosvg
-llvmlite==0.45.0
 beautifulsoup4
