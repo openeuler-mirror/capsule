@@ -1,12 +1,12 @@
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 from core.utils.config import output_files_dir, settings
 
 
 def new_run_id(prefix: str = "run") -> str:
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
     return f"{ts}_{prefix}"
 
 

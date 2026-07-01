@@ -26,12 +26,12 @@ from scripts.utils.preflight import print_preflight_report, run_preflight
 
 async def new_semantic_run_id(text: str, fallback_prefix: str = "ppt") -> str:
     """Build a run_id as <timestamp>_<llm_summary>. Falls back to <ts>_<prefix> on any failure."""
-    from datetime import datetime
+    from datetime import datetime, timezone
     from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
     from langchain.messages import HumanMessage
     from core.ppt_generator.utils.common import sanitize_filename
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
     if not text or not text.strip():
         return f"{ts}_{fallback_prefix}"
 
@@ -77,6 +77,40 @@ async def _load_cached_text(base_dir: str, rel_path: str) -> str:
     p = Path(base_dir) / rel_path
     if p.exists():
         return p.read_text(encoding='utf-8')
+    return ""
+
+
+def _find_run_id_by_session(output_root: str, session_id: str) -> str:
+    """Locate the ORIGINAL run_id whose run.json recorded the given session_id.
+
+    Used when resuming: the original run_id (potentially carrying a semantic
+    suffix) is recovered instead of generating a fresh fallback id. Returns
+    an empty string when no match is found.
+
+    A session_id can legitimately appear in multiple run.json files — every
+    resume attempt writes a new run.json. We filter out those `resume: true`
+    records to find the original run that started the session.
+    """
+    if not session_id:
+        return ""
+    root = Path(output_root)
+    if not root.is_dir():
+        return ""
+    for run_json in root.glob("*/run.json"):
+        try:
+            data = load_json(str(run_json))
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("session_id") != session_id:
+            continue
+        if data.get("resume"):
+            # This is a resume-attempt record, not the original. Skip.
+            continue
+        rid = data.get("run_id")
+        if isinstance(rid, str) and rid:
+            return rid
     return ""
 
 async def _maybe_require_missing(parsed):
@@ -443,7 +477,30 @@ async def main():
 
     _apply_runtime_overrides(args)
 
-    run_id = args.run_id or await new_semantic_run_id(args.text or "")
+    if args.run_id:
+        run_id = args.run_id
+    elif args.resume:
+        # Resume must reuse the original run_id so cache and artifacts stay
+        # in a single directory. Recover it from any prior run.json matching
+        # the session_id; fail loudly if none exists (cannot resume a run
+        # that was never started).
+        recovered = _find_run_id_by_session(output_files_dir, args.session_id)
+        if not recovered:
+            emit_stage_payload(
+                "invalid_request",
+                {
+                    "stage": "invalid_request",
+                    "message": (
+                        f"resume requested but no prior run.json matches "
+                        f"session_id={args.session_id!r}. Start a new run "
+                        f"with --text instead."
+                    ),
+                },
+            )
+            return
+        run_id = recovered
+    else:
+        run_id = await new_semantic_run_id(args.text or "")
     out_dir = run_dir(run_id)
     cached_run = _cached_run_metadata(out_dir)
     args.render_mode = _resolve_render_mode(args, cached_run)
