@@ -19,7 +19,7 @@ sys.path.append(str(root))
 
 from core.utils.cache import new_run_id, run_dir, save_json, load_json
 from scripts.utils.cli_output import emit_stage_payload
-from core.utils.config import settings
+from core.utils.config import output_files_dir, settings
 from core.utils.logger import logger
 from scripts.utils.preflight import print_preflight_report, run_preflight
 
@@ -504,7 +504,12 @@ async def main():
     out_dir = run_dir(run_id)
     cached_run = _cached_run_metadata(out_dir)
     args.render_mode = _resolve_render_mode(args, cached_run)
-    save_json(Path(out_dir) / "run.json", _build_run_metadata(args, run_id))
+    # run.json is the snapshot of the INITIAL run that started this session.
+    # Subsequent resume calls must not overwrite it — otherwise the resume:true
+    # marker hides the original record and breaks session-id-based lookup.
+    run_json_path = Path(out_dir) / "run.json"
+    if not run_json_path.exists():
+        save_json(run_json_path, _build_run_metadata(args, run_id))
 
     if stages == ["all"]:
         await _run_all_stages(args, run_id, out_dir)

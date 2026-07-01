@@ -400,7 +400,6 @@ class CliStageSmokeTests(unittest.TestCase):
 
         self.assertEqual(payload["stage"], "input_required")
         self.assertEqual(run_payload["render_mode"], "svg")
-        self.assertTrue(run_payload["resume"])
 
     def test_resume_allows_matching_explicit_render_mode(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -460,7 +459,6 @@ class CliStageSmokeTests(unittest.TestCase):
 
         self.assertEqual(payload["stage"], "input_required")
         self.assertEqual(run_payload["render_mode"], "svg")
-        self.assertTrue(run_payload["resume"])
 
     def test_resume_ignores_conflicting_render_mode(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -520,7 +518,6 @@ class CliStageSmokeTests(unittest.TestCase):
 
         self.assertEqual(payload["stage"], "input_required")
         self.assertEqual(run_payload["render_mode"], "svg")
-        self.assertTrue(run_payload["resume"])
 
     def test_render_stage_without_outline_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
