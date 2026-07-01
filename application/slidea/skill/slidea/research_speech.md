@@ -97,7 +97,7 @@ Document quality requirements:
 
 **1.4.3 Save the markdown file**
 
-Save the markdown file as `<topic_name>.md` to `<SLIDEA_DIR>/output/speech_script/`. Record the absolute file path as `<SPEECH_SCRIPT_MD_PATH>`. 
+Save the markdown file as `<topic_name>.md` to `<output_root>/speech_script/`, where `<output_root>` is `<SLIDEA_DIR>/output/` by default or the directory configured via `OUTPUT_DIR` in `.env`. Record the absolute file path as `<SPEECH_SCRIPT_MD_PATH>`.
 
 
 ## Step 1.5: Handle User Feedback

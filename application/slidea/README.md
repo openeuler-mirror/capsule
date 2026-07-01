@@ -287,7 +287,7 @@ For full argument documentation and JSON response contracts, see [CLI Reference]
 
 ## Outputs and Caching
 
-Each PPT generation run is identified by a `run_id`. `output/<run_id>/` is the run cache and metadata directory in the Slidea skill installation directory. All intermediate outputs generated during the run are cached there.
+Each PPT generation run is identified by a `run_id`. `output/<run_id>/` is the run cache and metadata directory. By default it lives under the Slidea skill installation directory; set `OUTPUT_DIR` in `.env` to redirect every run, cache, and intermediate artifact to a different directory. All intermediate outputs generated during the run are cached there.
 
 Typical cached files include:
 

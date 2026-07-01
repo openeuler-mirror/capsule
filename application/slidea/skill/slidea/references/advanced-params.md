@@ -24,7 +24,7 @@ This is an environment-level setting, not a CLI flag. The agent does not pass it
 | `--resume "<user reply>"` | string | Continue an interrupted LangGraph run using the user's answer, selection, or edited text. |
 | `--session-id <id>` | string | Session/thread id. Default `local`. Reuse the same value when resuming. |
 | `--stages <csv>` | `all` (default), `parse`, `research`, `outline`, `render` | Stage selection. See [staged-execution.md](staged-execution.md). |
-| `--render-mode` | `svg` (default), `html` | **Do not pass this flag.** The default SVG route is what this skill advertises. |
+| `--render-mode` | `svg` (default) | **Do not pass this flag.** The default SVG route is what this skill advertises. |
 | `--research-mode` | `skip`, `simple`, `deep`, `''` (default) | Force research mode. **High-impact parameter** — see rule below. |
 | `--image-search` | `on`, `off` | Toggle web image search. |
 | `--run-id <id>` | string | Pin or reuse a specific run_id. Skips the LLM-based semantic suffix generation. |

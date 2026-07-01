@@ -42,7 +42,7 @@ The output of Phase 1 is a saved markdown file at `<SPEECH_SCRIPT_MD_PATH>`.
 
 Run the PPT pipeline to generate the final presentation.
 
-Before starting, if no other slidea task is currently executing, clean up the `<SLIDEA_DIR>/output/db_data` directory.
+Before starting, if no other slidea task is currently executing, clean up the `db_data` directory under the configured output root (`<SLIDEA_DIR>/output/` by default; override via `OUTPUT_DIR`).
 
 ### Pre-run user reminder (mandatory)
 
@@ -95,6 +95,19 @@ If the pipeline returns `input_required` or `missing_required_info`, you must st
 ### Output
 
 After a successful run, the final PPTX is at the path returned in the structured CLI result. Run metadata is stored in `ppt.json` at `output/<run_id>/ppt.json` — see [references/caching-and-paths.md](references/caching-and-paths.md) for the full directory layout and field schema.
+
+The CLI also prints a completion block to stdout that surfaces the deliverable and its editable source:
+
+```
+>>> 【当前步骤】 导出 PPT 完成
+>>> 生成PPT结束
+>>> 生成文件：<abs_path_to_pptx>
+>>> 源文件目录：<abs_path_to_slides_svg>
+```
+
+The "源文件目录" line points at `<run_id>/slides/svg/` — the editable on-disk SVG pages that produced the PPTX. Edit any file there and re-run PPTX export to regenerate the deliverable with your changes; no intermediate finalize step is needed because image inlining happens at export time.
+
+The output root is `<SLIDEA_DIR>/output/` by default; set `OUTPUT_DIR` in `.env` to redirect every run, cache, and intermediate artifact to a different directory. See [references/advanced-params.md](references/advanced-params.md) for details.
 
 ## Structured CLI Results
 

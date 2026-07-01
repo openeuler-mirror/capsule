@@ -93,5 +93,5 @@ Logs are written to `<SLIDEA_DIR>/logs/app_{time:YYYY-MM-DD}.log`. Use these for
 
 ## Cleaning Up
 
-Before starting a new run, if no other slidea task is executing, you may clean up `<SLIDEA_DIR>/output/db_data` to reset sqlite checkpoints. Do NOT delete `output/<run_id>/` directories unless the user explicitly asks — they hold the cache that enables resume.
+Before starting a new run, if no other slidea task is executing, you may clean up the `db_data` directory under the configured output root to reset sqlite checkpoints. Do NOT delete `output/<run_id>/` directories unless the user explicitly asks — they hold the cache that enables resume.
 

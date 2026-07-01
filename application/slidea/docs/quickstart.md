@@ -166,7 +166,7 @@ Current limitation: `--resume` is supported by the full-graph `all` path. Staged
 
 ## Output Layout
 
-Each run creates `output/<run_id>/` for cached state and metadata.
+Each run creates `<output_root>/<run_id>/` for cached state, metadata, and rendered artifacts. `<output_root>` is `<slidea_install_dir>/output/` by default, or the directory configured via `OUTPUT_DIR` in `.env`.
 
 Typical contents:
 
@@ -179,11 +179,10 @@ Typical contents:
 - `thought/thought.md`: generated PPT writing thought
 - `outline/outline.json`: normalized outline cache
 - `ppt.json`: render result metadata
-
-Important distinction:
-
-- `output/<run_id>/` stores cache files and metadata,
-- rendered SVG pages plus the final PPTX are written into the separate render directory referenced by `ppt.json`.
+- `<topic>.pptx`: final PPTX deliverable at the cache root
+- `slides/svg/`: editable SVG source pages
+- `slides/prompts/`: per-page LLM input audit trail
+- `slides/images/`: downloaded image assets
 
 ## Common Local Modes
 
