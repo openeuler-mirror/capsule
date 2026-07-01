@@ -1,6 +1,6 @@
 ---
 name: slidea
-description: "AI-Powered PPT generation with caching and patch rendering by run_id. Use for PPT creation where an agent needs full-run control over parse/research/outline/render flows, plus cached reuse and selective re-rendering."
+description: "AI-Powered PPT generation. Use for PPT creation where an agent needs full-run control over parse/research/outline/render flows. Generates a native editable PPTX from a topic, files, or URLs, with optional research and speech-script phases."
 ---
 
 # Slidea
@@ -9,40 +9,38 @@ Use the directory containing this SKILL.md as the Slidea skill directory (referr
 
 ## Runtime Rule
 
-- This skill must be run exclusively using the Python interpreter located inside `.venv`. Both the `.venv` directory and the skill scripts are located in <SLIDEA_DIR>.
+- This skill must be run exclusively using the Python interpreter inside `.venv`. Both the `.venv` directory and the skill scripts are located in `<SLIDEA_DIR>`.
 - Do not use system `python` or `python3` for pipeline commands after the environment check.
-- Use the Python interpreter inside `.venv` for every script in `scripts/`.
 - Unix-like example: `.venv/bin/python`
 - Windows example: `.venv/Scripts/python.exe`
 
 ## Render Route
 
-Slidea renders slides as SVG and exports native editable PPTX. The SVG route is the default and only render route exposed to skill consumers; no `--render-mode` flag is needed. Do not pass `--render-mode` and do not mention any alternative render route when invoking this skill.
-
-If a host agent or end user wants the legacy HTML→PDF→PPTX route, they must opt in outside of this skill (see the repository README's "HTML Render Route (Optional)" section). Do not enable it on the user's behalf.
+Slidea renders slides as SVG and exports native editable PPTX. The SVG route is the default and only render route exposed to skill consumers; no `--render-mode` flag is needed. Do not pass `--render-mode` and do not mention any alternative render route.
 
 ## Workflow Overview
 
-**Important**: Before starting, you **must ask user** whether they want to review and refine the PPT speech script at first. Based on their answer:
+**Important**: Before starting, you **must ask user** whether they want to review and refine the PPT speech script first. Based on their answer:
 
-- **User wants to review**: Execute Phase 1 **Research & Speech Script**, Then proceed to Phase 2: **PPT Generation**.
+- **User wants to review**: Execute Phase 1 **Research & Speech Script**, then proceed to Phase 2: **PPT Generation**.
 - **User does not need to review** (Recommended): Skip Phase 1 and directly execute Phase 2: **PPT Generation**.
 
 ---
 
 ## Phase 1: Research & Speech Script
 
-Before generating the PPT, you must first produce a speech script markdown file.
+Before generating the PPT, produce a speech script markdown file.
 **Read [research_speech.md](research_speech.md) for the complete Phase 1 instructions.**
 
-Phase 1 provides built-in tools for extracting content from documents/web pages, and search tool for retrieving online information — these tools are ready to use out of the box.
+Phase 1 provides built-in tools for extracting content from documents/web pages and searching online information — these tools are ready to use out of the box.
 
 The output of Phase 1 is a saved markdown file at `<SPEECH_SCRIPT_MD_PATH>`.
 
 ---
 
 ## Phase 2: PPT Generation
-run the PPT pipeline to generate the final presentation.
+
+Run the PPT pipeline to generate the final presentation.
 
 Before starting, if no other slidea task is currently executing, clean up the `<SLIDEA_DIR>/output/db_data` directory.
 
@@ -60,12 +58,12 @@ The PPT pipeline makes many sequential LLM calls (parsing, research routing, tho
 
 When invoking the pipeline through a shell tool that accepts a timeout:
 
-- **Hard minimum: 15 minutes** (`timeout 15m` or equivalent). Never use anything below 15 minutes — the run will be killed mid-generation and leave a half-written cache.
+- **Hard minimum: 15 minutes** (`timeout 15m` or equivalent). Never use anything below 15 minutes.
 - **Hard maximum: 30 minutes** (`timeout 30m`). Do not exceed 30 minutes; if the run has not finished by then, something is wrong and you should investigate rather than wait longer.
 - **Recommended default: 30 minutes** (`timeout 30m`).
 - If the host tool does not accept a timeout flag, run the command in background mode and poll for completion instead of relying on a default short timeout.
 
-This rule applies to **every** command in this section: full pipeline, resume, and staged execution.
+This rule applies to **every** command in this section.
 
 ### Commands
 
@@ -73,108 +71,30 @@ This rule applies to **every** command in this section: full pipeline, resume, a
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \
   --text <PPT request> \
-  --session-id <id> \
-  --run-id <run_id>
+  --session-id <id>
 ```
 
-If Phase 1 was run previously, set --research-mode "skip", and `<PPT request>` must contain:
+If Phase 1 was run previously, set `--research-mode "skip"`, and `<PPT request>` must contain:
 - PPT Original Request
 - PPT writer must reference `<SPEECH_SCRIPT_MD_PATH>` for writing approach
 - Purpose/Audience/Topic of PPT
 - files/urls provided by user
 
-
 **Resume after `input_required`**:
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \
   --resume "<user reply>" \
-  --session-id <same_session_id> \
-  --run-id <same_run_id>
+  --session-id <same_session_id>
 ```
-Always reuse the same `run_id` and `session_id` when resuming an interrupted run.
 
-If the pipeline returns `input_required` or `missing_required_info`, you must stop autonomous execution immediately and ask the user instead of continuing on your own.
-When this happens, do not infer the user's intent, do not answer on the user's behalf, do not choose from provided options yourself.
-Your only allowed behavior is:
+If the pipeline returns `input_required` or `missing_required_info`, you must stop autonomous execution immediately and ask the user instead of continuing on your own. Your only allowed behavior is:
 1. show the question, missing information request, or options to the user;
 2. wait for the user's explicit answer or selection;
-3. resume using the same `run_id` after the user responds.
-If the host agent environment tends to auto-answer tool or skill interactions, treat that behavior as incorrect for this skill and override it by routing the interaction back to the user.
-The `run_id` parameter must be obtained from the output of a Full pipeline and must remain consistent throughout the entire task lifecycle.
-`scripts/install/install.py` is a bootstrap CLI with no command-line arguments. It prints step-based human-readable logs rather than JSON.
+3. resume using the same `--session-id` after the user responds.
 
-## Caching & Run ID
-- `output/<run_id>/` is the cache/index directory for a run
-- Key files:
-  - `outline/outline.json` with `run_id`, `topic`, and `outline`
-  - `research/research.json`
-  - `research/deep_report.md`
-  - `references/references_all.txt`
-  - `thought/thought.md`
-  - `ppt.json` stored at `output/<run_id>/ppt.json` with `run_id`, `topic`, `render_dir`, `pdf_path`, and `pptx_path`
+### Output
 
-Final SVG and PPTX artifacts are written to the render output directory referenced by `ppt.json`. That render directory is separate from `output/<run_id>/` and is reused on patch render when available.
-
-## Run Logs
-- Logs are stored in `logs/app_{time:YYYY-MM-DD}.log`
-- Use `logs/app_{time:YYYY-MM-DD}.log` for debugging when needed. Console output and structured CLI JSON remain the primary runtime signals.
-
-## Parameters
-Parameter selection must be conservative and user-driven.
-Only pass CLI parameters that the user explicitly specified in their request or explicitly confirmed during follow-up interaction.
-Do not optimize, infer, or personalize parameter values on the user's behalf just because one choice seems faster, cheaper, higher quality, or more appropriate for the task.
-If the user did not clearly specify a parameter, do not set it manually. Omit it and let the CLI use its built-in default behavior instead.
-
-This rule applies to all optional parameters, including but not limited to:
-- `--research-mode`
-- `--image-search`
-- `--session-id`
-- `--run-id`
-- `--recursion-limit`
-
-When reading the user's request, distinguish between:
-- explicit parameter intent: the user directly asked for a research mode, or similar execution control;
-- task content: the user only described the presentation topic, audience, style, or desired outcome.
-
-Task content alone is not permission to set optional CLI parameters.
-Unless the user explicitly expressed a parameter preference, keep the parameter unset and rely on the default value.
-
-`--research-mode` is a high-impact parameter because it can materially change runtime length, generation depth, and overall end-to-end behavior.
-If you want to set `--research-mode` to `simple` or `deep`, you must explicitly ask the user which mode they want. Do not choose the mode on the user's behalf, even if one mode seems more appropriate based on the request. Only set `--research-mode` after the user has clearly confirmed that exact choice. Otherwise, you may set `--research-mode` to `skip` without asking the user.
-
-`scripts/run_ppt_pipeline.py`:
-- `--text "<PPT request> 参考文件路径: <SPEECH_SCRIPT_MD_PATH>"`: new PPT request text; `--text` or `--resume` must be provided; Preserve user original input as much as possible; The speech script markdown file path from Phase 1 must be appended as `参考文件路径: <SPEECH_SCRIPT_MD_PATH>` after the request text.
-- `--resume "<user reply>"`: continue an interrupted LangGraph run using the user's answer, selection, or edited text
-- `--session-id <id>`: session / thread id, default `local`
-- `--stages <comma-separated>`: stage selection, default `all`; supported values are `all`, `parse`, `research`, `outline`, `render`
-- `--render-mode {html|svg}`: render route, default is `svg`; do not pass this flag unless you have an explicit reason (the default SVG route is what the skill advertises)
-- `--research-mode {skip|simple|deep}`: force research mode, skip means no research, simple means shallow research, deep means deep research, default is ''
-- `--image-search {on|off}`: toggle web image search
-- `--run-id <run_id>`: reuse or pin a run id
-- `--recursion-limit <int>`: override LangGraph recursion limit
-- `--dry-run`: run preflight only and skip generation
-
-`scripts/patch_render_missing.py`:
-- `--run-id <run_id>`: required
-- `--text "<PPT request>"`: optional request text reused in render prompts
-- `--indices "0,1,2"`: optional comma-separated slide indices to regenerate
-
-## Patch render (missing/target pages)
-Use when slide pages are missing or you want to re-render specific page indices without full rerun.
-
-Patch render also makes LLM calls (one per regenerated page plus quality check and PPTX export) and can take several minutes. Apply the same **timeout ≥ 15 minutes** rule as the full pipeline, and remind the user that patching takes a few minutes before invoking.
-
-```bash
-.venv/bin/python scripts/patch_render_missing.py \
-  --run-id <run_id> \
-  --text "<PPT request>" \
-  --indices "0,1,2,9"
-```
-- Omit `--indices` to auto-detect missing pages.
-- Re-exports PDF/PPTX after patching.
-- If no target indices are missing, the CLI returns `completed` with an empty `target_indices` list and skips regeneration.
-- Returns structured JSON with `completed`, `missing_outline`, or `empty_outline` stage values.
-- Shares the same JSON payload framing helper as `run_ppt_pipeline.py`.
+After a successful run, the final PPTX is at the path returned in the structured CLI result. Run metadata is stored in `ppt.json` at `output/<run_id>/ppt.json` — see [references/caching-and-paths.md](references/caching-and-paths.md) for the full directory layout and field schema.
 
 ## Structured CLI Results
 
@@ -186,28 +106,21 @@ Patch render also makes LLM calls (one per regenerated page plus quality check a
 - `missing_outline`
 - `input_required`
 
-Resume values are interpreted tolerantly. Upstream callers may resume with `payload.selection`, `payload.answer`, `payload.text`, or `payload.message`. The runtime consumes them in that order.
-
-`scripts/patch_render_missing.py` can return these top-level `stage` values:
-- `completed`
-- `missing_outline`
-- `empty_outline`
-
 Always inspect the top-level `stage` field first before deciding whether to continue, retry, or stop for user input.
 
-## Update
-
-When the skill code or dependencies change, follow the update process in `UPDATE.md`:
-
-1. Clone the latest code to a temporary directory
-2. Export the updated skill package using `export_skill.py --update`
-3. Delete the temporary directory
-4. Switch to the skill directory and run `python scripts/install/update.py`
-
-The update script only reinstalls dependencies if `requirements.txt` has changed.
-
 ## Notes
+
 - Keep all paths relative to the working directory unless the user explicitly asks for something else.
 - Once bootstrap is complete, all runtime commands must go through the Python interpreter inside `.venv`.
 - `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` must be configured before running the pipeline.
 - If `MODEL_INVOKE_HANDOVER` is not `true`, `DEFAULT_LLM_MODEL` must also be configured, and `SLIDEA_MODE` should be `ECONOMIC` or `PREMIUM`.
+
+## Advanced Topics (read on demand)
+
+These are NOT needed for the common "generate a PPT" flow. Read them only when the user explicitly asks for the corresponding capability:
+
+- [references/caching-and-paths.md](references/caching-and-paths.md) — Output directory structure, semantic run_id naming, cache reuse, how to find a previous run.
+- [references/staged-execution.md](references/staged-execution.md) — Running individual stages (`parse`, `research`, `outline`, `render`) via `--stages`, useful for debugging or resuming partial runs.
+- [references/patch-render.md](references/patch-render.md) — Re-rendering specific pages or fixing missing pages without a full rerun (`scripts/patch_render_missing.py`).
+- [references/advanced-params.md](references/advanced-params.md) — `--research-mode`, `--image-search`, `--recursion-limit`, `--dry-run`, and other optional flags.
+- [references/update.md](references/update.md) — How to update the skill when source code or dependencies change.

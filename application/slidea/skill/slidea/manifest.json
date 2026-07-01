@@ -25,6 +25,10 @@
       "to": "SKILL.md"
     },
     {
+      "from": "skill/slidea/references",
+      "to": "references"
+    },
+    {
       "from": "skill/slidea/UPDATE.md",
       "to": "UPDATE.md"
     },
