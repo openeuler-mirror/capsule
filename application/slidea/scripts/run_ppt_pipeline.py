@@ -68,6 +68,9 @@ class SimpleWriter:
         files = payload.get("files")
         if files:
             print(f"\n>>> 生成文件：{','.join(str(f) for f in files)}")
+        source_dir = payload.get("source_dir")
+        if source_dir:
+            print(f"\n>>> 源文件目录：{source_dir}")
 
 
 async def _load_cached_text(base_dir: str, rel_path: str) -> str:
@@ -441,7 +444,7 @@ async def main():
     _apply_runtime_overrides(args)
 
     run_id = args.run_id or await new_semantic_run_id(args.text or "")
-    out_dir = run_dir(str(root), run_id)
+    out_dir = run_dir(run_id)
     cached_run = _cached_run_metadata(out_dir)
     args.render_mode = _resolve_render_mode(args, cached_run)
     save_json(Path(out_dir) / "run.json", _build_run_metadata(args, run_id))

@@ -188,6 +188,7 @@ async def process_event_stream(event_stream: Any, *, emit_event: EmitEvent) -> N
         elif mode == "custom" and isinstance(payload, dict):
             step = payload.get("step")
             files = payload.get("files")
+            source_dir = payload.get("source_dir")
             text = payload.get("text")
 
             if isinstance(step, str) and step:
@@ -197,6 +198,8 @@ async def process_event_stream(event_stream: Any, *, emit_event: EmitEvent) -> N
             if isinstance(files, list) and files:
                 file_text = ",".join(str(file) for file in files)
                 emit_event("output.delta", {"text": f">>> 生成文件：{file_text}\n"})
+            if isinstance(source_dir, str) and source_dir:
+                emit_event("output.delta", {"text": f">>> 源文件目录：{source_dir}\n"})
 
 
 async def run_thinkflow_app(

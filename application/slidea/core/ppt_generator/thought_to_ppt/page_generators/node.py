@@ -527,6 +527,7 @@ async def export_node(state: PPTState, writer: StreamWriter, config: RunnableCon
         {
             "step": "导出 PPT 完成",
             "files": [pdf_path, pptx_path] if pdf_path else [pptx_path],
+            "source_dir": save_dir,
             "text": "生成PPT结束",
         }
     )

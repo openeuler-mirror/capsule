@@ -6,6 +6,16 @@ The default invocation in the main SKILL.md needs no flags beyond `--text` and `
 
 Parameter selection must be conservative and user-driven. Only pass CLI parameters that the user explicitly specified or explicitly confirmed during follow-up interaction. Do not optimize, infer, or personalize parameter values on the user's behalf. If the user did not clearly specify a parameter, omit it and let the CLI use its built-in default.
 
+## Output Root (`.env`)
+
+`OUTPUT_DIR` in `<SLIDEA_DIR>/.env` redirects every run, cache, and intermediate artifact slidea writes — PPT runs, deep research workspace, sqlite checkpoints, downloaded documents — to the configured directory.
+
+- **Empty (default)**: output goes to `<SLIDEA_DIR>/output/` (auto-created).
+- **Absolute path** (e.g. `OUTPUT_DIR=/data/slidea-output`): that directory becomes the output root; slidea treats it exactly like `<SLIDEA_DIR>/output`.
+- **Relative path** (e.g. `OUTPUT_DIR=./my_output`): resolves against `<SLIDEA_DIR>`.
+
+This is an environment-level setting, not a CLI flag. The agent does not pass it; the user edits `.env` directly. When helping the user configure it, ensure the directory is writable and has enough disk space (a single PPT run is ~1–10 MB; deep research workspaces can grow larger).
+
 ## `scripts/run_ppt_pipeline.py` Flags
 
 | Flag | Values | When to use |

@@ -189,7 +189,7 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         }
         stdout = io.StringIO()
 
-        def local_run_dir(_base_dir, run_id):
+        def local_run_dir(run_id):
             out_dir = Path(cwd) / "output" / run_id
             out_dir.mkdir(parents=True, exist_ok=True)
             return str(out_dir)

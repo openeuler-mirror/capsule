@@ -128,7 +128,7 @@ class CliStageSmokeTests(unittest.TestCase):
         if extra_modules:
             fake_modules.update(extra_modules)
 
-        def local_run_dir(_base_dir, run_id):
+        def local_run_dir(run_id):
             base = Path(cwd or ROOT)
             out_dir = base / "output" / run_id
             out_dir.mkdir(parents=True, exist_ok=True)

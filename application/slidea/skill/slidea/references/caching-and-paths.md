@@ -4,7 +4,7 @@ Read this when you need to find a previous run, resume an interrupted task, or u
 
 ## Output Directory Structure
 
-Each PPT generation run produces one **cache directory** under `<SLIDEA_DIR>/output/`. The cache directory holds everything: process metadata (outline, research, thought), the final PPTX deliverable, and the slide source files.
+Each PPT generation run produces one **cache directory** under the configured output root (`<SLIDEA_DIR>/output/` by default; override via `OUTPUT_DIR` in `.env` — see [advanced-params.md](advanced-params.md)). The cache directory holds everything: process metadata (outline, research, thought), the final PPTX deliverable, and the slide source files.
 
 ```
 output/

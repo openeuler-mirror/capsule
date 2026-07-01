@@ -75,13 +75,14 @@ def _load_outline_or_emit(args, out_dir: str):
 
 def _resolve_save_dir(out_dir: str, topic: str):
     from core.ppt_generator.utils.common import sanitize_filename
+    from core.utils.config import output_files_dir
 
     ppt_json = load_json(str(Path(out_dir) / "ppt.json"))
     if ppt_json and ppt_json.get("slides_dir"):
         return ppt_json["slides_dir"]
     if ppt_json and ppt_json.get("pdf_path"):
         return str(Path(ppt_json["pdf_path"]).parent)
-    return os.path.join(ROOT, "output", sanitize_filename(topic))
+    return os.path.join(output_files_dir, sanitize_filename(topic))
 
 
 def _resolve_target_indices(args, save_dir: str, outline):
@@ -439,7 +440,7 @@ async def main():
     parser.add_argument("--indices", required=False, default="")
     args = parser.parse_args()
 
-    out_dir = run_dir(str(ROOT), args.run_id)
+    out_dir = run_dir(args.run_id)
     outline, topic = _load_outline_or_emit(args, out_dir)
     if not outline:
         return
