@@ -117,14 +117,14 @@ async def _llm_repair_svg(svg_content: str, issue: str) -> Optional[str]:
 
 
 def _svg_page_filename(page) -> str:
-    """svg_output/{nn}_{safe_title}.svg relative path."""
-    return f"svg_output/{safe_svg_filename(page.index, page.title)}"
+    """svg/{nn}_{safe_title}.svg relative path."""
+    return f"svg/{safe_svg_filename(page.index, page.title)}"
 
 
 async def _svg_screenshot_with_embedded_images(source_path: str, output_path: str) -> str:
     """Rasterize an SVG to PNG via CairoSVG for VLM review.
 
-    SVGs in svg_output/ reference images via relative paths like ``images/xxx.jpg``.
+    SVGs in svg/ reference images via relative paths like ``images/xxx.jpg``.
     We embed those as data URIs in memory and feed the resulting bytes straight
     to CairoSVG so referenced images render correctly without a tempfile.
     """

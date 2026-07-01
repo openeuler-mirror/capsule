@@ -13,41 +13,28 @@ from core.utils.logger import logger
 
 def find_svg_files(
     project_path: Path,
-    source: str = 'output',
+    source: str = 'svg',
 ) -> tuple[list[Path], str]:
     """Find SVG files in the project.
 
     Args:
         project_path: Project directory path.
-        source: SVG source directory alias or name.
-            - 'output': svg_output (original version)
-            - 'final': svg_final (post-processed, recommended)
-            - or any subdirectory name
+        source: SVG source directory name (default ``svg``). If the named
+            directory does not exist and ``project_path`` itself is a directory,
+            falls back to scanning ``project_path`` directly.
 
     Returns:
         (list_of_svg_files, actual_directory_name) tuple.
     """
-    dir_map = {
-        'output': 'svg_output',
-        'final': 'svg_final',
-    }
-
-    dir_name = dir_map.get(source, source)
-    svg_dir = project_path / dir_name
-
-    if not svg_dir.exists():
-        logger.warning(f"{dir_name} directory does not exist, trying svg_output")
-        dir_name = 'svg_output'
-        svg_dir = project_path / dir_name
+    svg_dir = project_path / source
 
     if not svg_dir.exists():
         if project_path.is_dir():
             svg_dir = project_path
-            dir_name = project_path.name
         else:
             return [], ''
 
-    return sorted(svg_dir.glob('*.svg')), dir_name
+    return sorted(svg_dir.glob('*.svg')), svg_dir.name
 
 
 def find_notes_files(

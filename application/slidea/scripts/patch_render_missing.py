@@ -77,8 +77,8 @@ def _resolve_save_dir(out_dir: str, topic: str):
     from core.ppt_generator.utils.common import sanitize_filename
 
     ppt_json = load_json(str(Path(out_dir) / "ppt.json"))
-    if ppt_json and ppt_json.get("render_dir"):
-        return ppt_json["render_dir"]
+    if ppt_json and ppt_json.get("slides_dir"):
+        return ppt_json["slides_dir"]
     if ppt_json and ppt_json.get("pdf_path"):
         return str(Path(ppt_json["pdf_path"]).parent)
     return os.path.join(ROOT, "output", sanitize_filename(topic))
@@ -92,8 +92,8 @@ def _resolve_target_indices_for_mode(args, save_dir: str, outline, render_mode: 
     target_indices = parse_indices(args.indices)
     if not target_indices:
         if render_mode == "svg":
-            svg_output_dir = Path(save_dir) / "svg_output"
-            existing = _existing_svg_indices(svg_output_dir)
+            svg_dir = Path(save_dir) / "svg"
+            existing = _existing_svg_indices(svg_dir)
         else:
             existing = set(int(p.stem) for p in Path(save_dir).glob("*.html") if p.stem.isdigit())
         outline_indices = [p.index for p in outline]
@@ -101,11 +101,11 @@ def _resolve_target_indices_for_mode(args, save_dir: str, outline, render_mode: 
     return target_indices
 
 
-def _existing_svg_indices(svg_output_dir: Path) -> set[int]:
+def _existing_svg_indices(svg_dir: Path) -> set[int]:
     indices = set()
-    if not svg_output_dir.exists():
+    if not svg_dir.exists():
         return indices
-    for path in svg_output_dir.glob("*.svg"):
+    for path in svg_dir.glob("*.svg"):
         prefix = path.stem.split("_", 1)[0]
         if prefix.isdigit():
             indices.add(int(prefix) - 1)
@@ -113,7 +113,7 @@ def _existing_svg_indices(svg_output_dir: Path) -> set[int]:
 
 
 def _svg_path_for_index(save_dir: str, index: int) -> str | None:
-    matches = sorted((Path(save_dir) / "svg_output").glob(f"{index + 1:02d}_*.svg"))
+    matches = sorted((Path(save_dir) / "svg").glob(f"{index + 1:02d}_*.svg"))
     if not matches:
         return None
     return str(matches[0])
@@ -140,11 +140,15 @@ async def _patch_render_html(context: PatchRenderContext):
     from core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph import content_page_worker_app
     from core.ppt_generator.utils.common import sanitize_filename, htmls_to_pptx
 
+    cached_ppt_json = load_json(str(Path(out_dir) / "ppt.json")) or {}
+    cached_template_name = cached_ppt_json.get("template_name") or ""
+
     state = {
         "query": args.text or "",
         "outline": outline,
         "topic": topic,
         "save_dir": save_dir,
+        "template_name": cached_template_name,
         "ppt_prompt": "",
         "language": "",
         "generated_pages": [],
@@ -231,7 +235,7 @@ async def _patch_render_html(context: PatchRenderContext):
         "run_id": args.run_id,
         "topic": topic,
         "render_mode": "html",
-        "render_dir": save_dir,
+        "slides_dir": save_dir,
         "pdf_path": pdf_path,
         "pptx_path": pptx_path,
     }
@@ -262,7 +266,6 @@ async def _patch_render_svg(context: PatchRenderContext):
     from core.ppt_generator.thought_to_ppt.svg_page_generators.node import (
         prepare_generation_context_node,
         quality_check_node,
-        finalize_node,
     )
     from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph import (
         generate_cover_thanks_pages_app,
@@ -278,12 +281,16 @@ async def _patch_render_svg(context: PatchRenderContext):
     from core.ppt_generator.utils.common import sanitize_filename
     from core.ppt_generator.utils.svg_export import svgs_to_pptx
 
+    cached_ppt_json = load_json(str(Path(out_dir) / "ppt.json")) or {}
+    cached_template_name = cached_ppt_json.get("template_name") or ""
+
     state = {
         "query": args.text or "",
         "render_mode": "svg",
         "outline": outline,
         "topic": topic,
         "save_dir": save_dir,
+        "template_name": cached_template_name,
         "ppt_prompt": "",
         "language": "",
         "generated_pages": [],
@@ -382,20 +389,17 @@ async def _patch_render_svg(context: PatchRenderContext):
         )
         return
 
-    finalize_update = await finalize_node({"save_dir": save_dir, "page_files": files}, writer)
-    files = finalize_update.get("page_files", files)
-
-    pdf_path, pptx_path = await svgs_to_pptx(files, save_dir, sanitize_filename(topic))
+    pdf_path, pptx_path = await svgs_to_pptx(files, out_dir, sanitize_filename(topic))
 
     record = {
         "run_id": args.run_id,
         "topic": topic,
         "render_mode": "svg",
-        "render_dir": save_dir,
+        "slides_dir": save_dir,
+        "svg_dir": str(Path(save_dir) / "svg"),
+        "template_name": state.get("template_name", ""),
         "pdf_path": pdf_path,
         "pptx_path": pptx_path,
-        "svg_output_dir": str(Path(save_dir) / "svg_output"),
-        "svg_final_dir": str(Path(save_dir) / "svg_final"),
     }
     save_json(Path(out_dir) / "ppt.json", record)
 

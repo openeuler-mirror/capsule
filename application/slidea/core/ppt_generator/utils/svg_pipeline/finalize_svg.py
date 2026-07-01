@@ -1,6 +1,19 @@
+"""Inline local image references inside SVG files and SVG content.
+
+Used by two callers:
+
+- ``svgs_to_pptx`` (PPTX export): rewrites image hrefs in a temporary SVG copy
+  so the PPTX converter receives self-contained input.
+- VLM review's screenshot step: inlines images in memory before rasterizing
+  via CairoSVG, so referenced images render correctly.
+
+Public API:
+- ``embed_local_images_in_file(svg_path, source_dir)`` — rewrite a file in place.
+- ``embed_local_images_in_content(svg_content, source_dir)`` — rewrite a string in memory.
+"""
+
 import base64
 import mimetypes
-import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urlparse
@@ -13,41 +26,31 @@ ET.register_namespace("", SVG_NS)
 ET.register_namespace("xlink", XLINK_NS)
 
 
-def finalize_svg_files(svg_paths: list[str | Path], save_dir: str | Path) -> list[str]:
-    """Copy generated SVGs into svg_final and embed local image references."""
-    final_dir = Path(save_dir) / "svg_final"
-    if final_dir.exists():
-        shutil.rmtree(final_dir)
-    final_dir.mkdir(parents=True, exist_ok=True)
+def embed_local_images_in_file(svg_path: Path | str, source_dir: Path | str) -> bool:
+    """Inline local image references in an SVG file in place.
 
-    final_paths = []
-    for svg_path in svg_paths:
-        source_path = Path(svg_path)
-        target_path = final_dir / source_path.name
-        shutil.copy2(source_path, target_path)
-        _embed_local_images(target_path, source_path.parent)
-        final_paths.append(str(target_path.resolve()))
-
-    return final_paths
-
-
-def _embed_local_images(svg_path: Path, source_dir: Path) -> None:
+    ``source_dir`` is the directory used to resolve relative image hrefs (typical
+    value: the SVG's own parent directory, where ``images/<name>`` lives). HTTP(S)
+    and ``data:`` hrefs are left untouched. Returns True if any image was embedded.
+    """
+    p = Path(svg_path)
     try:
-        tree = ET.parse(svg_path)
+        tree = ET.parse(p)
     except ET.ParseError:
-        return
-
+        return False
     root = tree.getroot()
-    if _embed_images_in_root(root, svg_path.parent, source_dir):
-        tree.write(svg_path, encoding="unicode", xml_declaration=False)
+    if _embed_images_in_root(root, p.parent, Path(source_dir)):
+        tree.write(p, encoding="unicode", xml_declaration=False)
+        return True
+    return False
 
 
 def embed_local_images_in_content(svg_content: str, source_dir: Path | str) -> str:
-    """Return ``svg_content`` with all <image> hrefs resolved to base64 data URIs.
+    """Return ``svg_content`` with all local <image> hrefs resolved to data URIs.
 
-    Used by VLM review's screenshot step so Chromium doesn't render broken images
-    when an SVG references local files via relative paths that wouldn't resolve
-    from the SVG's own directory.
+    Memory-only variant of :func:`embed_local_images_in_file`, used when the SVG
+    is being fed straight to a rasterizer (e.g. CairoSVG for VLM screenshots)
+    and never lands on disk in its intermediate form.
     """
     try:
         root = ET.fromstring(svg_content)
@@ -55,8 +58,7 @@ def embed_local_images_in_content(svg_content: str, source_dir: Path | str) -> s
         return svg_content
 
     source_dir = Path(source_dir)
-    changed = _embed_images_in_root(root, source_dir, source_dir)
-    if not changed:
+    if not _embed_images_in_root(root, source_dir, source_dir):
         return svg_content
     return ET.tostring(root, encoding="unicode")
 

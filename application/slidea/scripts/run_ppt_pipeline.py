@@ -24,6 +24,38 @@ from core.utils.logger import logger
 from scripts.utils.preflight import print_preflight_report, run_preflight
 
 
+async def new_semantic_run_id(text: str, fallback_prefix: str = "ppt") -> str:
+    """Build a run_id as <timestamp>_<llm_summary>. Falls back to <ts>_<prefix> on any failure."""
+    from datetime import datetime
+    from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
+    from langchain.messages import HumanMessage
+    from core.ppt_generator.utils.common import sanitize_filename
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if not text or not text.strip():
+        return f"{ts}_{fallback_prefix}"
+
+    prompt = (
+        "请把下面的请求总结为一个简短的、适合作为目录名的中文短语,"
+        "不超过 20 个中文字符。\n"
+        "只输出总结本身,不要引号、不要标点、不要任何说明文字。\n"
+        "优先使用请求中的核心名词或主题,保持语义性。\n\n"
+        f"请求:{text.strip()[:1000]}"
+    )
+    try:
+        response = await llm_invoke(
+            ModelRoute.DEFAULT,
+            [HumanMessage(content=prompt)],
+            InvokeOptions(work_node="run_id_summary"),
+        )
+        summary = sanitize_filename(response.strip())[:30]
+        if summary and summary != "slide":
+            return f"{ts}_{summary}"
+    except Exception as error:
+        logger.warning(f"semantic run_id generation failed, falling back: {error}")
+    return f"{ts}_{fallback_prefix}"
+
+
 
 class SimpleWriter:
     def __call__(self, payload: dict):
@@ -53,12 +85,12 @@ async def _maybe_require_missing(parsed):
 
 
 def _cached_svg_paths_for_outline(save_dir: str, outline) -> list[str]:
-    svg_output_dir = Path(save_dir) / "svg_output"
-    if not svg_output_dir.exists():
+    svg_dir = Path(save_dir) / "svg"
+    if not svg_dir.exists():
         return []
     paths = []
     for page in sorted(outline, key=lambda item: item.index):
-        matches = sorted(svg_output_dir.glob(f"{page.index + 1:02d}_*.svg"))
+        matches = sorted(svg_dir.glob(f"{page.index + 1:02d}_*.svg"))
         if not matches:
             return []
         paths.append(str(matches[0]))
@@ -73,7 +105,6 @@ async def _try_export_cached_svg(state, out_dir: str, run_id: str) -> bool:
         return False
 
     from core.ppt_generator.utils.svg_pipeline.quality_checker import check_svg_files, format_quality_issues
-    from core.ppt_generator.utils.svg_pipeline.finalize_svg import finalize_svg_files
     from core.ppt_generator.utils.common import sanitize_filename
     from core.ppt_generator.utils.svg_export import svgs_to_pptx
 
@@ -91,15 +122,13 @@ async def _try_export_cached_svg(state, out_dir: str, run_id: str) -> bool:
         )
         return True
 
-    final_svgs = finalize_svg_files(svg_paths, state["save_dir"])
-    pdf_path, pptx_path = await svgs_to_pptx(final_svgs, state["save_dir"], sanitize_filename(state["topic"]))
+    pdf_path, pptx_path = await svgs_to_pptx(svg_paths, out_dir, sanitize_filename(state["topic"]))
     save_json(Path(out_dir) / "ppt.json", {
         "run_id": run_id,
         "topic": state["topic"],
         "render_mode": "svg",
-        "render_dir": state["save_dir"],
-        "svg_output_dir": str(Path(state["save_dir"]) / "svg_output"),
-        "svg_final_dir": str(Path(state["save_dir"]) / "svg_final"),
+        "slides_dir": state["save_dir"],
+        "svg_dir": str(Path(state["save_dir"]) / "svg"),
         "pdf_path": pdf_path,
         "pptx_path": pptx_path,
     })
@@ -339,10 +368,10 @@ async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: st
         if ppt_cached:
             if ppt_cached.get("render_mode"):
                 state["render_mode"] = ppt_cached["render_mode"]
-            render_dir = ppt_cached.get("render_dir")
+            slides_dir = ppt_cached.get("slides_dir")
             pdf_path = ppt_cached.get("pdf_path")
-            if render_dir:
-                state["save_dir"] = render_dir
+            if slides_dir:
+                state["save_dir"] = slides_dir
             elif pdf_path:
                 state["save_dir"] = str(Path(pdf_path).parent)
         if await _try_export_cached_svg(state, out_dir, run_id):
@@ -411,7 +440,7 @@ async def main():
 
     _apply_runtime_overrides(args)
 
-    run_id = args.run_id or new_run_id("ppt")
+    run_id = args.run_id or await new_semantic_run_id(args.text or "")
     out_dir = run_dir(str(root), run_id)
     cached_run = _cached_run_metadata(out_dir)
     args.render_mode = _resolve_render_mode(args, cached_run)

@@ -82,7 +82,6 @@ class PPTState(TypedDict):
 
     generated_pages: Annotated[List[GeneratedPageResult], operator.add]  # 生成的PPT页面结果列表
     page_files: NotRequired[list]  # 生成的页面文件路径列表（按 index 排序）
-    svg_final_dir: NotRequired[str]  # SVG后处理目录
     svg_quality_report: NotRequired[list]  # SVG质量检查结果
     final_pdf_path: Optional[str]  # 生成PPT的PDF文件路径
     final_pptx_path: Optional[str]  # 生成PPT的PPTX文件路径
