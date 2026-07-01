@@ -48,13 +48,13 @@ Before starting, if no other slidea task is currently executing, clean up the `d
 
 Before invoking the pipeline, you **must** send a short message to the user explaining that the run will take a while and asking them to be patient. Example:
 
-> Starting PPT generation. This typically takes 15-30 minutes (research, outline, rendering, PPTX export) and involves many model calls. Please be patient — I'll report back when generation completes.
+> Starting PPT generation. This typically takes 15-30 minutes (parsing, research routing, thought, outline, per-page SVG generation, quality checks, optional VLM review, PPTX export) and involves many model calls. Please be patient — I'll report back when generation completes.
 
 Do not silently start the pipeline. The user must know up front that this is a long-running operation.
 
 ### Timeout requirement (mandatory)
 
-The PPT pipeline makes many sequential LLM calls (parsing, research routing, thought, outline, per-page SVG generation, quality checks, optional VLM review). End-to-end generation takes 15-30 minutes. Long runs are normal, not a sign of failure.
+The PPT pipeline makes many sequential LLM calls (parsing, research routing, thought, outline, per-page SVG generation, quality checks, optional VLM review, PPTX export). End-to-end generation takes 15-30 minutes. Long runs are normal, not a sign of failure.
 
 When invoking the pipeline through a shell tool that accepts a timeout:
 
@@ -105,7 +105,7 @@ The CLI also prints a completion block to stdout that surfaces the deliverable a
 >>> 源文件目录：<abs_path_to_slides_svg>
 ```
 
-The "源文件目录" line points at `<run_id>/slides/svg/` — the editable on-disk SVG pages that produced the PPTX. Edit any file there and re-run PPTX export to regenerate the deliverable with your changes; no intermediate finalize step is needed because image inlining happens at export time.
+The "源文件目录" line points at `<run_id>/slides/svg/` — the editable on-disk SVG pages that produced the PPTX. Image inlining into `data:` URIs happens at PPTX export time inside a temporary directory, so on-disk SVGs stay small and editable.
 
 The output root is `<SLIDEA_DIR>/output/` by default; set `OUTPUT_DIR` in `.env` to redirect every run, cache, and intermediate artifact to a different directory. See [references/advanced-params.md](references/advanced-params.md) for details.
 

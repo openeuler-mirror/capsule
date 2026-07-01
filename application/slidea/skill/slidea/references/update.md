@@ -100,7 +100,7 @@ The following directories and files will be overwritten:
 - `skill/` - Skill-specific files
 - `requirements.txt` - Python dependencies
 - `.env.example` - Configuration template
-- `README.md`, `INSTALL.md`, `UPDATE.md` - Documentation
+- `README.md`, `INSTALL.md` - Documentation
 
 ## Verify
 
