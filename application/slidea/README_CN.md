@@ -61,7 +61,7 @@ Slidea 是 AI 驱动的 PPT 生成 skill。默认建议先配置 `DEFAULT_LLM`�
 要升级已有的 Slidea 安装，请将以下指令发送给你的 Agent：
 
 ```text
-请直接获取并遵循这里的说明更新 slidea skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/references/update.md
+请直接获取并遵循这里的说明更新 slidea skill：https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/UPDATE.md
 ```
 
 #### 使用 Slidea Skill
@@ -234,7 +234,7 @@ pip install -r requirements.txt
 ## 仓库结构
 
 - `scripts/`: 面向用户的 CLI 入口，包括 skill 导出、完整流水线、分阶段执行、补渲染以及嵌套的安装辅助脚本
-- `skill/`: 导出的 skill 包定义目录，包含 `skill/slidea/`（Slidea PPT 生成 skill）和 `skill/deep_research/`（Deep Research 深度研究 skill），各自包含 `SKILL.md`、`INSTALL.md`、skill 清单及相关文档（slidea 把深度主题放在 `references/` 子目录；deep_research 在根目录保留 `UPDATE.md`）
+- `skill/`: 导出的 skill 包定义目录，包含 `skill/slidea/`（Slidea PPT 生成 skill）和 `skill/deep_research/`（Deep Research 深度研究 skill），各自包含 `SKILL.md`、`INSTALL.md`、`UPDATE.md` 及 skill 清单
 - `core/`: 主要的 LangGraph 应用，包括深度研究、PPT 生成以及共享核心工具
 - `docs/`: 面向公开仓库读者的文档，包括快速开始、CLI、架构和 app 说明
 - `tests/`: 针对可移植性、CLI 契约与运行时行为的回归测试

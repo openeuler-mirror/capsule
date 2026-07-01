@@ -65,7 +65,7 @@ After the model resources are installed and configured for Slidea, restart the a
 To upgrade an existing Slidea installation, send the following instruction to your agent:
 
 ```text
-Please fetch and follow the update instructions for the Slidea skill here: https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/references/update.md
+Please fetch and follow the update instructions for the Slidea skill here: https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/UPDATE.md
 ```
 
 #### Use the Slidea Skill
@@ -235,7 +235,7 @@ pip install -r requirements.txt
 ## Repository Structure
 
 - `scripts/`: user-facing CLI entrypoints, including skill export, the full pipeline, staged execution, patch rendering, and nested installation helpers
-- `skill/`: the exported skill package definition directory, including `skill/slidea/` (Slidea PPT generation skill) and `skill/deep_research/` (Deep Research skill), each with `SKILL.md`, `INSTALL.md`, a skill manifest, and supporting documentation (slidea keeps its advanced topics under `references/`; deep_research ships an `UPDATE.md` at its root)
+- `skill/`: the exported skill package definition directory, including `skill/slidea/` (Slidea PPT generation skill) and `skill/deep_research/` (Deep Research skill), each with `SKILL.md`, `INSTALL.md`, `UPDATE.md`, and a skill manifest
 - `core/`: the main LangGraph applications, including deep research, PPT generation, and shared core utilities
 - `docs/`: public-facing documentation, including quick start, CLI, architecture, and app documentation
 - `tests/`: regression tests for portability, CLI contracts, and runtime behavior
