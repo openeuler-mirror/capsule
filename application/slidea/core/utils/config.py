@@ -7,7 +7,6 @@ from typing import List, Literal, get_args, get_origin
 # `config.py` now lives under `core/utils/`, but runtime artifacts still belong
 # to the skill root directory.
 app_base_dir = Path(__file__).resolve().parents[2]
-output_files_dir = os.path.join(app_base_dir, "output")
 env_file = app_base_dir / ".env"
 
 try:
@@ -58,6 +57,12 @@ class Settings(BaseSettings):
     # log
     LOG_LEVEL: str = "INFO"
     SETUP_COMPLETED: bool = False
+
+    # Output root directory. Empty (default) → <app_base_dir>/output.
+    # When set to an absolute path, that directory replaces <app_base_dir>/output
+    # as the root for every run, cache, and intermediate artifact slidea writes.
+    # Relative paths resolve against app_base_dir.
+    OUTPUT_DIR: str = ""
 
     # Runtime routing mode
     SLIDEA_MODE: str = "ECONOMIC"
@@ -223,3 +228,21 @@ class Settings(BaseSettings):
 settings = Settings()
 if not settings.should_handover_model_routing():
     settings.get_slidea_mode()
+
+
+def _resolve_output_files_dir() -> str:
+    """Resolve the output root directory from settings, falling back to <app_base_dir>/output.
+
+    Absolute paths are used as-is. Relative paths resolve against app_base_dir.
+    Empty/unset → <app_base_dir>/output (the historical default).
+    """
+    raw = (getattr(settings, "OUTPUT_DIR", "") or "").strip()
+    if not raw:
+        return os.path.join(app_base_dir, "output")
+    p = Path(raw).expanduser()
+    if not p.is_absolute():
+        p = Path(app_base_dir) / p
+    return str(p)
+
+
+output_files_dir = _resolve_output_files_dir()

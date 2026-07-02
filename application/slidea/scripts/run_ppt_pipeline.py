@@ -19,9 +19,41 @@ sys.path.append(str(root))
 
 from core.utils.cache import new_run_id, run_dir, save_json, load_json
 from scripts.utils.cli_output import emit_stage_payload
-from core.utils.config import settings
+from core.utils.config import output_files_dir, settings
 from core.utils.logger import logger
 from scripts.utils.preflight import print_preflight_report, run_preflight
+
+
+async def new_semantic_run_id(text: str, fallback_prefix: str = "ppt") -> str:
+    """Build a run_id as <timestamp>_<llm_summary>. Falls back to <ts>_<prefix> on any failure."""
+    from datetime import datetime, timezone
+    from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
+    from langchain.messages import HumanMessage
+    from core.ppt_generator.utils.common import sanitize_filename
+
+    ts = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
+    if not text or not text.strip():
+        return f"{ts}_{fallback_prefix}"
+
+    prompt = (
+        "请把下面的请求总结为一个简短的、适合作为目录名的中文短语,"
+        "不超过 20 个中文字符。\n"
+        "只输出总结本身,不要引号、不要标点、不要任何说明文字。\n"
+        "优先使用请求中的核心名词或主题,保持语义性。\n\n"
+        f"请求:{text.strip()[:1000]}"
+    )
+    try:
+        response = await llm_invoke(
+            ModelRoute.DEFAULT,
+            [HumanMessage(content=prompt)],
+            InvokeOptions(work_node="run_id_summary"),
+        )
+        summary = sanitize_filename(response.strip())[:30]
+        if summary and summary != "slide":
+            return f"{ts}_{summary}"
+    except Exception as error:
+        logger.warning(f"semantic run_id generation failed, falling back: {error}")
+    return f"{ts}_{fallback_prefix}"
 
 
 
@@ -36,12 +68,50 @@ class SimpleWriter:
         files = payload.get("files")
         if files:
             print(f"\n>>> 生成文件：{','.join(str(f) for f in files)}")
+        source_dir = payload.get("source_dir")
+        if source_dir:
+            print(f"\n>>> 源文件目录：{source_dir}")
 
 
 async def _load_cached_text(base_dir: str, rel_path: str) -> str:
     p = Path(base_dir) / rel_path
     if p.exists():
         return p.read_text(encoding='utf-8')
+    return ""
+
+
+def _find_run_id_by_session(output_root: str, session_id: str) -> str:
+    """Locate the ORIGINAL run_id whose run.json recorded the given session_id.
+
+    Used when resuming: the original run_id (potentially carrying a semantic
+    suffix) is recovered instead of generating a fresh fallback id. Returns
+    an empty string when no match is found.
+
+    A session_id can legitimately appear in multiple run.json files — every
+    resume attempt writes a new run.json. We filter out those `resume: true`
+    records to find the original run that started the session.
+    """
+    if not session_id:
+        return ""
+    output_path = Path(output_root)
+    if not output_path.is_dir():
+        return ""
+    for run_json in output_path.glob("*/run.json"):
+        try:
+            data = load_json(str(run_json))
+        except Exception as error:
+            logger.warning(f"failed to load {run_json}: {error}")
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("session_id") != session_id:
+            continue
+        if data.get("resume"):
+            # This is a resume-attempt record, not the original. Skip.
+            continue
+        rid = data.get("run_id")
+        if isinstance(rid, str) and rid:
+            return rid
     return ""
 
 async def _maybe_require_missing(parsed):
@@ -53,12 +123,12 @@ async def _maybe_require_missing(parsed):
 
 
 def _cached_svg_paths_for_outline(save_dir: str, outline) -> list[str]:
-    svg_output_dir = Path(save_dir) / "svg_output"
-    if not svg_output_dir.exists():
+    svg_dir = Path(save_dir) / "svg"
+    if not svg_dir.exists():
         return []
     paths = []
     for page in sorted(outline, key=lambda item: item.index):
-        matches = sorted(svg_output_dir.glob(f"{page.index + 1:02d}_*.svg"))
+        matches = sorted(svg_dir.glob(f"{page.index + 1:02d}_*.svg"))
         if not matches:
             return []
         paths.append(str(matches[0]))
@@ -73,7 +143,6 @@ async def _try_export_cached_svg(state, out_dir: str, run_id: str) -> bool:
         return False
 
     from core.ppt_generator.utils.svg_pipeline.quality_checker import check_svg_files, format_quality_issues
-    from core.ppt_generator.utils.svg_pipeline.finalize_svg import finalize_svg_files
     from core.ppt_generator.utils.common import sanitize_filename
     from core.ppt_generator.utils.svg_export import svgs_to_pptx
 
@@ -91,15 +160,13 @@ async def _try_export_cached_svg(state, out_dir: str, run_id: str) -> bool:
         )
         return True
 
-    final_svgs = finalize_svg_files(svg_paths, state["save_dir"])
-    pdf_path, pptx_path = await svgs_to_pptx(final_svgs, state["save_dir"], sanitize_filename(state["topic"]))
+    pdf_path, pptx_path = await svgs_to_pptx(svg_paths, out_dir, sanitize_filename(state["topic"]))
     save_json(Path(out_dir) / "ppt.json", {
         "run_id": run_id,
         "topic": state["topic"],
         "render_mode": "svg",
-        "render_dir": state["save_dir"],
-        "svg_output_dir": str(Path(state["save_dir"]) / "svg_output"),
-        "svg_final_dir": str(Path(state["save_dir"]) / "svg_final"),
+        "slides_dir": state["save_dir"],
+        "svg_dir": str(Path(state["save_dir"]) / "svg"),
         "pdf_path": pdf_path,
         "pptx_path": pptx_path,
     })
@@ -339,10 +406,10 @@ async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: st
         if ppt_cached:
             if ppt_cached.get("render_mode"):
                 state["render_mode"] = ppt_cached["render_mode"]
-            render_dir = ppt_cached.get("render_dir")
+            slides_dir = ppt_cached.get("slides_dir")
             pdf_path = ppt_cached.get("pdf_path")
-            if render_dir:
-                state["save_dir"] = render_dir
+            if slides_dir:
+                state["save_dir"] = slides_dir
             elif pdf_path:
                 state["save_dir"] = str(Path(pdf_path).parent)
         if await _try_export_cached_svg(state, out_dir, run_id):
@@ -411,11 +478,39 @@ async def main():
 
     _apply_runtime_overrides(args)
 
-    run_id = args.run_id or new_run_id("ppt")
-    out_dir = run_dir(str(root), run_id)
+    if args.run_id:
+        run_id = args.run_id
+    elif args.resume:
+        # Resume must reuse the original run_id so cache and artifacts stay
+        # in a single directory. Recover it from any prior run.json matching
+        # the session_id; fail loudly if none exists (cannot resume a run
+        # that was never started).
+        recovered = _find_run_id_by_session(output_files_dir, args.session_id)
+        if not recovered:
+            emit_stage_payload(
+                "invalid_request",
+                {
+                    "stage": "invalid_request",
+                    "message": (
+                        f"resume requested but no prior run.json matches "
+                        f"session_id={args.session_id!r}. Start a new run "
+                        f"with --text instead."
+                    ),
+                },
+            )
+            return
+        run_id = recovered
+    else:
+        run_id = await new_semantic_run_id(args.text or "")
+    out_dir = run_dir(run_id)
     cached_run = _cached_run_metadata(out_dir)
     args.render_mode = _resolve_render_mode(args, cached_run)
-    save_json(Path(out_dir) / "run.json", _build_run_metadata(args, run_id))
+    # run.json is the snapshot of the INITIAL run that started this session.
+    # Subsequent resume calls must not overwrite it — otherwise the resume:true
+    # marker hides the original record and breaks session-id-based lookup.
+    run_json_path = Path(out_dir) / "run.json"
+    if not run_json_path.exists():
+        save_json(run_json_path, _build_run_metadata(args, run_id))
 
     if stages == ["all"]:
         await _run_all_stages(args, run_id, out_dir)

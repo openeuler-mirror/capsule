@@ -1,12 +1,12 @@
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
-from core.utils.config import settings
+from core.utils.config import output_files_dir, settings
 
 
 def new_run_id(prefix: str = "run") -> str:
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
     return f"{ts}_{prefix}"
 
 
@@ -16,8 +16,13 @@ def ensure_dir(path: str | Path) -> str:
     return str(p)
 
 
-def run_dir(base_dir: str, run_id: str) -> str:
-    return ensure_dir(Path(base_dir) / "output" / run_id)
+def run_dir(run_id: str) -> str:
+    """Return the cache directory for a given run_id, creating it if necessary.
+
+    Uses the configured ``output_files_dir`` (settings.OUTPUT_DIR or the
+    default ``<app_base_dir>/output``) as the root.
+    """
+    return ensure_dir(Path(output_files_dir) / run_id)
 
 
 def get_run_id(config: dict | None) -> str:
@@ -34,13 +39,19 @@ def _cache_enabled() -> bool:
     return settings.USE_CACHE
 
 
-def run_dir_from_config(config: dict | None, base_dir: str) -> str:
+def run_dir_from_config(config: dict | None, base_dir: str = "") -> str:
+    """Resolve the cache directory for the run_id carried in ``config``.
+
+    ``base_dir`` is accepted for backward compatibility with callers that
+    imported the previous signature but no longer affects resolution — the
+    output root is governed by ``settings.OUTPUT_DIR`` / ``output_files_dir``.
+    """
     if not _cache_enabled():
         return ""
     rid = get_run_id(config)
     if not rid:
         return ""
-    return run_dir(base_dir, rid)
+    return run_dir(rid)
 
 
 def save_json(path: str | Path, data: Any) -> None:

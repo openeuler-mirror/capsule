@@ -25,16 +25,16 @@
       "to": "SKILL.md"
     },
     {
+      "from": "skill/slidea/references",
+      "to": "references"
+    },
+    {
       "from": "skill/slidea/UPDATE.md",
       "to": "UPDATE.md"
     },
     {
       "from": "skill/slidea/INSTALL.md",
       "to": "INSTALL.md"
-    },
-    {
-      "from": "skill/slidea/research_speech.md",
-      "to": "research_speech.md"
     },
     {
       "from": "scripts",

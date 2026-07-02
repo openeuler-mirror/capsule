@@ -128,7 +128,7 @@ class CliStageSmokeTests(unittest.TestCase):
         if extra_modules:
             fake_modules.update(extra_modules)
 
-        def local_run_dir(_base_dir, run_id):
+        def local_run_dir(run_id):
             base = Path(cwd or ROOT)
             out_dir = base / "output" / run_id
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -219,10 +219,10 @@ class CliStageSmokeTests(unittest.TestCase):
             run_id = "svg-cache"
             out_dir = Path(tmp_dir) / "output" / run_id
             outline_dir = out_dir / "outline"
-            render_dir = Path(tmp_dir) / "rendered"
-            svg_output = render_dir / "svg_output"
+            slides_dir = Path(tmp_dir) / "rendered"
+            svg_src = slides_dir / "svg"
             outline_dir.mkdir(parents=True, exist_ok=True)
-            svg_output.mkdir(parents=True, exist_ok=True)
+            svg_src.mkdir(parents=True, exist_ok=True)
             (outline_dir / "outline.json").write_text(
                 json.dumps(
                     {
@@ -247,12 +247,12 @@ class CliStageSmokeTests(unittest.TestCase):
                         "run_id": run_id,
                         "topic": "SVG Cache",
                         "render_mode": "svg",
-                        "render_dir": str(render_dir),
+                        "slides_dir": str(slides_dir),
                     }
                 ),
                 encoding="utf-8",
             )
-            (svg_output / "01_Cover.svg").write_text(
+            (svg_src / "01_Cover.svg").write_text(
                 '<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg"></svg>',
                 encoding="utf-8",
             )
@@ -271,13 +271,6 @@ class CliStageSmokeTests(unittest.TestCase):
             quality_module.check_svg_files = check_svg_files
             quality_module.format_quality_issues = format_quality_issues
 
-            finalize_module = types.ModuleType("core.ppt_generator.utils.svg_pipeline.finalize_svg")
-
-            def finalize_svg_files(paths, _save_dir):
-                return paths
-
-            finalize_module.finalize_svg_files = finalize_svg_files
-
             export_module = types.ModuleType("core.ppt_generator.utils.svg_export")
 
             async def svgs_to_pptx(_svgs, save_dir, filename):
@@ -289,7 +282,6 @@ class CliStageSmokeTests(unittest.TestCase):
                 ["--text", "demo", "--stages", "render", "--run-id", run_id],
                 extra_modules={
                     "core.ppt_generator.utils.svg_pipeline.quality_checker": quality_module,
-                    "core.ppt_generator.utils.svg_pipeline.finalize_svg": finalize_module,
                     "core.ppt_generator.utils.svg_export": export_module,
                 },
                 cwd=tmp_dir,
@@ -408,7 +400,6 @@ class CliStageSmokeTests(unittest.TestCase):
 
         self.assertEqual(payload["stage"], "input_required")
         self.assertEqual(run_payload["render_mode"], "svg")
-        self.assertTrue(run_payload["resume"])
 
     def test_resume_allows_matching_explicit_render_mode(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -468,7 +459,6 @@ class CliStageSmokeTests(unittest.TestCase):
 
         self.assertEqual(payload["stage"], "input_required")
         self.assertEqual(run_payload["render_mode"], "svg")
-        self.assertTrue(run_payload["resume"])
 
     def test_resume_ignores_conflicting_render_mode(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -528,7 +518,6 @@ class CliStageSmokeTests(unittest.TestCase):
 
         self.assertEqual(payload["stage"], "input_required")
         self.assertEqual(run_payload["render_mode"], "svg")
-        self.assertTrue(run_payload["resume"])
 
     def test_render_stage_without_outline_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

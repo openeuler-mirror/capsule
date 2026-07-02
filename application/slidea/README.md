@@ -287,7 +287,7 @@ For full argument documentation and JSON response contracts, see [CLI Reference]
 
 ## Outputs and Caching
 
-Each PPT generation run is identified by a `run_id`. `output/<run_id>/` is the run cache and metadata directory in the Slidea skill installation directory. All intermediate outputs generated during the run are cached there.
+Each PPT generation run is identified by a `run_id`. `output/<run_id>/` is the run cache and metadata directory. By default it lives under the Slidea skill installation directory; set `OUTPUT_DIR` in `.env` to redirect every run, cache, and intermediate artifact to a different directory. All intermediate outputs generated during the run are cached there.
 
 Typical cached files include:
 
@@ -298,7 +298,7 @@ Typical cached files include:
 - `outline/outline.json`
 - `ppt.json`
 
-The final rendered artifacts are written to the render directory recorded in `ppt.json`. The SVG render route produces `svg_output/*.svg` (raw LLM output), `svg_final/*.svg` (finalized with embedded images), and a native editable `*.pptx`. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
+The final rendered artifacts are written to the cache directory recorded in `ppt.json`. The SVG render route produces editable `slides/svg/*.svg` (the single on-disk source, with relative image references) and a native editable `*.pptx` at the cache root. Image inlining into `data:` URIs happens at PPTX export time inside a temporary directory, so on-disk SVGs stay small and editable. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
 
 ## Runtime Degradation Behavior
 

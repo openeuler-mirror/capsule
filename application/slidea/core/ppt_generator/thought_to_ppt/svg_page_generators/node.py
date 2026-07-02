@@ -23,7 +23,6 @@ from core.ppt_generator.utils.svg import (
     validate_svg_content,
 )
 from core.ppt_generator.utils.svg_export import svgs_to_pptx
-from core.ppt_generator.utils.svg_pipeline.finalize_svg import finalize_svg_files
 from core.ppt_generator.utils.svg_pipeline.quality_checker import (
     check_svg_files,
     format_quality_issues,
@@ -47,14 +46,18 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.n
 SVG_QUALITY_REPAIR_PROMPT = "svg_quality_repair_prompt.txt"
 
 
-async def prepare_generation_context_node(state: PPTState, writer: StreamWriter):
+async def prepare_generation_context_node(state: PPTState, writer: StreamWriter, config: RunnableConfig | None = None):
     """
     SVG-route preparation: build save_dir, pick an SVG template, download
     outline images, set language and ppt_prompt, load template content into state.
     """
-    time_prefix = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
     if not state.get("save_dir", None):
-        save_dir = os.path.join(output_files_dir, f'{time_prefix}_{sanitize_filename(state["topic"])}')
+        cache_dir = run_dir_from_config(config, str(app_base_dir))
+        if cache_dir:
+            save_dir = os.path.join(cache_dir, "slides")
+        else:
+            time_prefix = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
+            save_dir = os.path.join(output_files_dir, f'{time_prefix}_{sanitize_filename(state["topic"])}')
     else:
         save_dir = state["save_dir"]
     await aiofiles.os.makedirs(save_dir, exist_ok=True)
@@ -459,56 +462,43 @@ async def _repair_failed_svg_files(failed: list[dict]) -> None:
             )
 
 
-async def finalize_node(state: PPTState, writer: StreamWriter):
-    """Finalize SVG files: copy svg_output/*.svg into svg_final/, embed local images."""
-    files = state.get("page_files") or []
-    final_files = finalize_svg_files(files, state["save_dir"])
-    writer(
-        {
-            "step": "SVG 后处理",
-            "text": f"已完成 {len(final_files)} 个文件后处理。",
-        }
-    )
-    return {
-        "page_files": final_files,
-        "svg_final_dir": os.path.join(state["save_dir"], "svg_final"),
-    }
-
-
 async def export_node(state: PPTState, writer: StreamWriter, config: RunnableConfig | None = None):
-    """Export SVG pages to native editable PPTX."""
+    """Export SVG pages to native editable PPTX at the cache directory root."""
     topic = sanitize_filename(state["topic"])
     save_dir = state["save_dir"]
     files = state.get("page_files") or []
 
+    cache_dir = run_dir_from_config(config, str(app_base_dir)) or save_dir
+    pptx_output_dir = cache_dir
+
     writer(
         {
             "step": "开始导出 SVG PPT",
-            "text": f"开始将 {len(files)} 个页面导出为 PPTX，保存目录: {save_dir}。",
+            "text": f"开始将 {len(files)} 个页面导出为 PPTX，保存目录: {pptx_output_dir}。",
         }
     )
 
-    pdf_path, pptx_path = await svgs_to_pptx(files, save_dir, topic)
+    pdf_path, pptx_path = await svgs_to_pptx(files, pptx_output_dir, topic)
 
-    run_dir = run_dir_from_config(config, str(app_base_dir))
     run_id = get_run_id(config)
-    if run_dir:
+    if cache_dir != save_dir:
         record = {
             "run_id": run_id,
             "topic": state["topic"],
             "render_mode": "svg",
-            "render_dir": save_dir,
+            "slides_dir": save_dir,
+            "svg_dir": os.path.join(save_dir, "svg"),
+            "template_name": state.get("template_name", ""),
             "pdf_path": pdf_path,
             "pptx_path": pptx_path,
-            "svg_output_dir": os.path.join(save_dir, "svg_output"),
-            "svg_final_dir": state.get("svg_final_dir") or os.path.join(save_dir, "svg_final"),
         }
-        save_json(f"{run_dir}/ppt.json", record)
+        save_json(f"{cache_dir}/ppt.json", record)
 
     writer(
         {
             "step": "导出 PPT 完成",
             "files": [pdf_path, pptx_path] if pdf_path else [pptx_path],
+            "source_dir": os.path.join(save_dir, "svg"),
             "text": "生成PPT结束",
         }
     )

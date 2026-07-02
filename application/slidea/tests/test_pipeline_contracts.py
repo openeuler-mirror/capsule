@@ -11,13 +11,13 @@ class PipelineContractTests(unittest.TestCase):
         content = (ROOT / "README.md").read_text(encoding="utf-8")
 
         self.assertIn("`output/<run_id>/` is the run cache and metadata directory", content)
-        self.assertIn("final rendered artifacts are written to the render directory recorded in `ppt.json`", content)
+        self.assertIn("final rendered artifacts are written to the cache directory recorded in `ppt.json`", content)
 
     def test_skill_describes_actual_ppt_json_location(self):
         content = (ROOT / "skill/slidea/SKILL.md").read_text(encoding="utf-8")
 
         self.assertIn("`ppt.json`", content)
-        self.assertIn("stored at `output/<run_id>/ppt.json`", content)
+        self.assertIn("output/<run_id>/ppt.json", content)
 
     def test_deep_research_context_declares_os_import(self):
         source = (ROOT / "core/deep_research/context.py").read_text(encoding="utf-8")
@@ -82,7 +82,7 @@ class PipelineContractTests(unittest.TestCase):
         self.assertIn("run_id = get_run_id(config)", source)
         self.assertIn('"run_id": run_id', source)
         self.assertIn('"topic": state["topic"]', source)
-        self.assertIn('"render_dir": save_dir', source)
+        self.assertIn('"slides_dir": save_dir', source)
 
     def test_cli_scripts_use_shared_payload_emitter(self):
         run_pipeline = (ROOT / "scripts/run_ppt_pipeline.py").read_text(encoding="utf-8")

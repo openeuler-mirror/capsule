@@ -73,12 +73,8 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         async def quality_check_node(_state, _writer):
             return {}
 
-        async def finalize_node(state, _writer):
-            return {"page_files": state.get("page_files", [])}
-
         module.prepare_generation_context_node = prepare_generation_context_node
         module.quality_check_node = quality_check_node
-        module.finalize_node = finalize_node
         return module
 
     def _make_html_subgraph_modules(self):
@@ -193,7 +189,7 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         }
         stdout = io.StringIO()
 
-        def local_run_dir(_base_dir, run_id):
+        def local_run_dir(run_id):
             out_dir = Path(cwd) / "output" / run_id
             out_dir.mkdir(parents=True, exist_ok=True)
             return str(out_dir)
@@ -232,9 +228,9 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
             run_id = "success"
             out_dir = Path(tmp_dir) / "output" / run_id
             outline_dir = out_dir / "outline"
-            render_dir = Path(tmp_dir) / "rendered"
+            slides_dir = Path(tmp_dir) / "rendered"
             outline_dir.mkdir(parents=True, exist_ok=True)
-            render_dir.mkdir(parents=True, exist_ok=True)
+            slides_dir.mkdir(parents=True, exist_ok=True)
             (outline_dir / "outline.json").write_text(
                 json.dumps(
                     {
@@ -259,11 +255,11 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
                     "run_id": run_id,
                     "topic": "Demo Topic",
                     "render_mode": "html",
-                    "render_dir": str(render_dir),
+                    "slides_dir": str(slides_dir),
                 }),
                 encoding="utf-8",
             )
-            (render_dir / "0.html").write_text("<html></html>", encoding="utf-8")
+            (slides_dir / "0.html").write_text("<html></html>", encoding="utf-8")
 
             payload = self._run_main(["--run-id", run_id, "--indices", "0"], cwd=tmp_dir)
             ppt_payload = json.loads((out_dir / "ppt.json").read_text(encoding="utf-8"))
@@ -272,16 +268,16 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         self.assertEqual(payload["output"]["stage"], "completed")
         self.assertTrue(payload["output"]["pdf_path"].endswith(".pdf"))
         self.assertEqual(ppt_payload["run_id"], run_id)
-        self.assertEqual(ppt_payload["render_dir"], str(render_dir))
+        self.assertEqual(ppt_payload["slides_dir"], str(slides_dir))
 
     def test_svg_success_returns_structured_completed_payload(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             run_id = "svg-success"
             out_dir = Path(tmp_dir) / "output" / run_id
             outline_dir = out_dir / "outline"
-            render_dir = Path(tmp_dir) / "rendered"
+            slides_dir = Path(tmp_dir) / "rendered"
             outline_dir.mkdir(parents=True, exist_ok=True)
-            render_dir.mkdir(parents=True, exist_ok=True)
+            slides_dir.mkdir(parents=True, exist_ok=True)
             (outline_dir / "outline.json").write_text(
                 json.dumps(
                     {
@@ -307,15 +303,15 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
                         "run_id": run_id,
                         "topic": "SVG Demo",
                         "render_mode": "svg",
-                        "render_dir": str(render_dir),
+                        "slides_dir": str(slides_dir),
                     }
                 ),
                 encoding="utf-8",
             )
 
-            svg_output = render_dir / "svg_output"
-            svg_output.mkdir(parents=True, exist_ok=True)
-            (svg_output / "01_Cover.svg").write_text(
+            svg_dir = slides_dir / "svg"
+            svg_dir.mkdir(parents=True, exist_ok=True)
+            (svg_dir / "01_Cover.svg").write_text(
                 '<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg"></svg>',
                 encoding="utf-8",
             )

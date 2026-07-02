@@ -286,7 +286,7 @@ Slidea 主要暴露三个脚本入口：
 
 ## 输出与缓存
 
-每次 PPT 生成任务的运行都由一个 `run_id` 标识，PPT 生成任务执行过程中的所有中间结果将缓存在 slidea skill 安装目录下的`output/<run_id>/`
+每次 PPT 生成任务的运行都由一个 `run_id` 标识，PPT 生成任务执行过程中的所有中间结果将缓存在 `output/<run_id>/` 目录下。该目录默认位于 slidea skill 安装目录中；可在 `.env` 中设置 `OUTPUT_DIR` 将所有运行产物、缓存和中间结果重定向到其他目录。
 
 缓存的常见文件包括：
 
@@ -297,7 +297,7 @@ Slidea 主要暴露三个脚本入口：
 - `outline/outline.json`
 - `ppt.json`
 
-最终渲染产物将保存在 `ppt.json` 记录的 `render_dir` 路径下。SVG 渲染路线会产出 `svg_output/*.svg`（LLM 原始输出）、`svg_final/*.svg`（已嵌入图片的最终版）以及一份可编辑的原生 `*.pptx`。这种分离让系统可以在不重跑全流程的情况下，重新进入某一阶段或执行补渲染。
+最终渲染产物将保存在 `ppt.json` 记录的 `slides_dir` 路径下。SVG 渲染路线会产出可编辑的 `slides/svg/*.svg`（磁盘上的唯一源文件，使用相对图片路径引用），以及一份位于 cache 根目录的原生可编辑 `*.pptx`。图片在 PPTX 导出时于临时目录中内联为 `data:` URI，因此磁盘上的 SVG 保持小巧可编辑。这种分离让系统可以在不重跑全流程的情况下，重新进入某一阶段或执行补渲染。
 
 ## 运行时降级行为
 

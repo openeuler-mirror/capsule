@@ -50,8 +50,7 @@ Examples:
     %(prog)s examples/ppt169_demo -t push --transition-duration 1.0
 
 SVG source directory (-s):
-    output   - svg_output (original version)
-    final    - svg_final (post-processed, recommended)
+    svg      - default editable SVG source directory
     <any>    - Specify a subdirectory name directly
 
 Transition effects (-t/--transition):
@@ -252,18 +251,18 @@ Speaker notes (enabled by default):
         success = success and ok
 
         if ok and backup_dir is not None:
-            svg_output_src = project_path / "svg_output"
-            if svg_output_src.is_dir():
-                svg_output_dst = backup_dir / "svg_output"
+            svg_src = project_path / "svg"
+            if svg_src.is_dir():
+                svg_dst = backup_dir / "svg"
                 try:
-                    shutil.copytree(svg_output_src, svg_output_dst)
+                    shutil.copytree(svg_src, svg_dst)
                     if verbose:
-                        logger.info(f"svg_output backup: {svg_output_dst}")
+                        logger.info(f"svg backup: {svg_dst}")
                 except Exception as exc:
                     if verbose:
-                        logger.warning(f"svg_output backup skipped: {exc}")
+                        logger.warning(f"svg backup skipped: {exc}")
             elif verbose:
-                logger.info("svg_output/ not found, backup skipped")
+                logger.info("svg/ not found, backup skipped")
 
     return 0 if success else 1
 

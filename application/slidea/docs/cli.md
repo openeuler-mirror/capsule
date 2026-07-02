@@ -143,6 +143,8 @@ Top-level shape:
 }
 ```
 
+`output_dir` is rooted at the configured output root (`<slidea_install_dir>/output/` by default; override via `OUTPUT_DIR` in `.env`).
+
 Known stage values produced by the current code path:
 
 - `completed`
@@ -193,7 +195,7 @@ This matches the interaction hints emitted by the runtime:
 
 ### Cache side effects
 
-The command creates a `run_id` if one is not provided, then writes `output/<run_id>/run.json`.
+The command creates a `run_id` if one is not provided, then writes `<output_root>/<run_id>/run.json` (where `<output_root>` is `<slidea_install_dir>/output/` by default, or the directory configured via `OUTPUT_DIR`).
 
 Depending on the stage, it may also read or write:
 
@@ -278,7 +280,7 @@ python3 scripts/patch_render_missing.py --run-id <run_id> --indices "0,3,5"
 
 The command:
 
-1. loads `output/<run_id>/outline/outline.json`,
+1. loads `<output_root>/<run_id>/outline/outline.json` (where `<output_root>` is `<slidea_install_dir>/output/` by default, or the directory configured via `OUTPUT_DIR`),
 2. resolves the render directory from `ppt.json` or derives one from the topic,
 3. chooses target indices,
 4. regenerates only the needed page types,

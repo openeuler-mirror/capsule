@@ -63,14 +63,18 @@ def load_template_styles() -> list[dict[str, str]]:
     return valid_templates
 
 
-async def prepare_generation_context_node(state: PPTState, writer: StreamWriter):
+async def prepare_generation_context_node(state: PPTState, writer: StreamWriter, config: RunnableConfig | None = None):
     """
     HTML-route preparation: build save_dir, pick an HTML template, download
     outline images, set language and ppt_prompt, load template content into state.
     """
-    time_prefix = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
     if not state.get("save_dir", None):
-        save_dir = os.path.join(output_files_dir, f'{time_prefix}_{sanitize_filename(state["topic"])}')
+        cache_dir = run_dir_from_config(config, str(app_base_dir))
+        if cache_dir:
+            save_dir = os.path.join(cache_dir, "slides")
+        else:
+            time_prefix = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
+            save_dir = os.path.join(output_files_dir, f'{time_prefix}_{sanitize_filename(state["topic"])}')
     else:
         save_dir = state["save_dir"]
     await aiofiles.os.makedirs(save_dir, exist_ok=True)
@@ -513,7 +517,8 @@ async def export_node(state: PPTState, writer: StreamWriter, config: RunnableCon
             "run_id": run_id,
             "topic": state["topic"],
             "render_mode": "html",
-            "render_dir": save_dir,
+            "slides_dir": save_dir,
+            "template_name": state.get("template_name", ""),
             "pdf_path": pdf_path,
             "pptx_path": pptx_path,
         })
@@ -522,6 +527,7 @@ async def export_node(state: PPTState, writer: StreamWriter, config: RunnableCon
         {
             "step": "导出 PPT 完成",
             "files": [pdf_path, pptx_path] if pdf_path else [pptx_path],
+            "source_dir": save_dir,
             "text": "生成PPT结束",
         }
     )
