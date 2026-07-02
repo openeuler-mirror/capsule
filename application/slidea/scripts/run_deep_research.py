@@ -23,8 +23,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 async def _run_research(args) -> None:
+    workspace_dir = os.path.join(output_files_dir, args.session_id)
+    os.makedirs(workspace_dir, exist_ok=True)
+
     config = {
-        "configurable": {"thread_id": args.session_id},
+        "configurable": {
+            "thread_id": args.session_id,
+            "workspace_dir": workspace_dir,
+        },
         "recursion_limit": args.recursion_limit,
     }
 
@@ -33,9 +39,7 @@ async def _run_research(args) -> None:
         "research_depth": 2,
     }
 
-    db_dir = os.path.join(output_files_dir, "dr_db")
-    os.makedirs(db_dir, exist_ok=True)
-    db_name = os.path.join(db_dir, f"deep_research_{args.session_id}.sqlite")
+    db_name = os.path.join(workspace_dir, "checkpointer.sqlite")
     try:
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
         async with AsyncSqliteSaver.from_conn_string(db_name) as checkpointer:
@@ -50,8 +54,8 @@ async def _run_research(args) -> None:
         if os.path.exists(db_file):
             os.remove(db_file)
 
-    deep_report = result.get("deep_report", "")
-    logger.info("Deep research completed. Report saved to: {}", deep_report)
+    report_file = (result or {}).get("report_file") or ""
+    logger.info("Deep research completed. Report saved to: {}", report_file)
 
 
 def main() -> int:

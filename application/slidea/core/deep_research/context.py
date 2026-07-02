@@ -42,8 +42,23 @@ async def embed_text(text: str):
     return data["data"][0]["embedding"]
 
 
-WORKSPACE_DIR = os.path.join(output_files_dir, "research_workspace")
-os.makedirs(WORKSPACE_DIR, exist_ok=True)
+def resolve_workspace_dir(config: dict | None) -> str:
+    """Resolve the deep_research workspace directory for this invocation.
+
+    Caller (slidea's ``deep_research_node`` or ``scripts/run_deep_research.py``)
+    injects ``workspace_dir`` via ``config['configurable']`` so all intermediate
+    files (``todo_*.txt``) and the final ``deep_report.md`` land inside the
+    per-run / per-session directory. Falls back to
+    ``<output_files_dir>/deep_research_workspace`` only when no value is
+    injected — the normal entry points always set this.
+    """
+    cfg = ((config or {}).get("configurable") or {}) if config else {}
+    ws = cfg.get("workspace_dir") or ""
+    if not ws:
+        ws = os.path.join(output_files_dir, "deep_research_workspace")
+    os.makedirs(ws, exist_ok=True)
+    return ws
+
 
 MAX_CONTEXT_LEN = 81920
 MAX_TRUNK_LEN = 32768

@@ -42,7 +42,7 @@ The output of Phase 1 is a saved markdown file at `<SPEECH_SCRIPT_MD_PATH>`.
 
 Run the PPT pipeline to generate the final presentation.
 
-Before starting, if no other slidea task is currently executing, clean up the `db_data` directory under the configured output root (`<SLIDEA_DIR>/output/` by default; override via `OUTPUT_DIR`).
+Each run is identified by `--session-id` and writes everything (run metadata, research, outline, SVG source, PPTX, LangGraph checkpointer) under `<output_root>/<run_id>/`, where `<run_id>` is auto-generated as `<timestamp>_<semantic-summary>`. Use a **new** session-id for a fresh start; reuse the **same** session-id to resume an interrupted run.
 
 ### Pre-run user reminder (mandatory)
 

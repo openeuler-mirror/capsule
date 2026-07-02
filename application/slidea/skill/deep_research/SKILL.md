@@ -23,7 +23,7 @@ Deep Research performs multi-source investigation on a given topic, automaticall
 
 ## Running Deep Research
 
-Before starting, if no other deep research task is currently executing, clean up the `<DEEP_RESEARCH_DIR>/output/dr_db` directory.
+Each run is identified by `--session-id` and writes everything (deliverables, planning snapshots, LangGraph checkpointer) under `<output_root>/<session_id>/`. Use a **new** session-id for a fresh start; reuse the **same** session-id to resume an interrupted run.
 
 **Full research run**:
 ```bash
@@ -51,7 +51,9 @@ If the research run fails due to a runtime exception (network error, API timeout
 ---
 
 ## Output
-- `path/to/deep_report.md`: The final synthesized research report in markdown format
+- `<output_root>/<session_id>/deep_report.md`: The final synthesized research report in markdown format. `<output_root>` is `<DEEP_RESEARCH_DIR>/output/` by default and can be overridden via `OUTPUT_DIR` in `.env`. The directory is auto-created on first run.
+- Intermediate planning snapshots (`todo_*.txt`) are written alongside `deep_report.md` in the same `<session_id>/` directory for debugging.
+- `checkpointer.sqlite` (and its `-shm`/`-wal` companions) is the LangGraph resume state. It lives in the same `<session_id>/` directory during a run, and is **auto-removed on success**. A failed run leaves it behind so `--resume --session-id <same_id>` can pick up where it stopped; the file is safe to delete manually once you no longer want to resume.
 
 ## Run Logs
 - Logs are stored in `logs/app_{time:YYYY-MM-DD}.log`

@@ -1,4 +1,5 @@
 import json
+import os
 
 from pydantic_core.core_schema import no_info_wrap_validator_function
 from core.utils.logger import logger
@@ -250,12 +251,23 @@ async def deep_research_node(state: ThoughtState, writer: StreamWriter, config: 
         "research_request": request,
         "raw_content": state.get("raw_content", ""),
     }
-    result = await research_app.ainvoke(payload, config=config)
-    if run_dir and isinstance(result, dict):
-        deep_report = result.get("deep_report") or ""
-        if deep_report:
-            save_text(f"{run_dir}/research/deep_report.md", deep_report)
+    # Inject workspace_dir so deep_research's todo_*.txt and deep_report.md
+    # land inside this slidea run's research/ directory instead of the legacy
+    # shared <output_root>/research_workspace/.
+    workspace_dir = os.path.join(run_dir, "research") if run_dir else ""
+    research_config = _inject_workspace_dir(config, workspace_dir)
+    result = await research_app.ainvoke(payload, config=research_config)
     return result or {}
+
+
+def _inject_workspace_dir(config: RunnableConfig | None, workspace_dir: str) -> dict:
+    """Return a shallow copy of config with configurable.workspace_dir set."""
+    base = dict(config or {})
+    configurable = dict(base.get("configurable") or {})
+    if workspace_dir:
+        configurable["workspace_dir"] = workspace_dir
+    base["configurable"] = configurable
+    return base
 
 
 def build_references(state: ThoughtState) -> str:
