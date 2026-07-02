@@ -93,13 +93,14 @@ def _find_run_id_by_session(output_root: str, session_id: str) -> str:
     """
     if not session_id:
         return ""
-    root = Path(output_root)
-    if not root.is_dir():
+    output_path = Path(output_root)
+    if not output_path.is_dir():
         return ""
-    for run_json in root.glob("*/run.json"):
+    for run_json in output_path.glob("*/run.json"):
         try:
             data = load_json(str(run_json))
-        except Exception:
+        except Exception as error:
+            logger.warning(f"failed to load {run_json}: {error}")
             continue
         if not isinstance(data, dict):
             continue
