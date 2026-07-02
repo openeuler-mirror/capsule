@@ -1,6 +1,6 @@
 ---
 name: slidea
-description: "AI-Powered PPT generation. Use for PPT creation where an agent needs full-run control over parse/research/outline/render flows. Generates a native editable PPTX from a topic, files, or URLs, with optional research and speech-script phases."
+description: "AI-Powered PPT generation and editing. Use for PPT creation where an agent needs full-run control over parse/research/outline/render flows. Also use for editing an existing slidea run — rewording text, swapping images, adjusting layout, or redrawing a page as an architecture / flowchart / sequence / structural diagram. Generates a native editable PPTX from a topic, files, or URLs, with optional research and speech-script phases. Trigger this skill whenever the user mentions slidea or a previously generated PPT, asks to modify / redraw / change a slide, or wants any diagram (architecture, flowchart, sequence, ER, org chart, etc.) drawn onto an existing slide."
 ---
 
 # Slidea
@@ -109,6 +109,23 @@ The "源文件目录" line points at `<run_id>/slides/svg/` — the editable on-
 
 The output root is `<SLIDEA_DIR>/output/` by default; set `OUTPUT_DIR` in `.env` to redirect every run, cache, and intermediate artifact to a different directory. See [references/advanced-params.md](references/advanced-params.md) for details.
 
+---
+
+## Phase 3: Agent-led Page Editing
+
+After Phase 2 produces a PPTX, the user may ask for page-level edits: reword a title, swap an image, redraw page N as an architecture diagram, adjust layout, change colors. Phase 3 handles these edits **without re-running the generation pipeline** — it edits the on-disk SVG files directly and re-exports the PPTX.
+
+For any edit request against an existing run:
+
+1. Read [references/agent-edit.md](references/agent-edit.md) for the standard edit workflow (required reading, what to read, how to write, how to re-export).
+2. Follow the responsibility chain — each layer only decides whether to read the next:
+   - **SKILL.md** (this file): decides when to enter Phase 3 and read `agent-edit.md`.
+   - **`agent-edit.md`**: decides when the edit involves drawing, and if so, reads `diagram-basics.md`.
+   - **`diagram-basics.md`**: decides which diagram type, and if applicable, reads the matching `diagram-layouts/<type>.md`.
+   - **`diagram-layouts/<type>.md`**: pure drawing knowledge for one diagram type.
+
+The key invariant: Phase 3 edits SVG source under `output/<run_id>/slides/svg/` and runs `scripts/svg_to_pptx.py` to regenerate the PPTX. It does not call `run_ppt_pipeline.py` again.
+
 ## Structured CLI Results
 
 `scripts/run_ppt_pipeline.py` can return these top-level `stage` values:
@@ -136,4 +153,7 @@ These are NOT needed for the common "generate a PPT" flow. Read them only when t
 - [references/staged-execution.md](references/staged-execution.md) — Running individual stages (`parse`, `research`, `outline`, `render`) via `--stages`, useful for debugging or resuming partial runs.
 - [references/patch-render.md](references/patch-render.md) — Re-rendering specific pages or fixing missing pages without a full rerun (`scripts/patch_render_missing.py`).
 - [references/advanced-params.md](references/advanced-params.md) — `--research-mode`, `--image-search`, `--recursion-limit`, `--dry-run`, and other optional flags.
+- [references/agent-edit.md](references/agent-edit.md) — Phase 3: editing an existing run's pages (text, image, layout, or drawing changes) without re-running the pipeline.
+- [references/diagram-basics.md](references/diagram-basics.md) — Shared foundation for any Phase 3 edit that involves drawing a diagram (layering order, component patterns, spacing formulas, slidea SVG constraints).
+- [references/diagram-layouts/](references/diagram-layouts/) — Per-type drawing algorithms for diagrams: [architecture](references/diagram-layouts/architecture.md), [flowchart](references/diagram-layouts/flowchart.md), [sequence](references/diagram-layouts/sequence.md), [structural](references/diagram-layouts/structural.md).
 - [UPDATE.md](UPDATE.md) — How to update the skill when source code or dependencies change.
