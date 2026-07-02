@@ -261,7 +261,7 @@ async def _run_all_stages(args, run_id: str, out_dir: str):
 
     config = {"configurable": {"thread_id": args.session_id, "run_id": run_id}, "recursion_limit": args.recursion_limit}
     ctx = EmitCtx(session_id=args.session_id)
-    db_name = f"slidea_{args.session_id}.sqlite"
+    db_name = os.path.join(out_dir, "checkpointer.sqlite")
     async with AsyncSqliteSaver.from_conn_string(db_name) as checkpointer:
         ppt_app = ppt_workflow.compile(checkpointer=checkpointer)
         result = await run_thinkflow_app(ppt_app, graph_input, config, emit_ctx=ctx)

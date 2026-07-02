@@ -9,12 +9,13 @@ from core.utils.logger import logger
 
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.runnables import RunnableConfig
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.types import StreamWriter
 
 from core.deep_research.context import (
     get_task_reference, add_task_reference,
-    MAX_CONTEXT_LEN, WORKSPACE_DIR
+    MAX_CONTEXT_LEN, resolve_workspace_dir
 )
 from core.deep_research.state import (
     ResearchState, TaskStatus, TaskNode, ChapterItem,
@@ -55,7 +56,8 @@ def generate_todo_list(state: ResearchState, node_id: str = "") -> str:
     _dfs_build_lines(node_id, -1)
     todo = "\n".join(output_lines)
 
-    filepath = os.path.join(WORKSPACE_DIR, f"todo_{node_id}.txt")
+    workspace_dir = state.get("workspace_dir") or resolve_workspace_dir(None)
+    filepath = os.path.join(workspace_dir, f"todo_{node_id}.txt")
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(state["research_request"] + "\n\n")
         f.write(todo)
@@ -548,13 +550,15 @@ async def research_background(state: ResearchState, queries=[]):
         return []
 
 
-async def initializer_node(state: ResearchState, writer: StreamWriter):
+async def initializer_node(state: ResearchState, writer: StreamWriter, config: RunnableConfig | None = None):
     """初始化：接收用户请求，创建根节点"""
 
     logger.info(
         f"start deep research, using model {getattr(get_llm_by_route(ModelRoute.DEFAULT), 'model_name', 'unknown')}"
     )
     writer({"step": "开始洞察"})
+
+    workspace_dir = resolve_workspace_dir(config)
 
     research_request = state["research_request"]
     references = state.get("references", [])
@@ -596,7 +600,7 @@ async def initializer_node(state: ResearchState, writer: StreamWriter):
         "important": True,
     }
 
-    return {"root_id": root_id, "task_map": {root_id: root_node}}
+    return {"root_id": root_id, "task_map": {root_id: root_node}, "workspace_dir": workspace_dir}
 
 
 def tree_selector_node(state: ResearchState):
@@ -792,7 +796,8 @@ async def reporter_node(state: ResearchState, writer: StreamWriter):
     full_report = f"# {title[:50]}\n" + full_report
 
     logger.debug(f"\n\n{full_report}\n\n")
-    filepath = os.path.join(WORKSPACE_DIR, f"{title[:30]}.md")
+    workspace_dir = state.get("workspace_dir") or resolve_workspace_dir(None)
+    filepath = os.path.join(workspace_dir, "deep_report.md")
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(full_report)
 

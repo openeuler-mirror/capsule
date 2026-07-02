@@ -12,10 +12,13 @@ output/
     ├── <topic>.pptx                  ← FINAL deliverable, at the cache root
     ├── run.json                      ← CLI invocation parameters (input snapshot)
     ├── ppt.json                      ← linker: run_id, topic, slides_dir, svg_dir, pptx_path
+    ├── checkpointer.sqlite*          ← LangGraph resume state (auto-removed on success; present only after a failed run)
     ├── outline/
     │   └── outline.json              ← topic + per-page {title, abstract, type, reference_doc, ...}
-    ├── research/
-    │   └── research.json             ← Tavily search results (url, title, content, score)
+    ├── research/                      ← written by whichever research mode ran
+    │   ├── research.json             ← simple 模式: Tavily 搜索结果 (url, title, content, score)
+    │   ├── deep_report.md            ← deep 模式: deep_research 最终报告
+    │   └── todo_*.txt                ← deep 模式: 章节规划快照（调试用，每个 task node 一份）
     ├── references/
     │   ├── parsed_requirements.json  ← {audience, topic, goal, urls, missing_info}
     │   ├── images.json               ← image search results
@@ -93,5 +96,9 @@ Logs are written to `<SLIDEA_DIR>/logs/app_{time:YYYY-MM-DD}.log`. Use these for
 
 ## Cleaning Up
 
-Before starting a new run, if no other slidea task is executing, you may clean up the `db_data` directory under the configured output root to reset sqlite checkpoints. Do NOT delete `output/<run_id>/` directories unless the user explicitly asks — they hold the cache that enables resume.
+Each run's LangGraph checkpointer lives at `<run_id>/checkpointer.sqlite` (plus its `-shm`/`-wal` companions during a run). Successful runs auto-clean these files; failed runs leave them so `--resume --session-id <same_id>` can pick up where it stopped.
+
+- To force a fresh start on the same run_id, delete `<run_id>/checkpointer.sqlite*` — this drops the checkpointer but keeps all other artifacts (outline, research, slides) so cache reuse still kicks in.
+- To wipe a run entirely, delete the whole `<run_id>/` directory. The pipeline regenerates everything on the next invocation with the same session-id (which produces a new run_id anyway because of the timestamp prefix).
+- Do NOT delete `<run_id>/` directories unless the user explicitly asks — they hold the cache that enables resume and patch-render.
 

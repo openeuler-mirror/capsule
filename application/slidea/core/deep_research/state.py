@@ -49,6 +49,7 @@ class ResearchState(TypedDict):
     current_task_ids: List[str]
     preprocess: bool = False
 
+    workspace_dir: Optional[str]
     deep_report: Optional[str]
     report_file: Optional[str]
 

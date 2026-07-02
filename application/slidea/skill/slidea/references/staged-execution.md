@@ -9,7 +9,7 @@ The pipeline has four stages, executed in this order:
 | Stage | What it does | Output |
 |---|---|---|
 | `parse` | Parse user request into structured requirements (audience, topic, goal, urls, missing_info) | `references/parsed_requirements.json` |
-| `research` | Run Tavily search / deep research based on parsed requirements; download reference images | `research/research.json`, `references/images.json`, `references/references_all.txt` |
+| `research` | Run Tavily search / deep research based on parsed requirements; download reference images | `research/research.json` (simple) or `research/deep_report.md` (deep), `references/images.json`, `references/references_all.txt` |
 | `outline` | Generate the PPT outline (title, abstract, type, index for each page) using research material + thought strategy | `outline/outline.json`, `thought/thought.md` |
 | `render` | Generate per-page SVG (LLM calls, possibly parallel), run quality checks, export PPTX | `slides/svg/`, `<run_id>/<topic>.pptx` |
 
