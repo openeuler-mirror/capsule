@@ -22,12 +22,12 @@ This is an environment-level setting, not a CLI flag. The agent does not pass it
 |---|---|---|
 | `--text "<request>"` | string | New PPT request text. Required unless `--resume` is given. Preserve user original input as much as possible. If Phase 1 was run, append `参考文件路径: <SPEECH_SCRIPT_MD_PATH>` after the request text. |
 | `--resume "<user reply>"` | string | Continue an interrupted LangGraph run using the user's answer, selection, or edited text. |
-| `--session-id <id>` | string | Session/thread id. Default `local`. Reuse the same value when resuming. |
+| `--session-id <id>` | string | Session/thread id. If omitted, a unique id (`auto_<pid>_<ts>`) is auto-generated. **Reuse the same explicit value when resuming or running staged execution** — the auto-generated default changes every invocation and cannot be recovered. |
 | `--stages <csv>` | `all` (default), `parse`, `research`, `outline`, `render` | Stage selection. See [staged-execution.md](staged-execution.md). |
 | `--render-mode` | `svg` (default) | **Do not pass this flag.** The default SVG route is what this skill advertises. |
 | `--research-mode` | `skip`, `simple`, `deep`, `''` (default) | Force research mode. **High-impact parameter** — see rule below. |
 | `--image-search` | `on`, `off` | Toggle web image search. |
-| `--run-id <id>` | string | Pin or reuse a specific run_id. Skips the LLM-based semantic suffix generation. |
+| `--run-id <id>` | string | Pin or reuse a specific run_id. Skips the LLM-based semantic suffix generation. **Rarely needed** — staged execution and resume auto-recover `run_id` from `--session-id`. Use only when you want a custom directory name or to skip the LLM run_id-summary call. |
 | `--recursion-limit <int>` | integer | Override LangGraph recursion limit. |
 | `--dry-run` | flag | Run preflight only and skip generation. |
 

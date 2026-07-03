@@ -83,19 +83,26 @@ async def _load_cached_text(base_dir: str, rel_path: str) -> str:
 def _find_run_id_by_session(output_root: str, session_id: str) -> str:
     """Locate the ORIGINAL run_id whose run.json recorded the given session_id.
 
-    Used when resuming: the original run_id (potentially carrying a semantic
-    suffix) is recovered instead of generating a fresh fallback id. Returns
-    an empty string when no match is found.
+    Used when resuming or running staged execution: the original run_id
+    (potentially carrying a semantic suffix) is recovered instead of generating
+    a fresh fallback id. Returns an empty string when no match is found.
 
     A session_id can legitimately appear in multiple run.json files — every
     resume attempt writes a new run.json. We filter out those `resume: true`
     records to find the original run that started the session.
+
+    Collision detection: if multiple ORIGINAL runs share the same session_id
+    (typical when users reuse the default "local" across unrelated tasks), we
+    refuse to guess — return empty so the caller falls through to a fresh
+    run_id, and warn loudly. Disambiguate by passing --run-id explicitly.
     """
     if not session_id:
         return ""
     output_path = Path(output_root)
     if not output_path.is_dir():
         return ""
+
+    matches: list[tuple[str, str, str]] = []  # (run_id, run_json_path, original_text_preview)
     for run_json in output_path.glob("*/run.json"):
         try:
             data = load_json(str(run_json))
@@ -110,8 +117,28 @@ def _find_run_id_by_session(output_root: str, session_id: str) -> str:
             # This is a resume-attempt record, not the original. Skip.
             continue
         rid = data.get("run_id")
-        if isinstance(rid, str) and rid:
-            return rid
+        if not (isinstance(rid, str) and rid):
+            continue
+        text_preview = (data.get("text") or "")[:80]
+        matches.append((rid, str(run_json), text_preview))
+
+    if not matches:
+        return ""
+    if len(matches) == 1:
+        rid, _, text_preview = matches[0]
+        logger.info(
+            f"Recovered run_id={rid!r} for session_id={session_id!r} "
+            f"(original request: {text_preview!r})"
+        )
+        return rid
+    # Multiple original runs share this session_id — collision. Refuse to guess.
+    run_ids = [m[0] for m in matches]
+    logger.warning(
+        f"session_id {session_id!r} matches {len(matches)} original runs: {run_ids}. "
+        f"Refusing to recover — could write into the wrong run directory. "
+        f"Disambiguate by passing --run-id <one_of_above> explicitly, or use a "
+        f"unique --session-id for each unrelated task."
+    )
     return ""
 
 async def _maybe_require_missing(parsed):
@@ -123,7 +150,7 @@ async def _maybe_require_missing(parsed):
 
 
 def _cached_svg_paths_for_outline(save_dir: str, outline) -> list[str]:
-    svg_dir = Path(save_dir) / "svg"
+    svg_dir = Path(save_dir)
     if not svg_dir.exists():
         return []
     paths = []
@@ -166,7 +193,7 @@ async def _try_export_cached_svg(state, out_dir: str, run_id: str) -> bool:
         "topic": state["topic"],
         "render_mode": "svg",
         "slides_dir": state["save_dir"],
-        "svg_dir": str(Path(state["save_dir"]) / "svg"),
+        "svg_dir": state["save_dir"],
         "pdf_path": pdf_path,
         "pptx_path": pptx_path,
     })
@@ -414,7 +441,7 @@ async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: st
                 state["save_dir"] = str(Path(pdf_path).parent)
         if await _try_export_cached_svg(state, out_dir, run_id):
             return
-        state.update(await generate_pages_node(state))
+        state.update(await generate_pages_node(state, config=config))
         emit_stage_payload(
             "completed",
             {"stage": "completed", "files": [state.get('final_pdf_path'), state.get('final_pptx_path')]},
@@ -430,7 +457,11 @@ async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--text", type=str, default="")
     parser.add_argument("--resume", type=str, default="")
-    parser.add_argument("--session-id", type=str, default="local")
+    parser.add_argument("--session-id", type=str, default=None,
+                        help="LangGraph thread/session identifier. If omitted, a "
+                             "unique id (auto_<pid>_<ts>) is generated so unrelated "
+                             "runs never collide. Pass an explicit value when you "
+                             "intend to resume or run --stages against an existing run.")
     parser.add_argument("--stages", type=str, default="all")
     parser.add_argument("--research-mode", type=str, default="")
     parser.add_argument("--use-cache", type=str, default="true")
@@ -442,6 +473,15 @@ async def main():
 
     args = parser.parse_args()
     logger.debug(f"All arguments: {vars(args)}")
+    # Auto-generate a unique session-id when none was provided. This prevents
+    # the historical "local" default from colliding across unrelated runs
+    # (which would let staged execution silently write into the wrong run dir).
+    if not args.session_id:
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
+        args.session_id = f"auto_{os.getpid()}_{ts}"
+        logger.info(f"No --session-id provided; generated {args.session_id!r}. "
+                    f"Pass --session-id explicitly to enable resume / staged recovery.")
     stages = [s.strip() for s in args.stages.split(',') if s.strip()] or ["all"]
     # Preflight 仅关心用户意图：显式 --render-mode html 才需要 HTML 路线相关的
     # 运行时检查（playwright/libreoffice）。其他情况（默认或显式 svg）按 SVG
@@ -500,6 +540,12 @@ async def main():
             )
             return
         run_id = recovered
+    elif stages != ["all"]:
+        # Staged execution: prefer the original run_id for the same session so all
+        # stage outputs land in one directory. If no prior run exists (first-time
+        # staged start), fall through to generate a fresh run_id.
+        recovered = _find_run_id_by_session(output_files_dir, args.session_id)
+        run_id = recovered or await new_semantic_run_id(args.text or "")
     else:
         run_id = await new_semantic_run_id(args.text or "")
     out_dir = run_dir(run_id)

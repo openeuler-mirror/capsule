@@ -11,7 +11,7 @@ The pipeline has four stages, executed in this order:
 | `parse` | Parse user request into structured requirements (audience, topic, goal, urls, missing_info) | `references/parsed_requirements.json` |
 | `research` | Run Tavily search / deep research based on parsed requirements; download reference images | `research/research.json` (simple) or `research/deep_report.md` (deep), `references/images.json`, `references/references_all.txt` |
 | `outline` | Generate the PPT outline (title, abstract, type, index for each page) using research material + thought strategy | `outline/outline.json`, `thought/thought.md` |
-| `render` | Generate per-page SVG (LLM calls, possibly parallel), run quality checks, export PPTX | `slides/svg/`, `<run_id>/<topic>.pptx` |
+| `render` | Generate per-page SVG (LLM calls, possibly parallel), run quality checks, export PPTX | `slides/`, `<run_id>/<topic>.pptx` |
 
 ## Running Specific Stages
 
@@ -29,8 +29,8 @@ Supported values: `all` (default), `parse`, `research`, `outline`, `render`. You
 ## When to Use Staged Execution
 
 - **Debugging**: run only `parse` to inspect what the parser extracted, then decide whether to continue.
-- **Resume after failure**: if `render` failed but `outline` succeeded, re-run with `--stages render` using the same `--session-id` and `--run-id` to reuse cached outline.
-- **Iteration**: edit `outline/outline.json` manually, then re-run `--stages outline,render` to use the edited outline as input to rendering.
+- **Resume after failure**: if `render` failed but `outline` succeeded, re-run with `--stages render` and the same `--session-id`. The original run_id is recovered automatically from session-id and all artifacts stay in one directory.
+- **Iteration**: edit `outline/outline.json` manually, then re-run `--stages outline,render` (same `--session-id`) to use the edited outline as input to rendering.
 
 ## Stage Dependencies
 
@@ -45,7 +45,7 @@ If you skip a stage's prerequisite, the pipeline reads whatever cached output ex
 
 ## Cache Reuse Between Stages
 
-Cache is keyed on `run_id`. As long as you reuse the same `run_id` (implicitly via `--session-id` resume, or explicitly via `--run-id`), each stage reads prior stage outputs from `output/<run_id>/`. This is what makes staged execution work — see [caching-and-paths.md](caching-and-paths.md) for the on-disk layout.
+Cache is keyed on `run_id`, and for staged runs the `run_id` is automatically recovered from `--session-id` (same mechanism as `--resume`). As long as you reuse the same `--session-id`, each stage reads prior stage outputs from `output/<run_id>/` and writes its own outputs there. This is what makes staged execution work — see [caching-and-paths.md](caching-and-paths.md) for the on-disk layout.
 
 ## Same Timeout Rules Apply
 

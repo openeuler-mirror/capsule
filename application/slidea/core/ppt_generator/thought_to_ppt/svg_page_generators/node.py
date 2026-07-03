@@ -53,11 +53,19 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
     """
     if not state.get("save_dir", None):
         cache_dir = run_dir_from_config(config, str(app_base_dir))
-        if cache_dir:
-            save_dir = os.path.join(cache_dir, "slides")
-        else:
-            time_prefix = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
-            save_dir = os.path.join(output_files_dir, f'{time_prefix}_{sanitize_filename(state["topic"])}')
+        if not cache_dir:
+            # config must carry the run_id so we can place SVGs inside the active
+            # run's cache directory. Reaching this branch means the caller forgot
+            # to thread config (typical of staged execution before the
+            # generate_pages_node config fix). Raise loudly so the bug surfaces
+            # instead of silently creating an orphan directory at the output root.
+            raise RuntimeError(
+                "prepare_generation_context_node could not resolve the run cache "
+                "directory: config is missing or does not carry run_id. Pass "
+                "config from the caller (generate_pages_node dispatches it "
+                "automatically in normal runs)."
+            )
+        save_dir = os.path.join(cache_dir, "slides")
     else:
         save_dir = state["save_dir"]
     await aiofiles.os.makedirs(save_dir, exist_ok=True)
@@ -487,7 +495,7 @@ async def export_node(state: PPTState, writer: StreamWriter, config: RunnableCon
             "topic": state["topic"],
             "render_mode": "svg",
             "slides_dir": save_dir,
-            "svg_dir": os.path.join(save_dir, "svg"),
+            "svg_dir": save_dir,
             "template_name": state.get("template_name", ""),
             "pdf_path": pdf_path,
             "pptx_path": pptx_path,
@@ -498,7 +506,7 @@ async def export_node(state: PPTState, writer: StreamWriter, config: RunnableCon
         {
             "step": "导出 PPT 完成",
             "files": [pdf_path, pptx_path] if pdf_path else [pptx_path],
-            "source_dir": os.path.join(save_dir, "svg"),
+            "source_dir": save_dir,
             "text": "生成PPT结束",
         }
     )

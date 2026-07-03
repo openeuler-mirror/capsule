@@ -309,7 +309,7 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            svg_dir = slides_dir / "svg"
+            svg_dir = slides_dir
             svg_dir.mkdir(parents=True, exist_ok=True)
             (svg_dir / "01_Cover.svg").write_text(
                 '<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg"></svg>',

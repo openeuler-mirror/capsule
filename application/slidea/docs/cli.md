@@ -43,12 +43,12 @@ python3 scripts/run_ppt_pipeline.py --text "<request>"
 | --- | --- | --- |
 | `--text` | No* | New slide-generation request text |
 | `--resume` | No* | Resume payload for an interrupted full-graph run |
-| `--session-id` | No | LangGraph thread/session identifier, default `local` |
+| `--session-id` | No | LangGraph thread/session identifier. If omitted, a unique id (`auto_<pid>_<ts>`) is generated so unrelated runs never collide. Pass an explicit value when you intend to resume or run `--stages` against an existing run. |
 | `--stages` | No | Comma-separated stage list, default `all` |
 | `--research-mode` | No | Runtime override for research routing: `skip`, `simple`, `deep` |
 | `--use-cache` | No | String boolean controlling cache-backed reuse |
 | `--image-search` | No | String boolean override for web image search |
-| `--run-id` | No | Existing or explicit run id |
+| `--run-id` | No | Explicit run id override. Rarely needed — staged execution and resume auto-recover `run_id` from `--session-id`. |
 | `--recursion-limit` | No | LangGraph recursion limit, default `500` |
 | `--dry-run` | No | Run preflight only and skip generation |
 
@@ -236,7 +236,7 @@ python3 scripts/run_ppt_pipeline.py --text "..." --research-mode skip
 Render from a cached outline:
 
 ```bash
-python3 scripts/run_ppt_pipeline.py --text "..." --stages render --run-id <run_id>
+python3 scripts/run_ppt_pipeline.py --text "..." --stages render --session-id demo
 ```
 
 Resume an interrupted run:
@@ -244,8 +244,7 @@ Resume an interrupted run:
 ```bash
 python3 scripts/run_ppt_pipeline.py \
   --resume "..." \
-  --session-id demo \
-  --run-id <run_id>
+  --session-id demo
 ```
 
 Current limitation: `--resume` is consumed only by the `all` stage path that runs the compiled top-level graph. Staged execution does not currently resume LangGraph interrupts.

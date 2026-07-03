@@ -105,7 +105,7 @@ The CLI also prints a completion block to stdout that surfaces the deliverable a
 >>> 源文件目录：<abs_path_to_slides_svg>
 ```
 
-The "源文件目录" line points at `<run_id>/slides/svg/` — the editable on-disk SVG pages that produced the PPTX. Image inlining into `data:` URIs happens at PPTX export time inside a temporary directory, so on-disk SVGs stay small and editable.
+The "源文件目录" line points at `<run_id>/slides/` — the editable on-disk SVG pages that produced the PPTX. Image inlining into `data:` URIs happens at PPTX export time inside a temporary directory, so on-disk SVGs stay small and editable.
 
 The output root is `<SLIDEA_DIR>/output/` by default; set `OUTPUT_DIR` in `.env` to redirect every run, cache, and intermediate artifact to a different directory. See [references/advanced-params.md](references/advanced-params.md) for details.
 
@@ -124,7 +124,7 @@ For any edit request against an existing run:
    - **`diagram-basics.md`**: decides which diagram type, and if applicable, reads the matching `diagram-layouts/<type>.md`.
    - **`diagram-layouts/<type>.md`**: pure drawing knowledge for one diagram type.
 
-The key invariant: Phase 3 edits SVG source under `output/<run_id>/slides/svg/` and runs `scripts/svg_to_pptx.py` to regenerate the PPTX. It does not call `run_ppt_pipeline.py` again.
+The key invariant: Phase 3 edits SVG source under `output/<run_id>/slides/` and runs `scripts/svg_to_pptx.py` to regenerate the PPTX. It does not call `run_ppt_pipeline.py` again.
 
 ## Structured CLI Results
 

@@ -117,8 +117,13 @@ async def _llm_repair_svg(svg_content: str, issue: str) -> Optional[str]:
 
 
 def _svg_page_filename(page) -> str:
-    """svg/{nn}_{safe_title}.svg relative path."""
-    return f"svg/{safe_svg_filename(page.index, page.title)}"
+    """{nn}_{safe_title}.svg relative path.
+
+    SVGs live directly under save_dir (not under save_dir/svg/) so that the
+    relative image paths they contain (images/xxx.png) resolve correctly
+    against save_dir/images/.
+    """
+    return safe_svg_filename(page.index, page.title)
 
 
 async def _svg_screenshot_with_embedded_images(source_path: str, output_path: str) -> str:

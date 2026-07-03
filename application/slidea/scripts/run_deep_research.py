@@ -16,7 +16,13 @@ from core.utils.config import output_files_dir
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Deep Research CLI")
     parser.add_argument("--research-request", help="研究请求/主题")
-    parser.add_argument("--session-id", default="local", help="session / thread id")
+    parser.add_argument(
+        "--session-id",
+        default=None,
+        help="session / thread id. If omitted, a unique id (auto_<pid>_<ts>) is "
+             "generated so unrelated runs never collide. Pass an explicit value "
+             "when you intend to --resume an existing run.",
+    )
     parser.add_argument("--resume", action="store_true", help="从上次 checkpoint 恢复")
     parser.add_argument("--recursion-limit", type=int, default=500, help="LangGraph recursion limit")
     return parser
@@ -65,6 +71,17 @@ def main() -> int:
     if not args.research_request and not args.resume:
         logger.error("--research-request is required for new runs")
         return 1
+
+    # Auto-generate a unique session-id when none was provided. Prevents the
+    # historical "local" default from colliding across unrelated deep_research
+    # runs (each session writes to <output>/<session_id>/, so collisions would
+    # contaminate the wrong session's directory).
+    if not args.session_id:
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
+        args.session_id = f"auto_{os.getpid()}_{ts}"
+        logger.info(f"No --session-id provided; generated {args.session_id!r}. "
+                    f"Pass --session-id explicitly to enable --resume.")
 
     asyncio.run(_run_research(args))
     return 0

@@ -74,15 +74,20 @@ def _load_outline_or_emit(args, out_dir: str):
 
 
 def _resolve_save_dir(out_dir: str, topic: str):
-    from core.ppt_generator.utils.common import sanitize_filename
-    from core.utils.config import output_files_dir
+    """Resolve the slides directory for patch-render.
 
+    Prefer ppt.json's slides_dir (set by a prior successful render). Fall back
+    to <out_dir>/slides (the standard layout) when ppt.json is missing — this
+    happens when patching a run that completed outline but never rendered.
+    Never fall back to a top-level <output_root>/<topic> dir; that would orphan
+    artifacts from the original run.
+    """
     ppt_json = load_json(str(Path(out_dir) / "ppt.json"))
     if ppt_json and ppt_json.get("slides_dir"):
         return ppt_json["slides_dir"]
     if ppt_json and ppt_json.get("pdf_path"):
         return str(Path(ppt_json["pdf_path"]).parent)
-    return os.path.join(output_files_dir, sanitize_filename(topic))
+    return os.path.join(out_dir, "slides")
 
 
 def _resolve_target_indices(args, save_dir: str, outline):
@@ -93,7 +98,7 @@ def _resolve_target_indices_for_mode(args, save_dir: str, outline, render_mode: 
     target_indices = parse_indices(args.indices)
     if not target_indices:
         if render_mode == "svg":
-            svg_dir = Path(save_dir) / "svg"
+            svg_dir = Path(save_dir)
             existing = _existing_svg_indices(svg_dir)
         else:
             existing = set(int(p.stem) for p in Path(save_dir).glob("*.html") if p.stem.isdigit())
@@ -114,7 +119,7 @@ def _existing_svg_indices(svg_dir: Path) -> set[int]:
 
 
 def _svg_path_for_index(save_dir: str, index: int) -> str | None:
-    matches = sorted((Path(save_dir) / "svg").glob(f"{index + 1:02d}_*.svg"))
+    matches = sorted(Path(save_dir).glob(f"{index + 1:02d}_*.svg"))
     if not matches:
         return None
     return str(matches[0])
@@ -397,7 +402,7 @@ async def _patch_render_svg(context: PatchRenderContext):
         "topic": topic,
         "render_mode": "svg",
         "slides_dir": save_dir,
-        "svg_dir": str(Path(save_dir) / "svg"),
+        "svg_dir": save_dir,
         "template_name": state.get("template_name", ""),
         "pdf_path": pdf_path,
         "pptx_path": pptx_path,

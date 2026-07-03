@@ -11,7 +11,7 @@ This is the only render route advertised through `skill/SKILL.md`. Any alternati
 ## Runtime Flow
 
 ```text
-request -> thought -> outline -> slides/svg/*.svg -> quality repair -> PPTX export (images inlined in a temp dir)
+request -> thought -> outline -> slides/*.svg -> quality repair -> PPTX export (images inlined in a temp dir)
 ```
 
 The route reuses the existing request parsing, research, thought generation, outline generation, image download, cache, and patch-render infrastructure. Only the page-render and export backend changes.
@@ -19,7 +19,7 @@ The route reuses the existing request parsing, research, thought generation, out
 Key output paths are recorded in `output/<run_id>/ppt.json`:
 
 - `render_mode`: `svg`
-- `slides_dir`: directory holding slide source files (`svg/`, `prompts/`, `images/`)
+- `slides_dir`: directory holding slide source files (SVG pages directly inside, plus `prompts/` and `images/` subdirs)
 - `svg_dir`: editable on-disk SVG pages (relative image references)
 - `template_name`: persisted so patch-render reuses the same visual template
 - `pptx_path`: generated native PPTX path (at the cache directory root)
@@ -32,7 +32,7 @@ Render from a cached outline (default SVG route):
 python3 scripts/run_ppt_pipeline.py \
   --text "<request>" \
   --stages render \
-  --run-id <run_id>
+  --session-id demo
 ```
 
 Patch render missing or selected pages:
@@ -67,11 +67,11 @@ Use this checklist before treating a new SVG-route change as production-ready:
 
 1. Generate a small deck with the default SVG route (no `--render-mode` flag needed).
 2. Confirm `ppt.json` contains `render_mode: "svg"` and non-empty `slides_dir`, `svg_dir`, and `pptx_path`.
-3. Inspect `slides/svg/`; page count should match the outline.
+3. Inspect `slides/`; page count should match the outline.
 4. Open the generated PPTX in PowerPoint or another PPTX viewer.
 5. Confirm text boxes and basic shapes are editable, not flattened screenshots.
 6. Confirm images display and keep reasonable aspect ratios.
-7. Compare several PPTX pages against matching `slides/svg/*.svg` files.
+7. Compare several PPTX pages against matching `slides/*.svg` files.
 8. Run `patch_render_missing.py --run-id <run_id> --indices <page>` and confirm the PPTX is rebuilt.
 
 Fast regression suite used during implementation:

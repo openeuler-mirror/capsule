@@ -51,6 +51,6 @@ Always inspect `stage` first before deciding whether to continue, retry, or surf
 
 ## What Patch Render Does NOT Do
 
-- It does not edit existing SVGs in place. For that, an operator must manually edit the SVG file under `slides/svg/`, then re-export via `scripts/svg_to_pptx.py`. The on-disk SVG is the single source of truth — image inlining happens at export time inside a temporary directory, so edits to `slides/svg/` take effect on the next PPTX export without any intermediate step.
+- It does not edit existing SVGs in place. For that, an operator must manually edit the SVG file under `slides/`, then re-export via `scripts/svg_to_pptx.py`. The on-disk SVG is the single source of truth — image inlining happens at export time inside a temporary directory, so edits to `slides/` take effect on the next PPTX export without any intermediate step.
 - It does not regenerate the outline. If the outline itself is wrong, re-run the `outline` stage instead.
 - It does not refresh research material. The regenerated page reuses whatever is in `outline/<idx>_*.reference_doc`.

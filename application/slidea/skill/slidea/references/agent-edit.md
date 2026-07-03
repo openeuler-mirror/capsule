@@ -1,6 +1,6 @@
 # Agent-led Page Editing
 
-This document is the standard workflow for editing an existing slidea run — changing text on a page, swapping an image, redrawing a page as a diagram, adjusting layout, etc. **Phase 3 edits SVG files directly under `output/<run_id>/slides/svg/` and re-exports the PPTX — it never re-runs the generation pipeline.**
+This document is the standard workflow for editing an existing slidea run — changing text on a page, swapping an image, redrawing a page as a diagram, adjusting layout, etc. **Phase 3 edits SVG files directly under `output/<run_id>/slides/` and re-exports the PPTX — it never re-runs the generation pipeline.**
 
 ## 1. When to Read diagram-basics.md
 
@@ -68,7 +68,7 @@ Read these five files every time, before making any change:
 | 2 | `references/parsed_requirements.json` | The user's actual structured request: `audience`, `topic`, `goal`, `urls`, `missing_info` |
 | 3 | `thought/thought.md` | The PPT-wide narrative strategy — explains why each page exists and what it should say |
 | 4 | `outline/outline.json` | The full outline, with the target page's `title`, `abstract`, `type`, `reference_doc`, `reference_images` |
-| 5 | `slides/svg/<idx+1:02d>_*.svg` | The current SVG implementation of the page being edited |
+| 5 | `slides/<idx+1:02d>_*.svg` | The current SVG implementation of the page being edited |
 
 **Strongly recommended as a sixth file**: `slides/prompts/<idx+1:02d>_<title>.txt` for the page being edited. This is a single-file snapshot of everything that was fed to the LLM when the page was originally generated — it contains the full SVG compatibility contract, the page's outline entry, its `reference_doc`, available image materials, the template usage rules (including the protected-id list), and the complete template SVG with `data-description` annotations. Reading this one file can replace reading several of the files above and is the authoritative source for the constraints the page was generated against.
 
@@ -76,7 +76,7 @@ Optional, when you need extra context:
 
 - `references/references_all.txt` — all source material combined (raw user-provided text + deep research report + search results). Useful when the user asks for content changes that need to reference the original research.
 - `research/deep_report.md` — the deep research report (only present if the run used deep research mode).
-- `slides/svg/<other_page>.svg` — sibling pages from the same run. Useful for matching visual style across pages.
+- `slides/<other_page>.svg` — sibling pages from the same run. Useful for matching visual style across pages.
 
 ## 5. Standard Edit Workflow
 
@@ -155,7 +155,7 @@ When drawing is involved, [diagram-basics.md §5](diagram-basics.md#5-slidea-svg
 
 Use the Edit or Write tool against the target SVG file.
 
-- **Path**: `output/<run_id>/slides/svg/<idx+1:02d>_*.svg`.
+- **Path**: `output/<run_id>/slides/<idx+1:02d>_*.svg`.
 - **Filename prefix**: `{idx+1:02d}_` (e.g. `05_`) is load-bearing — it is what the export pipeline uses to sort pages and what patch-render uses to find a specific page. Preserve it exactly. The title suffix can be anything.
 - **New images**: if the edit introduces a new image, place the file under `output/<run_id>/slides/images/` and reference it as `images/<filename>` in the SVG. The export pipeline inlines images into `data:` URIs at export time, so on-disk SVGs stay editable.
 
