@@ -70,11 +70,13 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
     """
     if not state.get("save_dir", None):
         cache_dir = run_dir_from_config(config, str(app_base_dir))
-        if cache_dir:
-            save_dir = os.path.join(cache_dir, "slides")
-        else:
-            time_prefix = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
-            save_dir = os.path.join(output_files_dir, f'{time_prefix}_{sanitize_filename(state["topic"])}')
+        if not cache_dir:
+            raise RuntimeError(
+                "prepare_generation_context_node could not resolve the run cache "
+                "directory: config is missing or does not carry run_id. Pass "
+                "config from the caller."
+            )
+        save_dir = os.path.join(cache_dir, "slides")
     else:
         save_dir = state["save_dir"]
     await aiofiles.os.makedirs(save_dir, exist_ok=True)

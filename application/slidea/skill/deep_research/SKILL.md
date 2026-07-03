@@ -23,7 +23,7 @@ Deep Research performs multi-source investigation on a given topic, automaticall
 
 ## Running Deep Research
 
-Each run is identified by `--session-id` and writes everything (deliverables, planning snapshots, LangGraph checkpointer) under `<output_root>/<session_id>/`. Use a **new** session-id for a fresh start; reuse the **same** session-id to resume an interrupted run.
+Each run is identified by `--session-id` (LangGraph thread id) and writes everything (deliverables, planning snapshots, LangGraph checkpointer) under `<output_root>/<run_id>/`, where `<run_id>` is auto-generated as `<timestamp>_<semantic-summary>` (LLM summarizes the research request into a directory-safe suffix). Use a **new** session-id for a fresh start; reuse the **same** session-id to resume an interrupted run — the original `run_id` is recovered automatically.
 
 **Full research run**:
 ```bash
@@ -45,15 +45,22 @@ If the research run fails due to a runtime exception (network error, API timeout
 ```
 
 **Important**: 
-- Always reuse the same `session_id` when resuming an interrupted run.
+- Always reuse the same `session_id` when resuming an interrupted run — `run_id` is recovered automatically from the session-id ↔ run_id binding in `run.json`.
 - The Deep Research pipeline may take a long time(10-30 minutes) to complete. If the runtime environment supports it, execute the pipeline with timeout set to 60 minutes.
 
 ---
 
 ## Output
-- `<output_root>/<session_id>/deep_report.md`: The final synthesized research report in markdown format. `<output_root>` is `<DEEP_RESEARCH_DIR>/output/` by default and can be overridden via `OUTPUT_DIR` in `.env`. The directory is auto-created on first run.
-- Intermediate planning snapshots (`todo_*.txt`) are written alongside `deep_report.md` in the same `<session_id>/` directory for debugging.
-- `checkpointer.sqlite` (and its `-shm`/`-wal` companions) is the LangGraph resume state. It lives in the same `<session_id>/` directory during a run, and is **auto-removed on success**. A failed run leaves it behind so `--resume --session-id <same_id>` can pick up where it stopped; the file is safe to delete manually once you no longer want to resume.
+- `<output_root>/<run_id>/deep_report.md`: The final synthesized research report in markdown format. `<output_root>` is `<DEEP_RESEARCH_DIR>/output/` by default and can be overridden via `OUTPUT_DIR` in `.env`. The directory is auto-created on first run.
+- `<output_root>/<run_id>/run.json`: session_id ↔ run_id binding record (used by `--resume` to recover `run_id`).
+- Intermediate planning snapshots (`todo_*.txt`) are written alongside `deep_report.md` in the same `<run_id>/` directory for debugging.
+- `checkpointer.sqlite` (and its `-shm`/`-wal` companions) is the LangGraph resume state. It lives in the same `<run_id>/` directory during a run, and is **auto-removed on success**. A failed run leaves it behind so `--resume --session-id <same_id>` can pick up where it stopped; the file is safe to delete manually once you no longer want to resume.
+
+### Session-id Collision Detection
+
+If multiple original runs share the same `--session-id` (typical when users reuse a value across unrelated tasks), `--resume` recovery refuses to guess — it logs a WARNING listing the candidate `run_id`s and exits instead of writing into the wrong run directory. Disambiguate by passing `--run-id <one_of_the_listed>` explicitly, or use a unique `--session-id` per task.
+
+If you omit `--session-id` entirely, the CLI auto-generates a unique value (`auto_<pid>_<ts>`), so unrelated runs can never collide. The trade-off: auto-generated ids cannot be reused for `--resume` — pass an explicit `--session-id` whenever you intend to continue a prior run.
 
 ## Run Logs
 - Logs are stored in `logs/app_{time:YYYY-MM-DD}.log`

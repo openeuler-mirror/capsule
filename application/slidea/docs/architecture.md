@@ -172,7 +172,7 @@ Render pipeline (default SVG route):
 1. choose template,
 2. load shared PPT prompt,
 3. prepare output directory,
-4. generate each page as SVG (written to `slides/svg/`),
+4. generate each page as SVG (written to `slides/`),
 5. run quality checks (XML well-formedness, forbidden constructs, etc.),
 6. export native editable PPTX — local images are inlined into a temporary directory at export time so on-disk SVGs stay editable.
 

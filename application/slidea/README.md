@@ -298,7 +298,7 @@ Typical cached files include:
 - `outline/outline.json`
 - `ppt.json`
 
-The final rendered artifacts are written to the cache directory recorded in `ppt.json`. The SVG render route produces editable `slides/svg/*.svg` (the single on-disk source, with relative image references) and a native editable `*.pptx` at the cache root. Image inlining into `data:` URIs happens at PPTX export time inside a temporary directory, so on-disk SVGs stay small and editable. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
+The final rendered artifacts are written to the cache directory recorded in `ppt.json`. The SVG render route produces editable `slides/*.svg` (the single on-disk source, with relative image references) and a native editable `*.pptx` at the cache root. Image inlining into `data:` URIs happens at PPTX export time inside a temporary directory, so on-disk SVGs stay small and editable. This separation lets the system re-enter a stage or perform patch rendering without rerunning the whole pipeline.
 
 ## Runtime Degradation Behavior
 

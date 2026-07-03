@@ -124,18 +124,17 @@ The default `--stages all` path runs:
 
 ## Resume After User Input
 
-If the full pipeline pauses with `stage: "input_required"`, keep the returned `run_id` and ask the user the requested question.
+If the full pipeline pauses with `stage: "input_required"`, ask the user the requested question.
 
 Then continue with:
 
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \
   --resume "<user response>" \
-  --session-id local-demo \
-  --run-id <run_id>
+  --session-id local-demo
 ```
 
-Use the same `session-id` and `run-id` from the interrupted run.
+Use the same `session-id` from the interrupted run. The original `run_id` is recovered automatically.
 
 Resume payload mapping:
 
@@ -150,8 +149,8 @@ For simple CLI usage, passing the user response as `--resume "<text>"` is suffic
 When iterating on a cached run, staged execution is faster:
 
 ```bash
-.venv/bin/python scripts/run_ppt_pipeline.py --text "..." --stages outline --run-id <run_id>
-.venv/bin/python scripts/run_ppt_pipeline.py --text "..." --stages render --run-id <run_id>
+.venv/bin/python scripts/run_ppt_pipeline.py --text "..." --stages outline --session-id <id>
+.venv/bin/python scripts/run_ppt_pipeline.py --text "..." --stages render --session-id <id>
 ```
 
 Supported stages:
@@ -180,7 +179,7 @@ Typical contents:
 - `outline/outline.json`: normalized outline cache
 - `ppt.json`: render result metadata
 - `<topic>.pptx`: final PPTX deliverable at the cache root
-- `slides/svg/`: editable SVG source pages
+- `slides/`: editable SVG source pages
 - `slides/prompts/`: per-page LLM input audit trail
 - `slides/images/`: downloaded image assets
 

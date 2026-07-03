@@ -27,21 +27,20 @@ output/
     ├── thought/
     │   └── thought.md                ← LLM-generated "PPT writing strategy"
     └── slides/                       ← everything that produces the PPTX
-        ├── svg/                      ← THE editable SVG source (single source of truth)
-        │   ├── 01_<title>.svg
-        │   ├── ...
-        │   ├── vlm_svg_candidates/   ← VLM-reviewed candidates (if VLM review ran)
-        │   └── vlm_screenshots/      ← screenshots during VLM review
+        ├── 01_<title>.svg            ← THE editable SVG source (single source of truth, directly under slides/)
+        ├── ...
+        ├── vlm_svg_candidates/       ← VLM-reviewed candidates (if VLM review ran)
+        ├── vlm_screenshots/          ← screenshots during VLM review
         ├── prompts/                  ← per-page full LLM input (audit trail)
         │   └── <idx>_<title>.txt
         └── images/                   ← downloaded/generated image assets
 ```
 
-The PPTX is written to the cache root (not inside `slides/`) so the deliverable is the most visible artifact. `slides/` holds everything that produces the PPTX — the editable SVGs, the per-page prompts, and the referenced image assets.
+The PPTX is written to the cache root (not inside `slides/`) so the deliverable is the most visible artifact. `slides/` holds everything that produces the PPTX — the editable SVGs, the per-page prompts, and the referenced image assets. SVGs sit directly under `slides/` (not under `slides/svg/`) so the relative image paths they reference (`images/xxx.png`) resolve against `slides/images/`, making the on-disk SVGs viewable in any browser without further processing.
 
 ## Where image embedding happens
 
-SVGs in `slides/svg/` reference images via relative paths like `images/foo.png`. These relative paths are what make the SVGs editable and small on disk. The `<image href="...">` is rewritten to a `data:` URI **at PPTX export time**, inside a temporary directory, so the on-disk SVGs stay editable while the PPTX converter receives self-contained input. There is no `svg_final/` directory — the inline-then-export transform is a runtime concern, not a persisted artifact.
+SVGs under `slides/` reference images via relative paths like `images/foo.png`. These relative paths are what make the SVGs editable and small on disk; they resolve against the SVG's own directory (so `slides/01.svg` references `slides/images/foo.png`). The `<image href="...">` is rewritten to a `data:` URI **at PPTX export time**, inside a temporary directory, so the on-disk SVGs stay editable while the PPTX converter receives self-contained input. There is no `svg_final/` directory — the inline-then-export transform is a runtime concern, not a persisted artifact.
 
 ## Run ID Naming
 
@@ -66,7 +65,7 @@ The semantic suffix exists so humans can scan `output/` and recognize runs witho
   "topic": "2026年上半年热门Agent框架与应用洞察",
   "render_mode": "svg",
   "slides_dir": "/abs/path/to/output/20260624_104422_热门Agent框架洞察/slides",
-  "svg_dir": "/abs/path/to/output/20260624_104422_热门Agent框架洞察/slides/svg",
+  "svg_dir": "/abs/path/to/output/20260624_104422_热门Agent框架洞察/slides",
   "template_name": "common_light",
   "pdf_path": "",
   "pptx_path": "/abs/path/to/output/20260624_104422_热门Agent框架洞察/<topic>.pptx"
@@ -82,7 +81,13 @@ Two distinct mechanisms, both keyed on `run_id`:
 - **Cache reuse** (`USE_CACHE=true`, default): if `output/<run_id>/` already exists with prior stage outputs, those outputs are loaded instead of regenerated. Used when the same `run_id` is invoked again or when staged execution resumes.
 - **Resume** (`--resume "<user reply>"`): continues an interrupted LangGraph run inside the existing sqlite checkpoint. Always reuse the same `--session-id` and (implicitly) the same `run_id` when resuming.
 
-To force a fresh run ignoring cache: pass a new `--run-id`, or delete `output/<run_id>/` before invoking.
+To force a fresh run ignoring cache: delete `output/<run_id>/` before invoking with the same `--session-id`. The pipeline will not find a prior `run.json` and will generate a new `run_id` (new timestamp + new semantic suffix).
+
+## Session-id Collision Detection
+
+The pipeline recovers `run_id` from `--session-id` by scanning `output/*/run.json` for the original (non-resume) record matching the session-id. If **multiple** original runs share the same session-id (typical when users accidentally reuse a value across unrelated tasks), the recovery **refuses to guess** — it logs a WARNING listing the matching run_ids and falls through to a fresh `run_id`. Disambiguate by passing `--run-id <one_of_the_listed>` explicitly, or use a unique `--session-id` per task.
+
+If you omit `--session-id` entirely, the pipeline auto-generates a unique value (`auto_<pid>_<ts>`), so unrelated runs can never collide. The trade-off: auto-generated ids cannot be reused for `--resume` or `--stages` recovery — pass an explicit `--session-id` whenever you intend to continue a prior run.
 
 ## How to Find a Previous Run
 

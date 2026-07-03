@@ -128,13 +128,19 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
     return result
 
 
-async def generate_pages_node(state: PPTState):
-    """generate ppt pages — dispatch to the SVG (default) or HTML sub-pipeline by render_mode."""
+async def generate_pages_node(state: PPTState, config: RunnableConfig | None = None):
+    """generate ppt pages — dispatch to the SVG (default) or HTML sub-pipeline by render_mode.
+
+    config is threaded into the subgraph so prepare_generation_context_node can resolve
+    save_dir from the run cache directory. Required when called from staged execution
+    (scripts/run_ppt_pipeline.py --stages) where LangGraph's automatic config threading
+    does not apply.
+    """
     if state.get("render_mode", "svg") == "html":
         # HTML 路线为可选备用方案；仅当显式指定 render_mode=html 时才加载。
         # 默认 SVG 路线不会触发对 playwright/BrowserManager 等 HTML 路线依赖的 import。
         from core.ppt_generator.thought_to_ppt.page_generators.graph import generate_pages_app
-        return await generate_pages_app.ainvoke(state)
+        return await generate_pages_app.ainvoke(state, config=config)
 
     from core.ppt_generator.thought_to_ppt.svg_page_generators.graph import generate_svg_pages_app
-    return await generate_svg_pages_app.ainvoke(state)
+    return await generate_svg_pages_app.ainvoke(state, config=config)

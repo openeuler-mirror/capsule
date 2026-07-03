@@ -43,7 +43,7 @@ class CliStageSmokeTests(unittest.TestCase):
                 "topic": "Demo Topic",
             }
 
-        async def generate_pages_node(state):
+        async def generate_pages_node(state, config=None):
             return {
                 "final_pdf_path": "/tmp/demo.pdf",
                 "final_pptx_path": "/tmp/demo.pptx",
@@ -59,7 +59,7 @@ class CliStageSmokeTests(unittest.TestCase):
         async def generate_outline_node(state, config=None):
             return {}
 
-        async def generate_pages_node(state):
+        async def generate_pages_node(state, config=None):
             mode = state.get("render_mode", "missing")
             return {
                 "final_pdf_path": f"/tmp/{mode}.pdf",
@@ -150,7 +150,7 @@ class CliStageSmokeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             run_id = "outline-smoke"
             payload = self._run_main(
-                ["--text", "demo", "--stages", "outline", "--run-id", run_id],
+                ["--text", "demo", "--stages", "outline", "--session-id", "local", "--run-id", run_id],
                 cwd=tmp_dir,
             )
             run_payload = json.loads(
@@ -172,7 +172,13 @@ class CliStageSmokeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             run_id = "outline-svg"
             payload = self._run_main(
-                ["--text", "demo", "--stages", "outline", "--render-mode", "svg", "--run-id", run_id],
+                [
+                    "--text", "demo",
+                    "--stages", "outline",
+                    "--session-id", "local",
+                    "--render-mode", "svg",
+                    "--run-id", run_id,
+                ],
                 cwd=tmp_dir,
             )
             run_payload = json.loads(
@@ -207,7 +213,7 @@ class CliStageSmokeTests(unittest.TestCase):
             )
 
             payload = self._run_main(
-                ["--text", "demo", "--stages", "render", "--run-id", run_id],
+                ["--text", "demo", "--stages", "render", "--session-id", "local", "--run-id", run_id],
                 cwd=tmp_dir,
             )
 
@@ -220,7 +226,7 @@ class CliStageSmokeTests(unittest.TestCase):
             out_dir = Path(tmp_dir) / "output" / run_id
             outline_dir = out_dir / "outline"
             slides_dir = Path(tmp_dir) / "rendered"
-            svg_src = slides_dir / "svg"
+            svg_src = slides_dir
             outline_dir.mkdir(parents=True, exist_ok=True)
             svg_src.mkdir(parents=True, exist_ok=True)
             (outline_dir / "outline.json").write_text(
@@ -279,7 +285,7 @@ class CliStageSmokeTests(unittest.TestCase):
             export_module.svgs_to_pptx = svgs_to_pptx
 
             payload = self._run_main(
-                ["--text", "demo", "--stages", "render", "--run-id", run_id],
+                ["--text", "demo", "--stages", "render", "--session-id", "local", "--run-id", run_id],
                 extra_modules={
                     "core.ppt_generator.utils.svg_pipeline.quality_checker": quality_module,
                     "core.ppt_generator.utils.svg_export": export_module,
@@ -330,7 +336,7 @@ class CliStageSmokeTests(unittest.TestCase):
             )
 
             payload = self._run_main(
-                ["--text", "demo", "--stages", "render", "--run-id", run_id],
+                ["--text", "demo", "--stages", "render", "--session-id", "local", "--run-id", run_id],
                 extra_modules={
                     "core.ppt_generator.thought_to_ppt.node": self._make_render_mode_probe_module(),
                 },
@@ -388,7 +394,7 @@ class CliStageSmokeTests(unittest.TestCase):
             sqlite_module.AsyncSqliteSaver = FakeSaver
 
             payload = self._run_main(
-                ["--resume", "continue", "--run-id", run_id],
+                ["--resume", "continue", "--session-id", "local", "--run-id", run_id],
                 extra_modules={
                     "scripts.utils.pipeline": pipeline_module,
                     "core.ppt_generator.graph": graph_module,
@@ -447,7 +453,7 @@ class CliStageSmokeTests(unittest.TestCase):
             sqlite_module.AsyncSqliteSaver = FakeSaver
 
             payload = self._run_main(
-                ["--resume", "continue", "--run-id", run_id, "--render-mode", "svg"],
+                ["--resume", "continue", "--session-id", "local", "--run-id", run_id, "--render-mode", "svg"],
                 extra_modules={
                     "scripts.utils.pipeline": pipeline_module,
                     "core.ppt_generator.graph": graph_module,
@@ -506,7 +512,7 @@ class CliStageSmokeTests(unittest.TestCase):
             sqlite_module.AsyncSqliteSaver = FakeSaver
 
             payload = self._run_main(
-                ["--resume", "continue", "--run-id", run_id, "--render-mode", "html"],
+                ["--resume", "continue", "--session-id", "local", "--run-id", run_id, "--render-mode", "html"],
                 extra_modules={
                     "scripts.utils.pipeline": pipeline_module,
                     "core.ppt_generator.graph": graph_module,
@@ -522,7 +528,7 @@ class CliStageSmokeTests(unittest.TestCase):
     def test_render_stage_without_outline_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             payload = self._run_main(
-                ["--text", "demo", "--stages", "render", "--run-id", "missing-outline"],
+                ["--text", "demo", "--stages", "render", "--session-id", "local", "--run-id", "missing-outline"],
                 cwd=tmp_dir,
             )
 
@@ -533,7 +539,7 @@ class CliStageSmokeTests(unittest.TestCase):
     def test_parse_stage_missing_info_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             payload = self._run_main(
-                ["--text", "demo", "--stages", "parse", "--run-id", "parse-missing"],
+                ["--text", "demo", "--stages", "parse", "--session-id", "local", "--run-id", "parse-missing"],
                 extra_modules={
                     "core.ppt_generator.ppt_thought.node": self._make_missing_info_module(),
                 },
@@ -548,7 +554,7 @@ class CliStageSmokeTests(unittest.TestCase):
     def test_research_stage_missing_info_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             payload = self._run_main(
-                ["--text", "demo", "--stages", "research", "--run-id", "research-missing"],
+                ["--text", "demo", "--stages", "research", "--session-id", "local", "--run-id", "research-missing"],
                 extra_modules={
                     "core.ppt_generator.ppt_thought.node": self._make_missing_info_module(),
                 },
