@@ -1,6 +1,20 @@
 # Agent-led Page Editing
 
-This document is the standard workflow for editing an existing slidea run — changing text on a page, swapping an image, redrawing a page as a diagram, adjusting layout, etc. **Phase 3 edits SVG files directly under `output/<run_id>/slides/` and re-exports the PPTX — it never re-runs the generation pipeline.**
+This document is the standard workflow for editing an existing slidea run — changing text on a page, swapping an image, redrawing a page as a diagram, adjusting layout, etc. **Phase 3 edits SVG files directly under `output/<run_id>/slides/` and never re-runs the generation pipeline.**
+
+## 0. ⚡ Export Deferral Rule (Critical)
+
+Phase 3 is a **batch-edit** workflow. After every SVG edit:
+
+- **Do NOT run `svg_to_pptx.py`.**
+- Report the SVG path + a one-line summary of what changed, then wait for the next instruction.
+- Only run `svg_to_pptx.py` when the user **explicitly** signals completion — e.g. "导出" / "可以导出了" / "完成了" / "都改好了导出吧" / "export" / "done" / "now export the PPT" or equivalent explicit instruction.
+- Ambiguous cases ("改完这页就导出" / "差不多可以了" / "应该没别的了") → **ask, don't guess**. Confirm with one focused question before exporting.
+- A single user message that bundles an edit + an explicit export request (e.g. "改第5页标题然后导出") → edit the SVG, then export in the same turn.
+
+Why: re-exporting iterates every page, rewrites the PPTX, and forces the user to reopen the file after each tiny change. Batch the edits, export once at the end.
+
+The full "when to export" procedure is in §5 Step 10.
 
 ## 1. When to Read diagram-basics.md
 
@@ -172,9 +186,22 @@ The result is a JSON object. Look at `errors` and `warnings`:
 - **Errors** must be fixed — they will block PPTX export or cause silent data loss.
 - **Warnings** are advisory — common ones (e.g. a font-family that looks suspicious) can be ignored if you know what you are doing.
 
-### Step 9. Re-export the PPTX
+### Step 9. Report the SVG change (do NOT export)
 
-After writing the SVG change, regenerate the PPTX:
+After writing the SVG change and running the QC self-check, report to the user:
+
+- The absolute path of the edited SVG file.
+- A one-line summary of what changed on the page.
+- Any warnings from the QC step that were intentionally ignored.
+- **Explicitly state that the PPTX has not been re-exported yet**, and tell the user how to trigger the export when they are done (e.g. "说『导出』即可生成新 PPTX" / "say 'export' when ready").
+
+Then stop and wait for the next instruction. The user may ask for more edits (loop back to Step 1) or signal completion (proceed to Step 10).
+
+### Step 10. Final export (only on explicit user signal)
+
+Run the export **only** when the user explicitly signals completion — e.g. "导出" / "可以导出了" / "完成了" / "都改好了导出吧" / "export" / "done" / "now export the PPT" or equivalent. See §0 for the full rule and ambiguity handling.
+
+When the signal is given:
 
 ```bash
 .venv/bin/python scripts/svg_to_pptx.py "<svg_dir>" -o "<run_id_dir>" -n "<topic>"
@@ -186,15 +213,15 @@ After writing the SVG change, regenerate the PPTX:
 
 The exporter collects every `*.svg` in `<svg_dir>` (natural-sorted by the numeric prefix), re-exports a new PPTX at `<run_id_dir>/<topic>.pptx`, and overwrites the previous PPTX.
 
-### Step 10. Report the result
-
-Tell the user:
+After the export, tell the user:
 
 - The absolute path of the new PPTX.
-- A one-line summary of what changed on the page.
-- Any warnings from the QC step that were intentionally ignored.
+- A short recap of all edits since the last export (not just the last one).
+- Any warnings from earlier QC steps that were intentionally ignored.
 
 If the user wants to verify visually, point them at the PPTX path; PowerPoint / Keynote / LibreOffice Impress all open it natively and edits are preserved as DrawingML.
+
+If the user requests further edits after the export, loop back to Step 1 — and again defer the next export until they explicitly signal it.
 
 ## 6. Common Pitfalls
 
