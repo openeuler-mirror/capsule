@@ -103,7 +103,7 @@ Always start with the five (or six) files in §4. Editing without reading them i
 Identify exactly what the user wants changed. Common categories:
 
 - **Text edit**: reword a title, fix a typo, change a number.
-- **Image edit**: replace one image with another, add a new image, remove a broken image.
+- **Image edit**: replace one image with another, add a new image, remove a broken image. **See §7 for the full image-replacement workflow**.
 - **Layout adjustment**: move a card, resize a column, change spacing.
 - **Color tweak**: change one element's color (rare — usually the template palette is right).
 - **Drawing**: add or redraw a diagram on the page (architecture / flowchart / etc.).
@@ -231,3 +231,89 @@ If the user requests further edits after the export, loop back to Step 1 — and
 - **Editing a template-protected element.** The VLM-fix step in the original pipeline is told not to touch `header`, `page-title-text`, `main-content-frame`, etc. Phase 3 edits should respect the same boundary — moving the title bar looks fine on one page but breaks consistency with sibling pages.
 - **Skipping the QC self-check.** Small SVG mistakes (an unescaped `&`, a `<tspan>` for a line break, a stray `rgba()`) silently fail PPTX export. Running the QC takes seconds and surfaces every hard error.
 - **Using a non-template color.** Pulling a hex from memory or from another project's palette breaks visual consistency. Always copy color values from the current template SVG's `data-description`.
+
+## 7. Image Replacement Workflow
+
+Use this workflow whenever the user asks to replace, swap, or add an image on a page. It covers the full loop: clarify intent → acquire the image → place it under `slides/images/` → update the SVG.
+
+### Step 7.1 Ask what image the user wants (only if underspecified)
+
+If the user request is vague ("换张图" / "换个好看的" / "换成产品图" without specifying which product or angle), ask **one focused question** to find out what image the user actually wants — subject, mood, any hard constraints they care about. Keep it natural; do not turn it into a multi-dimensional checklist.
+
+Skip this step if the user already gave a URL, a local file path, or a specific enough subject.
+
+### Step 7.2 Acquire the image
+
+Pick the path that matches the user's intent. In all paths, `<images_dir>` is `output/<run_id>/slides/images/`.
+
+**A. User gave a URL** → download it:
+
+```bash
+.venv/bin/python -c "
+import asyncio
+from core.ppt_generator.utils.common import download_image
+asyncio.run(download_image('<URL>', '<images_dir>'))
+"
+```
+
+`download_image` auto-detects the extension, handles anti-leech headers, converts unsupported formats (avif/webp → jpg), and falls back to a placeholder if the URL fails.
+
+**B. User gave a local file** → copy it:
+
+```bash
+cp "<user_file>" "<images_dir>/<name>.<ext>"
+```
+
+Pick a filename that does not collide with existing images in the directory.
+
+**C. User described what they want → image search (three-tier fallback)**
+
+1. **First**, try any other image-search tool or skill the user has available.
+2. **If none is available or it fails**, fall back to slidea's built-in Tavily search:
+
+   ```bash
+   .venv/bin/python -m core.utils.search "<query>" --search-image --max-results 5
+   ```
+
+3. **If the Tavily fallback also fails** (e.g. `TAVILY_API_KEYS` not configured in `.env`, or the call errors out), stop and tell the user clearly: "当前没有可用的搜图工具，请直接给一个图片 URL 或本地文件路径。"
+
+When the search returns multiple results, the agent decides which image to use based on how well it matches the user's stated need. Do not ask the user to pick from candidates.
+
+After a URL is chosen (from any tier), download it via path A.
+
+**D. User wants AI-generated image → only if configured**
+
+If `.env` has `IMAGE_GEN_PROVIDER` and related fields configured:
+
+```bash
+.venv/bin/python -c "
+import asyncio
+from core.ppt_generator.utils.image import generate_ai_image
+asyncio.run(generate_ai_image('<prompt>', '<slides_dir>'))
+"
+```
+
+Note: `generate_ai_image` writes to `<slides_dir>/images/`, so pass the parent `slides/` directory, not `images/` itself.
+
+If AI image generation is not configured, tell the user it is unavailable and suggest path C or A instead. Do not try to enable it from inside the skill — that is a user-side `.env` change.
+
+### Step 7.3 Verify the image landed
+
+After the download or copy, confirm the file actually exists and is a real image (not an error page saved as a file):
+
+```bash
+ls -lh "<images_dir>/<filename>"
+file "<images_dir>/<filename>"
+```
+
+If the file is missing or not an image, redo Step 7.2 with another source.
+
+### Step 7.4 Update the SVG
+
+Locate the `<image>` element on the target page (typically inside an `image-panel`, `card-*-image`, or similar group). Update its `href` to `images/<filename>` (relative path).
+
+If the new image has a different aspect ratio than the old one, also update the `<image>` element's `width`, `height`, and `preserveAspectRatio` so the image fills the slot without stretching. Do not change surrounding template-protected elements (see §5 Step 5).
+
+### Step 7.5 QC + report (per §5 Step 8 / Step 9)
+
+Run the QC self-check on the edited SVG — it will surface "Image file not found" or bad-reference errors. Per the export deferral rule (§0), do NOT re-export the PPTX. Report the SVG path + the new image filename + a one-line summary of the change, then wait for the next instruction.
