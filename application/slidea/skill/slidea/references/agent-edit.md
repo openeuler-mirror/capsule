@@ -277,9 +277,18 @@ Pick a filename that does not collide with existing images in the directory.
 
 3. **If the Tavily fallback also fails** (e.g. `TAVILY_API_KEYS` not configured in `.env`, or the call errors out), stop and tell the user clearly: "当前没有可用的搜图工具，请直接给一个图片 URL 或本地文件路径。"
 
-When the search returns multiple results, the agent decides which image to use based on how well it matches the user's stated need. Do not ask the user to pick from candidates.
+When the search returns multiple results, **show the candidates to the user and let them pick**. Output each candidate directly as a plain markdown image — no list markers, no code fences:
 
-After a URL is chosen (from any tier), download it via path A.
+![<alt>](<url>)
+
+For `<alt>`:
+
+- If the search tool returned a description for the image, use that description as the image's caption.
+- If not, fall back to `候选 1`, `候选 2`, ... so the user has a label to refer to.
+
+Wait for the user to choose (by label or by URL). Do not silently pick one on the user's behalf.
+
+After the user picks a URL, download it via path A.
 
 **D. User wants AI-generated image → only if configured**
 
