@@ -124,7 +124,7 @@ For any edit request against an existing run:
    - **`diagram-basics.md`**: decides which diagram type, and if applicable, reads the matching `diagram-layouts/<type>.md`.
    - **`diagram-layouts/<type>.md`**: pure drawing knowledge for one diagram type.
 
-The key invariant: Phase 3 edits SVG source under `output/<run_id>/slides/`. It does not call `run_ppt_pipeline.py` again. **The PPTX is NOT re-exported after each edit** — accumulate edits in the SVG files, report each change to the user, and only run `scripts/svg_to_pptx.py` when the user explicitly signals completion (e.g. "导出" / "可以导出了" / "完成了" / "都改好了导出吧" / "export" / "done" / "now export the PPT" or equivalent). If unsure whether the user wants export, ask rather than guess. See [references/agent-edit.md](references/agent-edit.md) for the full batch-edit workflow.
+The key invariant: Phase 3 edits SVG source **in place** under `output/<run_id>/slides/` — never copy the run directory or export to a different location (the user opens the path in `ppt.json`, and a copy means they see an unchanged PPTX). It does not call `run_ppt_pipeline.py` again. **The PPTX is NOT re-exported after each edit** — accumulate edits in the SVG files, report each change to the user, and only run `scripts/svg_to_pptx.py` when the user explicitly signals completion (e.g. "导出" / "可以导出了" / "完成了" / "都改好了导出吧" / "export" / "done" / "now export the PPT" or equivalent). If unsure whether the user wants export, ask rather than guess. See [references/agent-edit.md](references/agent-edit.md) §0 for the two critical rules (defer export + edit in place) and the full batch-edit workflow.
 
 ## Structured CLI Results
 

@@ -2,19 +2,35 @@
 
 This document is the standard workflow for editing an existing slidea run — changing text on a page, swapping an image, redrawing a page as a diagram, adjusting layout, etc. **Phase 3 edits SVG files directly under `output/<run_id>/slides/` and never re-runs the generation pipeline.**
 
-## 0. ⚡ Export Deferral Rule (Critical)
+## 0. ⚡ Critical Rules (read before every edit)
+
+Phase 3 has two non-negotiable rules. Violating either one silently breaks the user's deliverable. Both are common failure modes — re-read this section before every edit.
+
+### Rule 1 — Defer PPTX export until the user explicitly signals
 
 Phase 3 is a **batch-edit** workflow. After every SVG edit:
 
-- **Do NOT run `svg_to_pptx.py`.**
-- Report the SVG path + a one-line summary of what changed, then wait for the next instruction.
+- **Do NOT run `svg_to_pptx.py`.** Not "to verify the edit worked". Not "to give the user something to look at". Not "because the edit is small". Never.
+- Report the SVG path + a one-line summary of what changed, then **stop and wait** for the next instruction.
 - Only run `svg_to_pptx.py` when the user **explicitly** signals completion — e.g. "导出" / "可以导出了" / "完成了" / "都改好了导出吧" / "export" / "done" / "now export the PPT" or equivalent explicit instruction.
 - Ambiguous cases ("改完这页就导出" / "差不多可以了" / "应该没别的了") → **ask, don't guess**. Confirm with one focused question before exporting.
 - A single user message that bundles an edit + an explicit export request (e.g. "改第5页标题然后导出") → edit the SVG, then export in the same turn.
+- **When in doubt: do not export.** Asking is cheap; an unwanted export forces the user to reopen a fresh PPTX and re-track what changed.
 
 Why: re-exporting iterates every page, rewrites the PPTX, and forces the user to reopen the file after each tiny change. Batch the edits, export once at the end.
 
 The full "when to export" procedure is in §5 Step 10.
+
+### Rule 2 — Edit in place, never copy the run directory
+
+Always operate on the SVG files at their original path under `output/<run_id>/slides/`, and always export to the original `<run_id_dir>`. Specifically:
+
+- Do **not** copy the run directory to a new location (e.g. `output/<run_id>_copy/`, `/tmp/<run_id>/`, `~/Desktop/<run_id>/`) and edit there.
+- Do **not** copy individual SVG files to a backup path before editing. The pipeline already keeps revision history under `slides/vlm_svg_candidates/` when it needs to; you do not need your own backup.
+- Do **not** create a "working" sub-directory inside the run.
+- When exporting, pass `<svg_dir>` and `<run_id_dir>` **exactly as they appear in `ppt.json`** to `svg_to_pptx.py`. Do not invent a new output directory.
+
+Why: `ppt.json`'s `pptx_path` is the contract — that path is what the user opens. If you edit a copy or export to a different directory, your changes never reach the file the user opens, and the user sees an unchanged PPTX. The pipeline's `output/<run_id>/` is the single source of truth; honor it.
 
 ## 1. When to Read diagram-basics.md
 
@@ -172,6 +188,7 @@ Use the Edit or Write tool against the target SVG file.
 - **Path**: `output/<run_id>/slides/<idx+1:02d>_*.svg`.
 - **Filename prefix**: `{idx+1:02d}_` (e.g. `05_`) is load-bearing — it is what the export pipeline uses to sort pages and what patch-render uses to find a specific page. Preserve it exactly. The title suffix can be anything.
 - **New images**: if the edit introduces a new image, place the file under `output/<run_id>/slides/images/` and reference it as `images/<filename>` in the SVG. The export pipeline inlines images into `data:` URIs at export time, so on-disk SVGs stay editable.
+- **Edit in place** (per §0 Rule 2): operate on the file at `output/<run_id>/slides/<idx+1:02d>_*.svg` directly. Do not copy it elsewhere first, do not create a backup, do not work in a temp directory.
 
 ### Step 8. Quality self-check (recommended)
 
@@ -186,7 +203,9 @@ The result is a JSON object. Look at `errors` and `warnings`:
 - **Errors** must be fixed — they will block PPTX export or cause silent data loss.
 - **Warnings** are advisory — common ones (e.g. a font-family that looks suspicious) can be ignored if you know what you are doing.
 
-### Step 9. Report the SVG change (do NOT export)
+### Step 9. Report the SVG change — 🛑 STOP, do NOT export
+
+🛑 **Do not run `svg_to_pptx.py` in this step.** Not after a single edit, not after several edits, not "just this once to verify". The PPTX is rebuilt only in Step 10, only on explicit user signal. If you are about to call `svg_to_pptx.py` here, stop and re-read §0 Rule 1.
 
 After writing the SVG change and running the QC self-check, report to the user:
 
@@ -199,7 +218,12 @@ Then stop and wait for the next instruction. The user may ask for more edits (lo
 
 ### Step 10. Final export (only on explicit user signal)
 
-Run the export **only** when the user explicitly signals completion — e.g. "导出" / "可以导出了" / "完成了" / "都改好了导出吧" / "export" / "done" / "now export the PPT" or equivalent. See §0 for the full rule and ambiguity handling.
+🛑 **Pre-flight check before running `svg_to_pptx.py`:**
+
+1. Has the user **explicitly** said to export (e.g. "导出" / "export" / "done" / "可以了")? If not — do not run this step. Go back to Step 9 and report the SVG change instead.
+2. Are `<svg_dir>` and `<run_id_dir>` the **original** paths from `ppt.json`? If you are about to pass a copied directory, a temp path, or a backup location — stop. That violates §0 Rule 2. Re-read it.
+
+Run the export **only** when the user explicitly signals completion — e.g. "导出" / "可以导出了" / "完成了" / "都改好了导出吧" / "export" / "done" / "now export the PPT" or equivalent. See §0 Rule 1 for the full rule and ambiguity handling.
 
 When the signal is given:
 
@@ -209,9 +233,9 @@ When the signal is given:
 
 - `<svg_dir>`: from `ppt.json`'s `svg_dir` field (absolute path).
 - `<run_id_dir>`: the `output/<run_id>/` directory (parent of `slides/`).
-- `<topic>`: from `ppt.json`'s `topic` field. The exporter sanitizes it into a filename.
+- `<topic>`: from `ppt.json`'s `topic` field, **passed verbatim**. The exporter applies the same `sanitize_filename` transform the generation pipeline uses (spaces → underscores, illegal chars stripped), so the re-export lands on exactly the same path the original pipeline wrote and truly overwrites it. Do not pre-sanitize `-n` yourself — that would double-transform and risk divergence.
 
-The exporter collects every `*.svg` in `<svg_dir>` (natural-sorted by the numeric prefix), re-exports a new PPTX at `<run_id_dir>/<topic>.pptx`, and overwrites the previous PPTX.
+The exporter collects every `*.svg` in `<svg_dir>` (natural-sorted by the numeric prefix), re-exports a new PPTX at `<run_id_dir>/<sanitized_topic>.pptx`, and overwrites the previous PPTX.
 
 After the export, tell the user:
 
@@ -225,6 +249,8 @@ If the user requests further edits after the export, loop back to Step 1 — and
 
 ## 6. Common Pitfalls
 
+- **Auto-exporting after every edit.** Despite §0 Rule 1, agents sometimes run `svg_to_pptx.py` right after editing "to verify" or "to give the user something to look at". Do not. The export deferral rule exists because re-exporting rewrites the whole PPTX and forces the user to reopen the file after each tiny change. Report the SVG change (Step 9), then wait for the explicit export signal.
+- **Copying the run directory before editing.** Some agents "play safe" by copying `output/<run_id>/` to a sibling directory and editing the copy, or by exporting to a different output directory. This breaks the contract: `ppt.json` still points at the original directory, so the user opens an unchanged PPTX. Always edit the original SVG files in place and export to the original `<run_id_dir>` (§0 Rule 2).
 - **Rewriting the whole SVG when only a `<g>` block changed.** This is the #1 cause of broken Phase 3 edits. The original generation went through VLM review and quality check; rewriting bypasses that. Use Edit with a tight `old_string`/`new_string` pair whenever possible.
 - **Renaming the SVG file.** The `{idx+1:02d}_` prefix is load-bearing — the exporter sorts by it, patch-render matches by it. Even renaming `05_xxx.svg` to `5_xxx.svg` breaks page order.
 - **Forgetting to copy image files into `slides/images/`.** An `<image href="images/foo.png">` that has no matching on-disk file fails quality check with "Image file not found". The export pipeline then drops the image silently or breaks.
@@ -277,9 +303,18 @@ Pick a filename that does not collide with existing images in the directory.
 
 3. **If the Tavily fallback also fails** (e.g. `TAVILY_API_KEYS` not configured in `.env`, or the call errors out), stop and tell the user clearly: "当前没有可用的搜图工具，请直接给一个图片 URL 或本地文件路径。"
 
-When the search returns multiple results, the agent decides which image to use based on how well it matches the user's stated need. Do not ask the user to pick from candidates.
+When the search returns multiple results, **show the candidates to the user and let them pick**. Output each candidate directly as a plain markdown image — no list markers, no code fences:
 
-After a URL is chosen (from any tier), download it via path A.
+![<alt>](<url>)
+
+For `<alt>`:
+
+- If the search tool returned a description for the image, use that description as the image's caption.
+- If not, fall back to `候选 1`, `候选 2`, ... so the user has a label to refer to.
+
+Wait for the user to choose (by label or by URL). Do not silently pick one on the user's behalf.
+
+After the user picks a URL, download it via path A.
 
 **D. User wants AI-generated image → only if configured**
 
