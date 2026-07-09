@@ -209,9 +209,9 @@ When the signal is given:
 
 - `<svg_dir>`: from `ppt.json`'s `svg_dir` field (absolute path).
 - `<run_id_dir>`: the `output/<run_id>/` directory (parent of `slides/`).
-- `<topic>`: from `ppt.json`'s `topic` field. The exporter sanitizes it into a filename.
+- `<topic>`: from `ppt.json`'s `topic` field, **passed verbatim**. The exporter applies the same `sanitize_filename` transform the generation pipeline uses (spaces → underscores, illegal chars stripped), so the re-export lands on exactly the same path the original pipeline wrote and truly overwrites it. Do not pre-sanitize `-n` yourself — that would double-transform and risk divergence.
 
-The exporter collects every `*.svg` in `<svg_dir>` (natural-sorted by the numeric prefix), re-exports a new PPTX at `<run_id_dir>/<topic>.pptx`, and overwrites the previous PPTX.
+The exporter collects every `*.svg` in `<svg_dir>` (natural-sorted by the numeric prefix), re-exports a new PPTX at `<run_id_dir>/<sanitized_topic>.pptx`, and overwrites the previous PPTX.
 
 After the export, tell the user:
 

@@ -27,6 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
+from core.ppt_generator.utils.common import sanitize_filename
 from core.utils.logger import logger
 
 
@@ -114,7 +115,7 @@ def _parse_args() -> argparse.Namespace:
         "-n",
         "--filename",
         default="output",
-        help="PPTX 文件名（不含扩展名，默认 output）",
+        help="PPTX 文件名（不含扩展名，默认 output）；会按生成流水线的规则自动 sanitize（空格→下划线等），传 ppt.json 的 topic 原文即可",
     )
     return parser.parse_args()
 
@@ -127,7 +128,13 @@ def main() -> None:
 
     output_dir: Path = (args.output_dir or default_output_dir).expanduser().resolve()
 
-    asyncio.run(_convert(svg_paths, output_dir, args.filename))
+    # Sanitize the filename the same way run_ppt_pipeline.py does, so Phase 3
+    # re-exports land on exactly the same path the original pipeline wrote.
+    # Without this, "-n <raw topic>" would produce a differently-named PPTX
+    # (spaces preserved) and the prior file would silently remain.
+    filename = sanitize_filename(args.filename)
+
+    asyncio.run(_convert(svg_paths, output_dir, filename))
 
 
 if __name__ == "__main__":
