@@ -20,10 +20,10 @@ This is an environment-level setting, not a CLI flag. The agent does not pass it
 
 | Flag | Values | When to use |
 |---|---|---|
-| `--text "<request>"` | string | Supply the PPT request. Exactly one of `--text`, `--resume`, or `--continue` is required. With default `--stages all`, this starts a fresh run and an existing session is rejected. With non-default `--stages`, the same session may be reused intentionally to read cached stage outputs. Preserve the user's original input as much as possible. If Phase 1 was run, append `参考文件路径: <SPEECH_SCRIPT_MD_PATH>`. |
+| `--text "<request>"` | string | Supply the PPT request. Exactly one of `--text`, `--resume`, or `--continue` is required. With default `--stages all`, this starts a fresh run and an existing session is rejected. With non-default `--stages`, the same session may be reused intentionally to read cached stage outputs. Preserve the user's original input as much as possible. Assemble per SKILL.md "Assemble `--text`": the understood PPT request text, and if Phase 1 (Document Processing) ran, append `参考文档: <abs_path_to_structured.md>` on a new line — use the doc-processing output, **not** the original document paths. |
 | `--resume "<user reply>"` | string | Supply the user's answer, selection, or edited text after `stage: input_required`. This flag takes the reply directly; do not also pass `--text`. Not used for process timeout recovery. |
 | `--continue` | flag | Continue unfinished checkpoint tasks after timeout/process termination. Pass no `--text`, `--resume`, non-default `--stages`, or replacement runtime settings. |
-| `--session-id <id>` | string | Public task/session id. If omitted for a new run, a unique id (`auto_<pid>_<ts>`) is generated. Reuse the same explicit value for continuation, interrupt replies, patch rendering, or staged execution. |
+| `--session-id <id>` | string | Public task/session id. If omitted for a new run, a unique id (`auto_<pid>_<ts>`) is generated. The auto-generated default changes every invocation and cannot be recovered, so **reuse the same explicit value** for continuation, interrupt replies, patch rendering, or staged execution. |
 | `--stages <csv>` | `all` (default), `parse`, `research`, `outline`, `render` | Stage selection. See [staged-execution.md](staged-execution.md). |
 | `--render-mode` | `svg` (default) | **Do not pass this flag.** The default SVG route is what this skill advertises. |
 | `--research-mode` | `skip`, `simple`, `deep`, `''` (default) | Force research mode. **High-impact parameter** — see rule below. |
