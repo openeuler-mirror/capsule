@@ -313,6 +313,48 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertNotIn("textLength", title_text.attrib)
 
+    def test_composer_selects_page_title_when_reference_has_multiple_headers(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720"/></g>
+          <g id="master-content"/>
+          <g id="layout-content"/>
+          <g id="main-content">
+            <g id="card-title-1" data-role="header"><rect x="159" y="201" width="473" height="75"/><text x="172" y="252" font-size="42.667">Something One</text></g>
+            <g id="card-title-2" data-role="header"><rect x="757" y="201" width="473" height="75"/><text x="769" y="252" font-size="42.667">Something Two</text></g>
+            <g id="card-title-3" data-role="header"><rect x="159" y="420" width="473" height="75"/><text x="172" y="471" font-size="42.667">Something Three</text></g>
+            <g id="card-title-4" data-role="header"><rect x="757" y="420" width="473" height="75"/><text x="769" y="471" font-size="42.667">Something Four</text></g>
+            <g id="page-title" data-role="header"><rect x="58" y="42" width="1164" height="104"/><text x="374" y="108" font-size="60" textLength="532">Add your title here.</text></g>
+          </g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="body"><rect x="58" y="158" width="1164" height="448"/><text x="90" y="210">Dynamic body</text></g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "multi-header.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="真正的新页面标题",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=3,
+                style_reference_svg=str(reference),
+                style_reference_page_type="content",
+            )
+            root = ET.fromstring(apply_style_reference_shell(generated_svg, page))
+            title_group = next(
+                child for child in root if child.get("id") == "slidea-style-page-title"
+            )
+            title_text = next(
+                item for item in title_group.iter()
+                if item.tag.rsplit("}", 1)[-1] == "text"
+            )
+
+        self.assertEqual(title_text.text, "真正的新页面标题")
+        self.assertEqual(title_text.get("y"), "108")
+        self.assertEqual(title_text.get("font-size"), "60")
+        self.assertEqual(title_text.get("x"), "640")
+        self.assertEqual(title_text.get("text-anchor"), "middle")
+
     def test_composer_is_exact_noop_without_style_reference(self):
         page = PPTPage(title="普通页", abstract="摘要", type=PageType.CONTENT, index=0)
         content = '<svg xmlns="http://www.w3.org/2000/svg"><g id="header"/></svg>'

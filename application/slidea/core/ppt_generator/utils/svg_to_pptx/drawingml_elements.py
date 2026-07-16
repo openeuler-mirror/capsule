@@ -1250,9 +1250,21 @@ def _fit_image_viewport(
     preserve_aspect_ratio: str | None,
 ) -> tuple[float, float, float, float, str]:
     """Apply SVG meet/slice semantics and return DrawingML crop XML."""
+    fit_x, fit_y, fit_w, fit_h, crop = _fit_image_viewport_components(
+        x, y, w, h, img_w, img_h, preserve_aspect_ratio,
+    )
+    return fit_x, fit_y, fit_w, fit_h, _crop_values_to_xml(crop)
+
+
+def _fit_image_viewport_components(
+    x: float, y: float, w: float, h: float,
+    img_w: int, img_h: int,
+    preserve_aspect_ratio: str | None,
+) -> tuple[float, float, float, float, tuple[float, float, float, float]]:
+    """Return the rendered image frame and normalized source crop values."""
     align, mode = _parse_preserve_aspect_ratio(preserve_aspect_ratio)
     if mode == 'none' or img_w <= 0 or img_h <= 0:
-        return x, y, w, h, ''
+        return x, y, w, h, (0.0, 0.0, 0.0, 0.0)
 
     image_aspect = img_w / img_h
     frame_aspect = w / h
@@ -1263,10 +1275,16 @@ def _fit_image_viewport(
         if image_aspect > frame_aspect:
             display_w = w
             display_h = w / image_aspect
-            return x, y + (h - display_h) * y_fraction, display_w, display_h, ''
+            return (
+                x, y + (h - display_h) * y_fraction, display_w, display_h,
+                (0.0, 0.0, 0.0, 0.0),
+            )
         display_h = h
         display_w = h * image_aspect
-        return x + (w - display_w) * x_fraction, y, display_w, display_h, ''
+        return (
+            x + (w - display_w) * x_fraction, y, display_w, display_h,
+            (0.0, 0.0, 0.0, 0.0),
+        )
 
     left = top = right = bottom = 0.0
     if image_aspect > frame_aspect:
@@ -1278,13 +1296,123 @@ def _fit_image_viewport(
         top = total_crop * y_fraction
         bottom = total_crop - top
 
-    crop_xml = ''
-    if any(value > 1e-9 for value in (left, top, right, bottom)):
-        crop_xml = (
-            f'<a:srcRect l="{round(left * 100000)}" t="{round(top * 100000)}" '
-            f'r="{round(right * 100000)}" b="{round(bottom * 100000)}"/>'
+    return x, y, w, h, (left, top, right, bottom)
+
+
+def _crop_values_to_xml(crop: tuple[float, float, float, float]) -> str:
+    left, top, right, bottom = crop
+    if not any(value > 1e-9 for value in crop):
+        return ''
+    return (
+        f'<a:srcRect l="{round(left * 100000)}" t="{round(top * 100000)}" '
+        f'r="{round(right * 100000)}" b="{round(bottom * 100000)}"/>'
+    )
+
+
+def _rect_clip_viewport(
+    elem: ET.Element,
+    ctx: ConvertContext,
+    raw_x: float, raw_y: float,
+    raw_w: float, raw_h: float,
+) -> tuple[float, float, float, float, str] | None:
+    """Resolve a rectangular clipPath to its transformed picture frame."""
+    clip_id = resolve_url_id(elem.get('clip-path', ''))
+    if not clip_id or clip_id not in ctx.defs:
+        return None
+    clip_elem = ctx.defs[clip_id]
+    if clip_elem.tag.replace(f'{{{SVG_NS}}}', '') != 'clipPath':
+        return None
+    shape = next(
+        (
+            child for child in clip_elem
+            if child.tag.replace(f'{{{SVG_NS}}}', '') == 'rect'
+        ),
+        None,
+    )
+    if shape is None:
+        return None
+
+    is_obb = clip_elem.get('clipPathUnits') == 'objectBoundingBox'
+    clip_x = _f(shape.get('x'))
+    clip_y = _f(shape.get('y'))
+    clip_w = _f(shape.get('width'))
+    clip_h = _f(shape.get('height'))
+    if is_obb:
+        clip_x = raw_x + clip_x * raw_w
+        clip_y = raw_y + clip_y * raw_h
+        clip_w *= raw_w
+        clip_h *= raw_h
+    if clip_w <= 0 or clip_h <= 0:
+        return None
+
+    x1, x2 = ctx_x(clip_x, ctx), ctx_x(clip_x + clip_w, ctx)
+    y1, y2 = ctx_y(clip_y, ctx), ctx_y(clip_y + clip_h, ctx)
+    frame_x, frame_y = min(x1, x2), min(y1, y2)
+    frame_w, frame_h = abs(x2 - x1), abs(y2 - y1)
+
+    rx_attr = shape.get('rx')
+    ry_attr = shape.get('ry')
+    raw_rx = _f(rx_attr) if rx_attr is not None else _f(ry_attr)
+    raw_ry = _f(ry_attr) if ry_attr is not None else _f(rx_attr)
+    if is_obb:
+        raw_rx *= raw_w
+        raw_ry *= raw_h
+    rx = min(max(raw_rx * abs(ctx.scale_x), 0.0), frame_w / 2.0)
+    ry = min(max(raw_ry * abs(ctx.scale_y), 0.0), frame_h / 2.0)
+    if rx <= 0 or ry <= 0:
+        geom = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+    elif math.isclose(rx, ry, rel_tol=1e-9, abs_tol=1e-9):
+        adj = round(min(rx / min(frame_w, frame_h), 0.5) * 100000)
+        geom = (
+            '<a:prstGeom prst="roundRect"><a:avLst>'
+            f'<a:gd name="adj" fmla="val {adj}"/>'
+            '</a:avLst></a:prstGeom>'
         )
-    return x, y, w, h, crop_xml
+    else:
+        geom = _rounded_rect_custom_geom(frame_w, frame_h, rx, ry)
+    return frame_x, frame_y, frame_w, frame_h, geom
+
+
+def _intersect_image_with_clip(
+    image_frame: tuple[float, float, float, float],
+    crop: tuple[float, float, float, float],
+    clip_frame: tuple[float, float, float, float],
+) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float]] | None:
+    """Intersect a rendered image frame with a clip frame and compose crops."""
+    image_x, image_y, image_w, image_h = image_frame
+    clip_x, clip_y, clip_w, clip_h = clip_frame
+    left = max(image_x, clip_x)
+    top = max(image_y, clip_y)
+    right = min(image_x + image_w, clip_x + clip_w)
+    bottom = min(image_y + image_h, clip_y + clip_h)
+    intersection_dimensions = (right - left, bottom - top, image_w, image_h)
+    if min(intersection_dimensions) <= 0:
+        return None
+
+    base_left, base_top, base_right, base_bottom = crop
+    source_w = max(0.0, 1.0 - base_left - base_right)
+    source_h = max(0.0, 1.0 - base_top - base_bottom)
+    remove_left = (left - image_x) / image_w
+    remove_top = (top - image_y) / image_h
+    remove_right = (image_x + image_w - right) / image_w
+    remove_bottom = (image_y + image_h - bottom) / image_h
+    combined = (
+        base_left + remove_left * source_w,
+        base_top + remove_top * source_h,
+        base_right + remove_right * source_w,
+        base_bottom + remove_bottom * source_h,
+    )
+    return (left, top, right - left, bottom - top), combined
+
+
+def _frames_match(
+    first_frame: tuple[float, float, float, float],
+    second_frame: tuple[float, float, float, float],
+) -> bool:
+    for first, second in zip(first_frame, second_frame):
+        if not math.isclose(first, second, rel_tol=1e-9, abs_tol=1e-6):
+            return False
+    return True
 
 
 def convert_image(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
@@ -1346,11 +1474,34 @@ def convert_image(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
 
     img_data, img_format = _normalise_image_for_pptx(img_data, img_format)
     img_pixel_w, img_pixel_h = _image_pixel_size(img_data)
-    x, y, w, h, crop_xml = _fit_image_viewport(
+    x, y, w, h, crop = _fit_image_viewport_components(
         x, y, w, h,
         img_pixel_w, img_pixel_h,
         elem.get('preserveAspectRatio'),
     )
+
+    rect_clip = _rect_clip_viewport(elem, ctx, raw_x, raw_y, raw_w, raw_h)
+    if rect_clip is not None:
+        clip_x, clip_y, clip_w, clip_h, rect_clip_geom = rect_clip
+        clipped = _intersect_image_with_clip(
+            (x, y, w, h), crop, (clip_x, clip_y, clip_w, clip_h),
+        )
+        if clipped is None:
+            return None
+        (x, y, w, h), crop = clipped
+        # When the image does not reach every edge of the clip window (for
+        # example preserveAspectRatio="meet"), the rounded clip corners are
+        # outside the visible image and must not be applied to its smaller box.
+        frame_matches_clip = _frames_match(
+            (x, y, w, h),
+            (clip_x, clip_y, clip_w, clip_h),
+        )
+        clip_geom = rect_clip_geom if frame_matches_clip else (
+            '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+        )
+    else:
+        clip_geom = _resolve_clip_geometry(elem, ctx, raw_x, raw_y, raw_w, raw_h)
+    crop_xml = _crop_values_to_xml(crop)
 
     img_idx = len(ctx.media_files) + 1
     img_filename = f's{ctx.slide_num}_img{img_idx}.{img_format}'
@@ -1377,9 +1528,6 @@ def convert_image(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
     if ctx.scale_y < 0:
         transform_attrs.append('flipV="1"')
     rot_attr = f' {" ".join(transform_attrs)}' if transform_attrs else ''
-
-    # Resolve clip-path → DrawingML geometry
-    clip_geom = _resolve_clip_geometry(elem, ctx, raw_x, raw_y, raw_w, raw_h)
 
     shape_id = ctx.next_id()
     off_x = px_to_emu(x)

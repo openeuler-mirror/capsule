@@ -115,6 +115,31 @@ class SVGToPPTXImageGeometryTests(unittest.TestCase):
         self.assertIn('<a:custGeom>', result.xml)
         self.assertIn('<a:cubicBezTo>', result.xml)
 
+    def test_offset_rect_clip_becomes_picture_frame_and_combines_slice_crop(self):
+        clip = ET.fromstring(
+            '<clipPath xmlns="http://www.w3.org/2000/svg" id="photo-clip">'
+            '<rect x="42" y="150" width="390" height="318" rx="8" ry="8"/>'
+            '</clipPath>'
+        )
+        image = ET.fromstring(
+            f'<image xmlns="http://www.w3.org/2000/svg" '
+            f'x="-16" y="150" width="507" height="338" '
+            f'href="{_png_data_uri(width=4, height=2)}" '
+            f'preserveAspectRatio="xMidYMid slice" clip-path="url(#photo-clip)"/>'
+        )
+        result = convert_image(image, ConvertContext(defs={'photo-clip': clip}))
+
+        self.assertEqual(
+            result.bounds_emu,
+            (px_to_emu(42), px_to_emu(150), px_to_emu(432), px_to_emu(468)),
+        )
+        self.assertIn(
+            '<a:srcRect l="21080" t="0" r="21228" b="5917"/>',
+            result.xml,
+        )
+        self.assertIn('<a:prstGeom prst="roundRect">', result.xml)
+        self.assertIn('<a:gd name="adj" fmla="val 2516"/>', result.xml)
+
 
 class SVGToPPTXTransformGeometryTests(unittest.TestCase):
     def test_nested_child_translation_inherits_parent_scale(self):

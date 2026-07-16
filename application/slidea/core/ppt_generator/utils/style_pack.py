@@ -450,9 +450,31 @@ def _reference_title_group(reference_root: ET.Element, page: Any) -> ET.Element 
     if main is None:
         return None
     groups = [child for child in main if _local_name(child.tag) == "g" and _text_elements(child)]
-    explicit = next((group for group in groups if group.get("data-role") == "header"), None)
-    if explicit is not None:
-        return explicit
+    explicit = [group for group in groups if group.get("data-role") == "header"]
+    if explicit:
+        slide_height = _float_attr(reference_root, "height", 720.0) or 720.0
+
+        def title_rank(group: ET.Element) -> tuple[float, float, float]:
+            bounds = _visual_bounds(group)
+            width = max(0.0, bounds[2] - bounds[0]) if bounds is not None else 0.0
+            top = bounds[1] if bounds is not None else _min_text_y(group)
+            return _max_font_size(group), width, -top
+
+        if reference_page_type in {"content", "toc"} or (
+            not reference_page_type and int(getattr(page, "type", 1)) in {1, 2}
+        ):
+            # Google Slides and similar producers may serialize every card
+            # heading as a title placeholder.  Prefer a header in the actual
+            # top title band, then use font size and visual width to distinguish
+            # the page title from small labels in that band.
+            top_band = [
+                group for group in explicit
+                if (_visual_bounds(group) or (0.0, _min_text_y(group), 0.0, 0.0))[1]
+                <= slide_height * 0.25
+            ]
+            if top_band:
+                return max(top_band, key=title_rank)
+        return max(explicit, key=title_rank)
     if reference_page_type in {"content", "toc"} or (
         not reference_page_type and int(getattr(page, "type", 1)) in {1, 2}
     ):
@@ -491,6 +513,19 @@ def _replace_group_text(group: ET.Element, value: str) -> None:
     if not texts:
         return
     first = texts[0]
+    # ooxml-svg stores centered text as a measured left edge rather than an
+    # SVG text-anchor.  Preserve that visual center before removing the old
+    # measured-width contract, otherwise a longer replacement title drifts
+    # right and can leave the slide.
+    bounds = _visual_bounds(group)
+    measured_width = _float_attr(first, "textLength", _float_attr(first, "data-measured-width"))
+    if bounds is not None and measured_width > 0:
+        original_center = _float_attr(first, "x") + measured_width / 2.0
+        bounds_center = (bounds[0] + bounds[2]) / 2.0
+        tolerance = max(2.0, (bounds[2] - bounds[0]) * 0.02)
+        if abs(original_center - bounds_center) <= tolerance:
+            first.set("x", f"{bounds_center:g}")
+            first.set("text-anchor", "middle")
     first.text = value
     for attr in ("textLength", "lengthAdjust", "data-measured-width"):
         first.attrib.pop(attr, None)
