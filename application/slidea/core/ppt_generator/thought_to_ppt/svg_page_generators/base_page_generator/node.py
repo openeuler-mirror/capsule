@@ -21,7 +21,10 @@ from core.ppt_generator.utils.svg import (
     validate_svg_content,
 )
 from core.ppt_generator.utils.svg_pipeline.finalize_svg import embed_local_images_in_content
-from core.ppt_generator.utils.style_pack import apply_style_reference_shell
+from core.ppt_generator.utils.style_pack import (
+    apply_style_reference_shell,
+    extract_style_dynamic_content,
+)
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.state import SVGWorkerState
 
 
@@ -32,6 +35,7 @@ VLM_SCREENSHOT_DIR_NAME = "vlm_screenshots"
 GENERATE_PROMPT_LOG_DIR_NAME = "prompts"
 SVG_JUDGE_PROMPT = "svg_vlm_judge_prompt.txt"
 SVG_FIX_PROMPT = "svg_vlm_fix_prompt.txt"
+SVG_STYLE_PACK_FIX_PROMPT = "svg_vlm_fix_style_pack_prompt.txt"
 SVG_QUALITY_REPAIR_PROMPT = "svg_quality_repair_prompt.txt"
 SVG_GENERATION_REPAIR_MAX_ATTEMPTS = 1
 _XLINK_NS = "http://www.w3.org/1999/xlink"
@@ -268,14 +272,25 @@ async def vlm_modify_node(state: SVGWorkerState):
         logger.warning(f"vlm_modify missing screenshot for page {index}, skip")
         return {"vlm_iteration": vlm_iteration + 1}
 
-    fix_prompt_template = _load_prompt(SVG_FIX_PROMPT)
+    page = state.get("page")
+    style_pack_active = bool(getattr(page, "style_reference_svg", ""))
+    if style_pack_active:
+        # The judge still sees the fully composed screenshot, but the modifier
+        # receives only model-authored nodes.  This makes it impossible for a
+        # VLM rewrite to mutate or spend context on the deterministic shell.
+        prompt_svg_content = extract_style_dynamic_content(svg_content)
+        fix_prompt_template = _load_prompt(SVG_STYLE_PACK_FIX_PROMPT)
+    else:
+        # Preserve the original no-style-pack route and prompt byte-for-byte.
+        prompt_svg_content = svg_content
+        fix_prompt_template = _load_prompt(SVG_FIX_PROMPT)
     issues_block = _format_issues(issues)
     history_block = _format_judge_history(state.get("vlm_judge_history") or [])
     fix_prompt = fix_prompt_template.format(
         issues_block=issues_block,
         history_block=history_block,
         ppt_prompt=state.get("ppt_prompt", ""),
-        content=svg_content,
+        content=prompt_svg_content,
     )
 
     try:
@@ -834,6 +849,110 @@ def strip_unresolvable_images(svg_path: str) -> int:
                 continue
             parent.remove(child)
             removed += 1
+
+    if removed:
+        ET.register_namespace("", "http://www.w3.org/2000/svg")
+        ET.register_namespace("xlink", _XLINK_NS)
+        tree.write(path, encoding="unicode", xml_declaration=False)
+    return removed
+
+
+def repair_redundant_non_image_clip_paths(svg_path: str) -> int:
+    """Remove provably redundant ``clip-path`` attributes from dynamic rects.
+
+    Slidea's native DrawingML route supports clipping on images, not arbitrary
+    SVG shapes.  Models commonly reuse an image's rounded-rectangle clip on a
+    caption overlay that is already fully contained by the same rectangle.  In
+    that specific case the clip is redundant and can be removed without moving
+    content.  Rounded corners are copied to overlays touching the clip edge.
+
+    Complex, transformed or non-rectangular clips are deliberately left intact
+    so the quality gate can route them to the dynamic-only LLM fallback.
+    """
+    path = Path(svg_path)
+    try:
+        tree = ET.parse(path)
+    except (ET.ParseError, OSError):
+        return 0
+    root = tree.getroot()
+
+    def _local_name(tag: str) -> str:
+        return tag.rsplit("}", 1)[-1].lower()
+
+    def _float(element: ET.Element, name: str, default: float = 0.0) -> float:
+        try:
+            return float(element.get(name, default))
+        except (TypeError, ValueError):
+            return default
+
+    clip_rects: dict[str, ET.Element] = {}
+    for clip in root.iter():
+        if _local_name(clip.tag) != "clippath" or clip.get("transform"):
+            continue
+        children = [child for child in clip if isinstance(child.tag, str)]
+        if len(children) != 1 or _local_name(children[0].tag) != "rect":
+            continue
+        rect = children[0]
+        if rect.get("transform"):
+            continue
+        clip_id = clip.get("id")
+        if clip_id:
+            clip_rects[clip_id] = rect
+
+    removed = 0
+    reference_pattern = re.compile(r"^url\(#([^)]+)\)$")
+    tolerance = 0.05
+    for element in root.iter():
+        if _local_name(element.tag) != "rect" or element.get("transform"):
+            continue
+        clip_attr = next(
+            (name for name in element.attrib if _local_name(name) == "clip-path"),
+            None,
+        )
+        if clip_attr is None:
+            continue
+        match = reference_pattern.match((element.get(clip_attr) or "").strip())
+        clip_rect = clip_rects.get(match.group(1)) if match else None
+        if clip_rect is None:
+            continue
+
+        x, y = _float(element, "x"), _float(element, "y")
+        width, height = _float(element, "width"), _float(element, "height")
+        clip_x, clip_y = _float(clip_rect, "x"), _float(clip_rect, "y")
+        clip_width, clip_height = _float(clip_rect, "width"), _float(clip_rect, "height")
+        dimensions = (width, height, clip_width, clip_height)
+        if any(value < 0 for value in dimensions):
+            continue
+        contained = (
+            x >= clip_x - tolerance
+            and y >= clip_y - tolerance
+            and x + width <= clip_x + clip_width + tolerance
+            and y + height <= clip_y + clip_height + tolerance
+        )
+        if not contained:
+            continue
+
+        del element.attrib[clip_attr]
+        removed += 1
+
+        # A bottom/top photo caption often reaches the rounded clip boundary.
+        # Carrying the same radius to the overlay preserves the visible corner
+        # treatment after the now-redundant clip is removed.
+        shares_width = (
+            abs(x - clip_x) <= tolerance
+            and abs(width - clip_width) <= tolerance
+        )
+        touches_vertical_edge = (
+            abs(y - clip_y) <= tolerance
+            or abs((y + height) - (clip_y + clip_height)) <= tolerance
+        )
+        if shares_width and touches_vertical_edge:
+            clip_rx = clip_rect.get("rx")
+            clip_ry = clip_rect.get("ry") or clip_rx
+            if clip_rx and not element.get("rx"):
+                element.set("rx", clip_rx)
+            if clip_ry and not element.get("ry"):
+                element.set("ry", clip_ry)
 
     if removed:
         ET.register_namespace("", "http://www.w3.org/2000/svg")

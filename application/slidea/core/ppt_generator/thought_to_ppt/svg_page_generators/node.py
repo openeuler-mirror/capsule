@@ -3,6 +3,8 @@ import copy
 import json
 import asyncio
 import shutil
+import tempfile
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
@@ -41,15 +43,21 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generat
     generate_content_pages_app,
 )
 from core.ppt_generator.thought_to_ppt.svg_page_generators.toc_page_generator.graph import generate_toc_page_app
-from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.node import strip_unresolvable_images
+from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.node import (
+    repair_redundant_non_image_clip_paths,
+    strip_unresolvable_images,
+)
 from core.ppt_generator.utils.style_pack import (
+    apply_style_reference_shell,
     apply_style_reference_shell_file,
     bind_style_reference_paths,
+    extract_style_dynamic_content,
     prepare_style_runtime_references,
 )
 
 
 SVG_QUALITY_REPAIR_PROMPT = "svg_quality_repair_prompt.txt"
+SVG_STYLE_PACK_QUALITY_REPAIR_PROMPT = "svg_quality_repair_style_pack_prompt.txt"
 
 
 async def prepare_generation_context_node(state: PPTState, writer: StreamWriter, config: RunnableConfig | None = None):
@@ -118,7 +126,8 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
             style_pack_active = True
             logger.info(
                 "using style references stored in outline.json; "
-                "fixed master/layout assets prepared under slides/images/style-pack"
+                "inherited shell and authorized reusable assets prepared under "
+                "slides/images/style-pack"
             )
         except Exception as error:
             logger.warning(
@@ -437,8 +446,14 @@ async def ppt_synthesizer_node(state: PPTState, writer: StreamWriter):
 
 
 async def quality_check_node(state: PPTState, writer: StreamWriter):
-    """SVG quality gate. Run check_svg_files; on failure, attempt LLM repair and re-check."""
+    """Run the legacy gate, or the style-pack dynamic-only deterministic gate."""
     files = state.get("page_files") or []
+    style_pages = _active_style_pack_pages(state, files)
+    if style_pages is not None:
+        return await _quality_check_style_dynamic_content(state, files, style_pages, writer)
+
+    # Keep the pre-existing non-style-pack route unchanged.  In particular it
+    # still uses the legacy LLM repair behavior for compatibility.
     _restore_style_shells(state, files)
     results = check_svg_files(files)
     failed = [item for item in results if not item.get("passed")]
@@ -476,8 +491,286 @@ async def quality_check_node(state: PPTState, writer: StreamWriter):
     return {"svg_quality_report": results}
 
 
+def _active_style_pack_pages(state: PPTState, files: list[str]) -> list[Any] | None:
+    """Return ordered style pages, or ``None`` for the legacy built-in route."""
+    pages = sorted(state.get("outline") or [], key=lambda page: int(page.index))
+    references = [str(getattr(page, "style_reference_svg", "") or "") for page in pages]
+    if not any(references):
+        return None
+    if len(pages) != len(files):
+        raise ValueError(
+            f"cannot check style dynamic content: {len(pages)} outline pages != {len(files)} SVG files"
+        )
+    if not all(references):
+        raise ValueError("cannot check a partially bound style pack: some pages have no style reference")
+    return pages
+
+
+def _check_style_dynamic_candidate(
+    path: Path,
+    dynamic: str,
+) -> tuple[dict[str, Any], str]:
+    """Run deterministic local repairs and the unchanged checker on a candidate."""
+    temp_path: Path | None = None
+    try:
+        dynamic = repair_svg_content(dynamic)
+        validate_svg_content(dynamic)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".svg",
+            prefix=".slidea-dynamic-",
+            dir=path.parent,
+            delete=False,
+        ) as handle:
+            handle.write(dynamic)
+            temp_path = Path(handle.name)
+
+        stripped = strip_unresolvable_images(str(temp_path))
+        repaired_clips = repair_redundant_non_image_clip_paths(str(temp_path))
+        dynamic = temp_path.read_text(encoding="utf-8")
+        result = check_svg_files([str(temp_path)])[0]
+        result["file"] = path.name
+        result["path"] = str(path)
+        result["scope"] = "dynamic-main-content"
+        if stripped:
+            result.setdefault("warnings", []).append(
+                f"Removed {stripped} unresolvable dynamic image(s) deterministically"
+            )
+        if repaired_clips:
+            result.setdefault("warnings", []).append(
+                f"Removed {repaired_clips} redundant non-image clip-path attribute(s) deterministically"
+            )
+        return result, dynamic
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _validate_style_dynamic_repair_contract(original: str, repaired: str) -> None:
+    """Reject a quality-repair candidate that redesigns dynamic page content."""
+    import xml.etree.ElementTree as ET
+
+    original_root = ET.fromstring(original)
+    repaired_root = ET.fromstring(repaired)
+
+    def local_name(tag: str) -> str:
+        return tag.rsplit("}", 1)[-1].lower()
+
+    def text_values(root: ET.Element) -> list[str]:
+        return [
+            (item.text or "").strip()
+            for item in root.iter()
+            if local_name(item.tag) == "text" and (item.text or "").strip()
+        ]
+
+    def group_ids(root: ET.Element) -> Counter[str]:
+        return Counter(
+            item.get("id")
+            for item in root.iter()
+            if local_name(item.tag) == "g" and item.get("id")
+        )
+
+    def image_hrefs(root: ET.Element) -> Counter[str]:
+        xlink_href = "{http://www.w3.org/1999/xlink}href"
+        return Counter(
+            item.get("href") or item.get(xlink_href) or ""
+            for item in root.iter()
+            if local_name(item.tag) == "image"
+        )
+
+    geometry_attrs = {
+        "rect": ("x", "y", "width", "height", "rx", "ry", "transform"),
+        "circle": ("cx", "cy", "r", "transform"),
+        "ellipse": ("cx", "cy", "rx", "ry", "transform"),
+        "line": ("x1", "y1", "x2", "y2", "transform"),
+        "path": ("d", "transform"),
+        "polygon": ("points", "transform"),
+        "polyline": ("points", "transform"),
+        "text": ("x", "y", "font-size", "text-anchor", "transform"),
+    }
+
+    def geometry_signatures(root: ET.Element) -> Counter[tuple[str, ...]]:
+        signatures: Counter[tuple[str, ...]] = Counter()
+        for item in root.iter():
+            tag = local_name(item.tag)
+            attrs = geometry_attrs.get(tag)
+            if attrs is None:
+                continue
+            signatures[(tag, *(item.get(name) or "" for name in attrs))] += 1
+        return signatures
+
+    def image_signatures(root: ET.Element) -> Counter[tuple[str, ...]]:
+        xlink_href = "{http://www.w3.org/1999/xlink}href"
+        return Counter(
+            (
+                item.get("href") or item.get(xlink_href) or "",
+                *(item.get(name) or "" for name in ("x", "y", "width", "height", "transform")),
+            )
+            for item in root.iter()
+            if local_name(item.tag) == "image"
+        )
+
+    original_canvas = tuple(original_root.get(name) for name in ("width", "height", "viewBox"))
+    repaired_canvas = tuple(repaired_root.get(name) for name in ("width", "height", "viewBox"))
+    if repaired_canvas != original_canvas:
+        raise ValueError("canvas attributes changed")
+    if text_values(repaired_root) != text_values(original_root):
+        raise ValueError("visible text content or order changed")
+    if group_ids(repaired_root) != group_ids(original_root):
+        raise ValueError("dynamic group ids changed")
+    if geometry_signatures(repaired_root) != geometry_signatures(original_root):
+        raise ValueError("dynamic geometry or text positioning changed")
+
+    original_images = image_hrefs(original_root)
+    repaired_images = image_hrefs(repaired_root)
+    if any(count > original_images[href] for href, count in repaired_images.items()):
+        raise ValueError("new or duplicated image href introduced")
+    original_image_geometry = image_signatures(original_root)
+    repaired_image_geometry = image_signatures(repaired_root)
+    if any(
+        count > original_image_geometry[signature]
+        for signature, count in repaired_image_geometry.items()
+    ):
+        raise ValueError("image geometry changed")
+    if any(
+        item.get("data-slidea-style-shell") == "true"
+        or item.get("data-slidea-style-shell-def") == "true"
+        for item in repaired_root.iter()
+    ):
+        raise ValueError("fixed style shell nodes appeared in dynamic candidate")
+
+
+async def _check_one_style_dynamic_svg(
+    svg_path: str,
+    page: Any,
+) -> tuple[dict[str, Any], str | None]:
+    """Repair one style page dynamically, accepting only a checked candidate."""
+    path = Path(svg_path)
+    try:
+        original = path.read_text(encoding="utf-8")
+        dynamic = extract_style_dynamic_content(original)
+        initial_result, deterministic_dynamic = _check_style_dynamic_candidate(path, dynamic)
+        if initial_result.get("passed"):
+            initial_result["repair_mode"] = (
+                "deterministic" if initial_result.get("warnings") else "none"
+            )
+            recomposed = apply_style_reference_shell(deterministic_dynamic, page)
+            validate_svg_content(recomposed)
+            return initial_result, recomposed
+
+        repair_prompt_template = (
+            Path(app_base_dir)
+            / "core" / "ppt_generator" / "assets" / "prompts"
+            / SVG_STYLE_PACK_QUALITY_REPAIR_PROMPT
+        ).read_text(encoding="utf-8")
+        prompt = repair_prompt_template.format(
+            issues=format_quality_issues([initial_result]),
+            content=deterministic_dynamic,
+        )
+        response = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)])
+        repaired = repair_svg_content(extract_svg_content(response))
+        validate_svg_content(repaired)
+        _validate_style_dynamic_repair_contract(deterministic_dynamic, repaired)
+
+        repaired_result, repaired_dynamic = _check_style_dynamic_candidate(path, repaired)
+        repaired_result["repair_attempted"] = True
+        repaired_result["initial_errors"] = list(initial_result.get("errors") or [])
+        if not repaired_result.get("passed"):
+            return repaired_result, None
+
+        repaired_result["repair_mode"] = "dynamic-llm"
+        repaired_result.setdefault("warnings", []).append(
+            "Accepted a checked dynamic-only LLM quality repair"
+        )
+        recomposed = apply_style_reference_shell(repaired_dynamic, page)
+        validate_svg_content(recomposed)
+        logger.info(f"SVG dynamic-only quality repair succeeded: {path}")
+        return repaired_result, recomposed
+    except Exception as error:
+        result = locals().get("initial_result") or {
+            "file": path.name,
+            "path": str(path),
+            "exists": path.exists(),
+            "errors": [],
+            "warnings": [],
+            "passed": False,
+            "scope": "dynamic-main-content",
+        }
+        result["passed"] = False
+        result["repair_attempted"] = "initial_result" in locals()
+        result.setdefault("errors", []).append(
+            f"Dynamic-only quality repair failed or was rejected: {error}"
+        )
+        logger.warning(f"SVG dynamic-only quality repair failed for {path}: {error}")
+        return result, None
+
+
+async def _quality_check_style_dynamic_content(
+    state: PPTState,
+    files: list[str],
+    pages: list[Any],
+    writer: StreamWriter,
+) -> dict[str, Any]:
+    """Style-pack quality gate: never send the composed page to an LLM."""
+    _restore_style_shells(state, files)
+    results: list[dict[str, Any]] = []
+    updates: list[tuple[Path, str]] = []
+    for page, svg_path in zip(pages, files):
+        result, recomposed = await _check_one_style_dynamic_svg(svg_path, page)
+        results.append(result)
+        if recomposed is not None:
+            updates.append((Path(svg_path), recomposed))
+
+    failed = [item for item in results if not item.get("passed")]
+    if failed:
+        issue_text = format_quality_issues(results)
+        for item in failed:
+            report_path = Path(str(item["path"])).with_suffix(".quality-report.json")
+            try:
+                report_path.write_text(
+                    json.dumps(item, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                item["quality_report_path"] = str(report_path)
+            except OSError as error:
+                logger.warning(f"failed to write SVG quality report {report_path}: {error}")
+        logger.error(f"style dynamic SVG quality check failed:\n{issue_text}")
+        writer(
+            {
+                "step": "SVG 动态内容质量检查失败",
+                "text": issue_text,
+            }
+        )
+        raise ValueError("style dynamic SVG quality check failed:\n" + issue_text)
+
+    # Commit deterministic dynamic repairs only after every page passes, so a
+    # failed deck keeps all original composed SVGs for diagnosis.
+    for path, content in updates:
+        path.write_text(content, encoding="utf-8")
+        try:
+            path.with_suffix(".quality-report.json").unlink(missing_ok=True)
+        except OSError as error:
+            logger.warning(f"failed to remove stale SVG quality report for {path}: {error}")
+
+    warning_count = sum(len(item.get("warnings") or []) for item in results)
+    writer(
+        {
+            "step": "SVG 动态内容质量检查",
+            "text": (
+                f"已完成 {len(results)} 个文件的动态内容检查，"
+                f"发现 {warning_count} 个警告；固定 style pack 外壳未参与模型修复。"
+            ),
+        }
+    )
+    return {"svg_quality_report": results}
+
+
 def _restore_style_shells(state: PPTState, files: list[str]) -> None:
-    """Re-apply deterministic shells after any VLM/quality-repair rewrite."""
+    """Re-apply deterministic shells after VLM changes and before final checks."""
     pages = sorted(state.get("outline") or [], key=lambda page: int(page.index))
     if not any(getattr(page, "style_reference_svg", "") for page in pages):
         return

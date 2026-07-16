@@ -12,6 +12,7 @@ from core.ppt_generator.utils.style_pack import (
     assign_style_references_for_outline,
     bind_style_reference_paths,
     copy_style_pack_into_run,
+    extract_style_dynamic_content,
     prepare_style_runtime_references,
     style_reference_catalog,
     validate_style_pack,
@@ -316,6 +317,42 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
         page = PPTPage(title="普通页", abstract="摘要", type=PageType.CONTENT, index=0)
         content = '<svg xmlns="http://www.w3.org/2000/svg"><g id="header"/></svg>'
         self.assertIs(apply_style_reference_shell(content, page), content)
+
+    def test_dynamic_extraction_removes_only_injected_style_shell(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+          <defs><linearGradient id="fixed-gradient"><stop offset="0" stop-color="#fff"/></linearGradient></defs>
+          <g id="background"><rect width="1280" height="720" fill="url(#fixed-gradient)"/></g>
+          <g id="master-content"><text x="40" y="690">fixed footer</text></g>
+          <g id="layout-content"/>
+          <g id="main-content"><g data-role="header"><text x="40" y="80" font-size="40">old title</text></g></g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+          <defs><linearGradient id="dynamic-gradient"><stop offset="0" stop-color="#f00"/></linearGradient></defs>
+          <g id="body"><rect x="100" y="180" width="400" height="200" fill="url(#dynamic-gradient)"/><text x="120" y="240">dynamic body</text></g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "reference.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="new title",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=0,
+                style_reference_svg=str(reference),
+                style_reference_page_type="content",
+            )
+            composed = apply_style_reference_shell(generated_svg, page)
+            dynamic = extract_style_dynamic_content(composed)
+            restored = apply_style_reference_shell(dynamic, page)
+
+        self.assertIn("dynamic body", dynamic)
+        self.assertIn("dynamic-gradient", dynamic)
+        self.assertNotIn("data-slidea-style-shell", dynamic)
+        self.assertNotIn("fixed-gradient", dynamic)
+        self.assertNotIn("fixed footer", dynamic)
+        self.assertIn("dynamic body", restored)
+        self.assertIn("fixed footer", restored)
+        self.assertIn("slidea-style-background", restored)
 
     def test_special_page_composer_rejects_model_invented_redesign_groups(self):
         reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">

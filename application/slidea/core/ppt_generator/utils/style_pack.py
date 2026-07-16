@@ -726,6 +726,52 @@ def apply_style_reference_shell(svg_content: str, page: Any) -> str:
     return ET.tostring(generated_root, encoding="unicode", xml_declaration=False)
 
 
+def extract_style_dynamic_content(svg_content: str) -> str:
+    """Return a standalone SVG containing only model-authored dynamic nodes.
+
+    ``apply_style_reference_shell`` marks every injected top-level shell group
+    and copied definition.  Removing only those marked nodes is therefore
+    deterministic and does not depend on model-chosen ids such as
+    ``main-content``.  Unstyled SVGs are returned byte-for-byte unchanged.
+    """
+    try:
+        root = ET.fromstring(svg_content)
+    except ET.ParseError as error:
+        raise ValueError(f"cannot extract style dynamic content: {error}") from error
+
+    has_shell = any(
+        item.get(STYLE_SHELL_ATTR) == "true"
+        or item.get(STYLE_SHELL_DEF_ATTR) == "true"
+        for item in root.iter()
+    )
+    if not has_shell:
+        return svg_content
+
+    dynamic_root = ET.Element(root.tag, dict(root.attrib))
+    dynamic_root.text = root.text
+
+    def clone_without_shell_nodes(element: ET.Element) -> ET.Element | None:
+        if (
+            element.get(STYLE_SHELL_ATTR) == "true"
+            or element.get(STYLE_SHELL_DEF_ATTR) == "true"
+        ):
+            return None
+        clone = copy.copy(element)
+        clone[:] = []
+        for child in element:
+            child_clone = clone_without_shell_nodes(child)
+            if child_clone is not None:
+                clone.append(child_clone)
+        return clone
+
+    for child in root:
+        clone = clone_without_shell_nodes(child)
+        if clone is not None:
+            dynamic_root.append(clone)
+
+    return ET.tostring(dynamic_root, encoding="unicode", xml_declaration=False)
+
+
 def apply_style_reference_shell_file(svg_path: str | Path, page: Any) -> None:
     path = Path(svg_path)
     content = path.read_text(encoding="utf-8")
