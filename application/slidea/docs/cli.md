@@ -459,7 +459,7 @@ To follow a prepared reference-PPT style pack:
 ```bash
 SESSION_ID=<new-unique-id>
 .venv/bin/python scripts/pptx_to_style_pack.py reference.pptx --session-id "$SESSION_ID"
-# Agent reads selected SVG files and authors /tmp/slidea/style-packs/$SESSION_ID/style-pack.json.
+# Agent reads asset-inventory.json plus selected SVG files, then authors style-pack.json.
 .venv/bin/python scripts/validate_style_pack.py "/tmp/slidea/style-packs/$SESSION_ID"
 .venv/bin/python scripts/run_ppt_pipeline.py \
   --text "<request>" \
@@ -467,4 +467,6 @@ SESSION_ID=<new-unique-id>
   --style-pack "/tmp/slidea/style-packs/$SESSION_ID"
 ```
 
-The conversion command always writes to `/tmp/slidea/style-packs/<session-id>` and creates SVG material only; it does not create a manifest or previews. The Agent selects a small representative subset and writes the manifest from SVG source. At pipeline startup, the validated pack is copied to `output/<run_id>/style_pack/`. Reference ids are selected during outline generation and saved in `outline/outline.json`. Before parallel generation, only fixed master/layout images are copied into `slides/images/style-pack`; body images from the source deck remain reference-only. Generated style-mode pages receive the assigned reference background, master/layout, title, header/footer, fixed logos and page-number format through deterministic composition after generation and repair. Invalid packs, assignments or fixed-asset preflight fall back to the built-in template workflow for the entire run.
+The conversion command always writes to `/tmp/slidea/style-packs/<session-id>`. It creates editable reference SVGs, extracted image assets, `reference/conversion-report.json`, and an advisory `asset-inventory.json`; it does not create `style-pack.json` or PNG previews. The inventory reports deterministic candidate signals only. The Agent reads it together with selected SVG source, chooses a small representative subset, and explicitly authorizes reusable template decorations through top-level `reusable_assets` and page-level `fixed_image_elements` in `style-pack.json`.
+
+At pipeline startup, the validated pack is copied to `output/<run_id>/style_pack/`. Reference ids are selected during outline generation using page type, density, and structure, then saved in `outline/outline.json`. Before parallel generation, Slidea prepares prompt-safe references under `slides/style_references/` and copies inherited shell images plus Agent-authorized reusable images into `slides/images/style-pack/`; every other `main-content` image remains reference-only. Generated style-mode pages receive the assigned background, master/layout layers, title geometry, header/footer, fixed logos, authorized `back`/`front` decorations, and page-number format through deterministic composition after generation, VLM review, and quality repair. Invalid packs, assignments, or style-asset preflight errors fall back to the built-in template workflow for the entire run. Runs without `--style-pack` retain the existing workflow unchanged.

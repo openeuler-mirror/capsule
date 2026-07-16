@@ -259,6 +259,121 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("images/style-pack/", runtime_text)
             self.assertIn("style-reference-only/business.png", runtime_text)
 
+    def test_explicit_reusable_assets_are_published_and_injected_by_layer(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720" fill="#fff"/></g>
+          <g id="master-content"/>
+          <g id="layout-content"/>
+          <g id="main-content">
+            <g id="decor-back"><image href="images/brush.png" x="0" y="560" width="1280" height="160"/></g>
+            <g id="source-title" data-role="header"><text x="60" y="90" font-size="44">Source title</text></g>
+            <g id="business-photo"><image href="images/business.png" x="400" y="180" width="480" height="320"/></g>
+            <g id="decor-front"><image href="images/badge.png" x="1120" y="20" width="120" height="120"/></g>
+          </g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="body"><text x="100" y="220">New body</text></g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pack = self._pack(root)
+            reference = pack / "reference"
+            images = reference / "images"
+            images.mkdir(exist_ok=True)
+            (images / "brush.png").write_bytes(b"brush")
+            (images / "badge.png").write_bytes(b"badge")
+            (images / "business.png").write_bytes(b"business")
+            (reference / "content.svg").write_text(reference_svg, encoding="utf-8")
+            manifest_path = pack / "style-pack.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["reusable_assets"] = [
+                {
+                    "id": "brush",
+                    "path": "reference/images/brush.png",
+                    "role": "decoration",
+                    "reason": "Repeated bottom brush texture",
+                },
+                {
+                    "id": "badge",
+                    "path": "reference/images/badge.png",
+                    "role": "branding",
+                    "reason": "Fixed corner badge",
+                },
+            ]
+            content_page = next(page for page in manifest["pages"] if page["id"] == "content")
+            content_page["fixed_image_elements"] = [
+                {"element_id": "decor-back", "layer": "back"},
+                {"element_id": "decor-front", "layer": "front"},
+            ]
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            validate_style_pack(pack)
+
+            slides = root / "run" / "slides"
+            page = PPTPage(
+                title="New title",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=0,
+                style_reference_id="content",
+            )
+            bind_style_reference_paths([page], pack)
+            prepare_style_runtime_references([page], pack, slides)
+            runtime_text = Path(page.style_reference_svg).read_text(encoding="utf-8")
+            composed = apply_style_reference_shell(generated_svg, page)
+            root_svg = ET.fromstring(composed)
+            group_ids = [child.get("id") for child in root_svg if child.get("id")]
+            published_asset_count = len(list((slides / "images" / "style-pack").iterdir()))
+
+        self.assertEqual(published_asset_count, 2)
+        self.assertEqual(runtime_text.count('data-slidea-style-reusable="true"'), 2)
+        self.assertIn("style-reference-only/business.png", runtime_text)
+        back_id = next(item for item in group_ids if item.startswith("slidea-style-reusable-back-"))
+        front_id = next(item for item in group_ids if item.startswith("slidea-style-reusable-front-"))
+        self.assertLess(group_ids.index(back_id), group_ids.index("body"))
+        self.assertGreater(group_ids.index(front_id), group_ids.index("body"))
+        self.assertNotIn("business-photo", group_ids)
+
+    def test_reusable_element_validation_rejects_text_or_undeclared_images(self):
+        cases = [
+            (
+                '<g id="decor"><image href="images/decor.png"/><text>private</text></g>',
+                "must not contain text",
+                True,
+            ),
+            (
+                '<g id="decor"><image href="images/decor.png"/></g>',
+                "not declared in reusable_assets",
+                False,
+            ),
+        ]
+        for element, expected, declare_asset in cases:
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                pack = self._pack(root)
+                reference = pack / "reference"
+                (reference / "images").mkdir(exist_ok=True)
+                (reference / "images" / "decor.png").write_bytes(b"decor")
+                (reference / "content.svg").write_text(
+                    '<svg xmlns="http://www.w3.org/2000/svg"><g id="background"/>'
+                    '<g id="master-content"/><g id="layout-content"/><g id="main-content">'
+                    f'{element}</g></svg>',
+                    encoding="utf-8",
+                )
+                manifest_path = pack / "style-pack.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if declare_asset:
+                    manifest["reusable_assets"] = [{
+                        "id": "decor",
+                        "path": "reference/images/decor.png",
+                        "role": "decoration",
+                        "reason": "test decoration",
+                    }]
+                page = next(item for item in manifest["pages"] if item["id"] == "content")
+                page["fixed_image_elements"] = [{"element_id": "decor", "layer": "back"}]
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, expected):
+                    validate_style_pack(pack)
+
     def test_composer_restores_fixed_shell_title_and_page_number(self):
         reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
           <defs/>

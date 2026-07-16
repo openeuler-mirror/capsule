@@ -37,6 +37,19 @@ class PipelineContractTests(unittest.TestCase):
         self.assertIn('STYLE_PACK_TEMP_ROOT = Path("/tmp/slidea/style-packs")', converter)
         self.assertIn('"--session-id",', converter)
 
+    def test_style_pack_docs_require_agent_authorization_for_reusable_assets(self):
+        skill = (ROOT / "skill/slidea/SKILL.md").read_text(encoding="utf-8")
+        style_reference = (ROOT / "skill/slidea/references/style-pack.md").read_text(encoding="utf-8")
+        cli = (ROOT / "docs/cli.md").read_text(encoding="utf-8")
+
+        self.assertIn("advisory `asset-inventory.json`", skill)
+        self.assertIn('"reusable_assets"', style_reference)
+        self.assertIn('"fixed_image_elements"', style_reference)
+        self.assertIn("they never authorize reuse", style_reference)
+        self.assertIn("an advisory `asset-inventory.json`", cli)
+        self.assertIn("Agent-authorized reusable images", cli)
+        self.assertNotIn("only fixed master/layout images are copied", cli)
+
     def test_deep_research_context_declares_os_import(self):
         source = (ROOT / "core/deep_research/context.py").read_text(encoding="utf-8")
         module = ast.parse(source)

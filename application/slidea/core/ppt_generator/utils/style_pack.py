@@ -16,7 +16,10 @@ from urllib.parse import unquote, urlparse
 from langchain.messages import HumanMessage
 from pydantic import BaseModel, Field, TypeAdapter
 
-from core.ppt_generator.utils.svg_to_pptx.drawingml_transform import parse_transform_info
+from core.ppt_generator.utils.svg_to_pptx.drawingml_transform import (
+    AffineMatrix,
+    parse_transform_info,
+)
 from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
 from core.utils.logger import logger
 
@@ -31,7 +34,10 @@ SVG_NS = "http://www.w3.org/2000/svg"
 XLINK_NS = "http://www.w3.org/1999/xlink"
 STYLE_SHELL_ATTR = "data-slidea-style-shell"
 STYLE_SHELL_DEF_ATTR = "data-slidea-style-shell-def"
+STYLE_REUSABLE_ATTR = "data-slidea-style-reusable"
+STYLE_REUSABLE_LAYER_ATTR = "data-slidea-style-layer"
 STYLE_REFERENCE_ONLY_PREFIX = "style-reference-only/"
+REUSABLE_LAYERS = {"back", "front"}
 
 ET.register_namespace("", SVG_NS)
 ET.register_namespace("xlink", XLINK_NS)
@@ -57,6 +63,13 @@ def _required_text(page: dict[str, Any], field: str) -> str:
     return value.strip()
 
 
+def _is_local_file_reference(href: str) -> bool:
+    if not href or href.startswith("data:"):
+        return False
+    parsed = urlparse(href)
+    return not parsed.scheme and not parsed.netloc
+
+
 def validate_style_pack(style_pack_dir: str | Path) -> dict[str, Any]:
     """Validate the Agent-authored manifest and every selected SVG path."""
     root = Path(style_pack_dir).resolve()
@@ -73,11 +86,37 @@ def validate_style_pack(style_pack_dir: str | Path) -> dict[str, Any]:
     if manifest.get("version") != STYLE_PACK_VERSION:
         raise ValueError(f"unsupported style pack version: {manifest.get('version')!r}")
 
+    reusable_assets = manifest.get("reusable_assets", [])
+    if not isinstance(reusable_assets, list):
+        raise ValueError("reusable_assets must be an array when provided")
+    reusable_paths: dict[Path, str] = {}
+    reusable_ids: set[str] = set()
+    for asset in reusable_assets:
+        if not isinstance(asset, dict):
+            raise ValueError("every reusable_assets entry must be an object")
+        asset_id = _required_text(asset, "id")
+        if asset_id in reusable_ids:
+            raise ValueError(f"duplicate reusable asset id: {asset_id}")
+        reusable_ids.add(asset_id)
+        relative_path = _required_text(asset, "path")
+        asset_path = _safe_child(root, relative_path)
+        if not asset_path.is_file():
+            raise ValueError(f"missing reusable asset: {relative_path}")
+        if asset_path in reusable_paths:
+            raise ValueError(
+                f"reusable asset path {relative_path!r} is declared by both "
+                f"{reusable_paths[asset_path]!r} and {asset_id!r}"
+            )
+        reusable_paths[asset_path] = asset_id
+        _required_text(asset, "role")
+        _required_text(asset, "reason")
+
     pages = manifest.get("pages")
     if not isinstance(pages, list) or not pages:
         raise ValueError("style pack has no selected reference pages")
 
     seen_ids: set[str] = set()
+    used_reusable_paths: set[Path] = set()
     for page in pages:
         if not isinstance(page, dict):
             raise ValueError("every style-pack page must be an object")
@@ -90,6 +129,12 @@ def validate_style_pack(style_pack_dir: str | Path) -> dict[str, Any]:
         svg_path = _safe_child(root, svg)
         if not svg_path.is_file() or svg_path.suffix.lower() != ".svg":
             raise ValueError(f"missing reference SVG: {svg}")
+        try:
+            svg_root = ET.parse(svg_path).getroot()
+        except (ET.ParseError, OSError) as error:
+            raise ValueError(f"invalid reference SVG {svg}: {error}") from error
+        if _local_name(svg_root.tag) != "svg":
+            raise ValueError(f"reference file is not an SVG document: {svg}")
 
         source_slide = page.get("source_slide")
         if not isinstance(source_slide, int) or isinstance(source_slide, bool) or source_slide < 1:
@@ -109,6 +154,80 @@ def validate_style_pack(style_pack_dir: str | Path) -> dict[str, Any]:
             )
         _required_text(page, "structure")
         _required_text(page, "description")
+
+        fixed_elements = page.get("fixed_image_elements", [])
+        if not isinstance(fixed_elements, list):
+            raise ValueError(
+                f"style-pack page {page_id} fixed_image_elements must be an array when provided"
+            )
+        main_content = _direct_child(svg_root, "main-content")
+        seen_element_ids: set[str] = set()
+        for fixed in fixed_elements:
+            if not isinstance(fixed, dict):
+                raise ValueError(
+                    f"style-pack page {page_id} fixed_image_elements entries must be objects"
+                )
+            element_id = _required_text(fixed, "element_id")
+            if element_id in seen_element_ids:
+                raise ValueError(
+                    f"style-pack page {page_id} has duplicate fixed image element {element_id!r}"
+                )
+            seen_element_ids.add(element_id)
+            layer = _required_text(fixed, "layer")
+            if layer not in REUSABLE_LAYERS:
+                raise ValueError(
+                    f"style-pack page {page_id} fixed image element {element_id!r} has invalid "
+                    f"layer {layer!r}; expected one of {sorted(REUSABLE_LAYERS)}"
+                )
+            matches = (
+                [child for child in main_content if child.get("id") == element_id]
+                if main_content is not None else []
+            )
+            if len(matches) != 1:
+                raise ValueError(
+                    f"style-pack page {page_id} fixed image element {element_id!r} must identify "
+                    "exactly one direct child of main-content"
+                )
+            element = matches[0]
+            if any(_local_name(item.tag) == "text" for item in element.iter()):
+                raise ValueError(
+                    f"style-pack page {page_id} fixed image element {element_id!r} "
+                    "must not contain text"
+                )
+            images = [item for item in element.iter() if _local_name(item.tag) == "image"]
+            if not images:
+                raise ValueError(
+                    f"style-pack page {page_id} fixed image element {element_id!r} "
+                    "must contain at least one image"
+                )
+            for image in images:
+                href = _image_href(image)
+                if not _is_local_file_reference(href):
+                    raise ValueError(
+                        f"style-pack page {page_id} fixed image element {element_id!r} "
+                        "must use declared local image files"
+                    )
+                parsed = urlparse(href)
+                image_path = (svg_path.parent / unquote(parsed.path)).resolve()
+                if not _is_within(image_path, root) or not image_path.is_file():
+                    raise ValueError(
+                        f"style-pack page {page_id} fixed image element {element_id!r} "
+                        f"references missing or unsafe image {href!r}"
+                    )
+                if image_path not in reusable_paths:
+                    raise ValueError(
+                        f"style-pack page {page_id} fixed image element {element_id!r} image "
+                        f"{href!r} is not declared in reusable_assets"
+                    )
+                used_reusable_paths.add(image_path)
+
+    unused_assets = set(reusable_paths) - used_reusable_paths
+    if unused_assets:
+        unused = ", ".join(sorted(reusable_paths[path] for path in unused_assets))
+        raise ValueError(
+            "every reusable asset must be used by at least one fixed_image_elements entry; "
+            f"unused ids: {unused}"
+        )
 
     global_style = manifest.get("global_style")
     if global_style is not None and not isinstance(global_style, (str, dict)):
@@ -221,6 +340,7 @@ def _prepare_runtime_reference(
     target: Path,
     *,
     page: Any,
+    reference_page: dict[str, Any],
     style_pack_root: Path,
     slides_root: Path,
     asset_dir: Path,
@@ -243,6 +363,20 @@ def _prepare_runtime_reference(
     # texture/logo images must be published with the inherited fixed assets.
     for group in _reference_title_shell_nodes(root, page):
         fixed_nodes.update(id(item) for item in group.iter())
+
+    reusable_by_id = {
+        str(item["element_id"]): str(item["layer"])
+        for item in reference_page.get("fixed_image_elements", [])
+    }
+    main_content = _direct_child(root, "main-content")
+    if main_content is not None:
+        for child in main_content:
+            layer = reusable_by_id.get(child.get("id") or "")
+            if layer is None:
+                continue
+            child.set(STYLE_REUSABLE_ATTR, "true")
+            child.set(STYLE_REUSABLE_LAYER_ATTR, layer)
+            fixed_nodes.update(id(item) for item in child.iter())
 
     for image in (item for item in root.iter() if _local_name(item.tag) == "image"):
         href = _image_href(image)
@@ -277,9 +411,9 @@ def prepare_style_runtime_references(
 
     The immutable style-pack snapshot remains untouched. Each outline page is
     rebound to a runtime SVG under ``slides/style_references``. Only images in
-    ``master-content`` or ``layout-content`` are copied into
-    ``slides/images/style-pack``; slide-body images are never published to the
-    generated slide asset directory.
+    the inherited shell or in Agent-authorized ``fixed_image_elements`` are
+    copied into ``slides/images/style-pack``. Other slide-body images remain
+    unavailable content references.
     """
     style_pack_root = Path(style_pack_dir).resolve()
     slides_root = Path(slides_dir).resolve()
@@ -288,7 +422,14 @@ def prepare_style_runtime_references(
     reference_dir.mkdir(parents=True, exist_ok=True)
     asset_dir.mkdir(parents=True, exist_ok=True)
 
-    prepared: dict[Path, Path] = {}
+    manifest = validate_style_pack(style_pack_root)
+    pages_by_id = {str(item["id"]): item for item in manifest["pages"]}
+    pages_by_source: dict[Path, list[dict[str, Any]]] = {}
+    for item in manifest["pages"]:
+        source_path = _safe_child(style_pack_root, str(item["svg"]))
+        pages_by_source.setdefault(source_path, []).append(item)
+
+    prepared: dict[tuple[Path, str], Path] = {}
     for page in outline:
         source_value = str(getattr(page, "style_reference_svg", "") or "")
         if not source_value:
@@ -296,20 +437,38 @@ def prepare_style_runtime_references(
         source = Path(source_value).resolve()
         if not _is_within(source, style_pack_root):
             raise ValueError(f"style reference escapes style pack: {source}")
-        if source not in prepared:
+        reference_id = str(getattr(page, "style_reference_id", "") or "")
+        reference_page = pages_by_id.get(reference_id)
+        if reference_page is None:
+            source_matches = pages_by_source.get(source, [])
+            if len(source_matches) != 1:
+                raise ValueError(
+                    f"cannot resolve style manifest entry for outline page {page.index}: {source}"
+                )
+            reference_page = source_matches[0]
+        fixed_signature = json.dumps(
+            reference_page.get("fixed_image_elements", []),
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        prepared_key = (source, fixed_signature)
+        if prepared_key not in prepared:
             relative = source.relative_to(style_pack_root).as_posix()
-            suffix = hashlib.sha1(relative.encode("utf-8")).hexdigest()[:10]
+            suffix = hashlib.sha1(
+                f"{relative}\n{fixed_signature}".encode("utf-8")
+            ).hexdigest()[:10]
             target = reference_dir / f"{source.stem}-{suffix}.svg"
             _prepare_runtime_reference(
                 source,
                 target,
                 page=page,
+                reference_page=reference_page,
                 style_pack_root=style_pack_root,
                 slides_root=slides_root,
                 asset_dir=asset_dir,
             )
-            prepared[source] = target
-        page.style_reference_svg = str(prepared[source])
+            prepared[prepared_key] = target
+        page.style_reference_svg = str(prepared[prepared_key])
 
 
 def _float_attr(element: ET.Element, name: str, default: float = 0.0) -> float:
@@ -332,12 +491,12 @@ def _min_text_y(element: ET.Element) -> float:
 
 
 def _multiply_matrix(
-    left: tuple[float, float, float, float, float, float],
-    right: tuple[float, float, float, float, float, float],
-) -> tuple[float, float, float, float, float, float]:
+    left: AffineMatrix,
+    right: AffineMatrix,
+) -> AffineMatrix:
     a1, b1, c1, d1, e1, f1 = left
     a2, b2, c2, d2, e2, f2 = right
-    return (
+    return AffineMatrix(
         a1 * a2 + c1 * b2,
         b1 * a2 + d1 * b2,
         a1 * c2 + c1 * d2,
@@ -348,7 +507,7 @@ def _multiply_matrix(
 
 
 def _transform_point(
-    matrix: tuple[float, float, float, float, float, float],
+    matrix: AffineMatrix,
     x: float,
     y: float,
 ) -> tuple[float, float]:
@@ -409,7 +568,7 @@ def _visual_bounds(element: ET.Element) -> tuple[float, float, float, float] | N
 
     def visit(
         node: ET.Element,
-        parent_matrix: tuple[float, float, float, float, float, float],
+        parent_matrix: AffineMatrix,
     ) -> None:
         matrix = _multiply_matrix(
             parent_matrix,
@@ -419,7 +578,7 @@ def _visual_bounds(element: ET.Element) -> tuple[float, float, float, float] | N
         for child in node:
             visit(child, matrix)
 
-    visit(element, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
+    visit(element, AffineMatrix(1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
     if not points:
         return None
     xs, ys = zip(*points)
@@ -467,11 +626,12 @@ def _reference_title_group(reference_root: ET.Element, page: Any) -> ET.Element 
             # heading as a title placeholder.  Prefer a header in the actual
             # top title band, then use font size and visual width to distinguish
             # the page title from small labels in that band.
-            top_band = [
-                group for group in explicit
-                if (_visual_bounds(group) or (0.0, _min_text_y(group), 0.0, 0.0))[1]
-                <= slide_height * 0.25
-            ]
+            top_band: list[ET.Element] = []
+            for group in explicit:
+                bounds = _visual_bounds(group)
+                group_top = bounds[1] if bounds is not None else _min_text_y(group)
+                if group_top <= slide_height * 0.25:
+                    top_band.append(group)
             if top_band:
                 return max(top_band, key=title_rank)
         return max(explicit, key=title_rank)
@@ -642,7 +802,7 @@ def _reference_body_top(reference_root: ET.Element) -> float:
     shell_ids = {id(item) for item in _reference_title_shell_nodes(reference_root, object())}
     candidates = []
     for child in main:
-        if id(child) in shell_ids:
+        if id(child) in shell_ids or child.get(STYLE_REUSABLE_ATTR) == "true":
             continue
         bounds = _visual_bounds(child)
         if bounds is not None and bounds[1] >= 120.0 and bounds[3] - bounds[1] > 40.0:
@@ -726,7 +886,34 @@ def apply_style_reference_shell(svg_content: str, page: Any) -> str:
         group = _direct_child(reference_root, group_id)
         if group is not None:
             fixed_pairs.append((name, group))
-    reference_nodes = [group for _, group in fixed_pairs] + title_shell_nodes
+    reference_main = _direct_child(reference_root, "main-content")
+    reusable_back: list[ET.Element] = []
+    reusable_front: list[ET.Element] = []
+    if reference_main is not None:
+        for child in reference_main:
+            if child.get(STYLE_REUSABLE_ATTR) != "true":
+                continue
+            if child.get(STYLE_REUSABLE_LAYER_ATTR) == "front":
+                reusable_front.append(child)
+            else:
+                reusable_back.append(child)
+
+    front_ids = {id(item) for item in reusable_front}
+    before_dynamic_by_id = {
+        id(item): item
+        for item in [*title_shell_nodes, *reusable_back]
+        if id(item) not in front_ids
+    }
+    if reference_main is not None:
+        before_dynamic = [
+            item for item in reference_main
+            if id(item) in before_dynamic_by_id
+        ]
+    else:
+        before_dynamic = list(before_dynamic_by_id.values())
+
+    fixed_sources = [group for _, group in fixed_pairs]
+    reference_nodes = [*fixed_sources, *before_dynamic, *reusable_front]
     clones, definition_clones = _clone_reference_nodes(reference_root, reference_nodes)
     for definition in definition_clones:
         definition.set(STYLE_SHELL_DEF_ATTR, "true")
@@ -737,26 +924,38 @@ def apply_style_reference_shell(svg_content: str, page: Any) -> str:
         slide_height = 720.0
     insertion_index = list(generated_root).index(generated_defs) + 1
     fixed_count = len(fixed_pairs)
-    for index, clone in enumerate(clones):
+    before_count = len(before_dynamic)
+    for index, (source_node, clone) in enumerate(zip(reference_nodes, clones)):
         clone.set(STYLE_SHELL_ATTR, "true")
         if index < fixed_count:
             clone.set("id", f"slidea-style-{fixed_pairs[index][0]}")
             _update_page_number(clone, int(page.index) + 1, slide_height)
         else:
-            shell_source = title_shell_nodes[index - fixed_count]
-            if shell_source is not title:
+            reusable = source_node.get(STYLE_REUSABLE_ATTR) == "true"
+            if reusable:
+                layer = source_node.get(STYLE_REUSABLE_LAYER_ATTR) or "back"
+                source_id = re.sub(
+                    r"[^A-Za-z0-9_.-]+",
+                    "-",
+                    source_node.get("id") or str(index + 1),
+                ).strip("-") or str(index + 1)
+                clone.set("id", f"slidea-style-reusable-{layer}-{source_id}")
+            elif source_node is title:
+                clone.set("id", "slidea-style-page-title")
+                # A selected thanks page already carries the template's deliberate
+                # closing phrase. Keep that generic fixed title verbatim; replacing
+                # it with an outline label such as “致谢页” degrades the result.
+                if str(getattr(page, "style_reference_page_type", "") or "") != "thanks":
+                    _replace_group_text(clone, str(getattr(page, "title", "")))
+            else:
                 clone.set("id", f"slidea-style-title-shell-{index - fixed_count + 1}")
-                generated_root.insert(insertion_index, clone)
-                insertion_index += 1
-                continue
-            clone.set("id", "slidea-style-page-title")
-            # A selected thanks page already carries the template's deliberate
-            # closing phrase. Keep that generic fixed title verbatim; replacing
-            # it with an outline label such as “致谢页” degrades the result.
-            if str(getattr(page, "style_reference_page_type", "") or "") != "thanks":
-                _replace_group_text(clone, str(getattr(page, "title", "")))
-        generated_root.insert(insertion_index, clone)
-        insertion_index += 1
+
+        is_front = index >= fixed_count + before_count
+        if is_front:
+            generated_root.append(clone)
+        else:
+            generated_root.insert(insertion_index, clone)
+            insertion_index += 1
 
     return ET.tostring(generated_root, encoding="unicode", xml_declaration=False)
 

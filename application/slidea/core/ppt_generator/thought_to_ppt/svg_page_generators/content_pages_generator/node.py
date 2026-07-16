@@ -44,11 +44,11 @@ def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
     if is_style_reference:
         template_heading = "# 用户示例 PPT 中为本页预分配的参考页 SVG"
         template_rules = """# Style pack 参考页使用规范
-- 代码会在生成后精确注入参考页的 background、master-content、layout-content、标题区、页眉、页脚、Logo 和页码。你只生成当前页的动态主体内容，不得输出、重画、移动或覆盖这些固定元素。
+- 代码会在生成后精确注入参考页的 background、master-content、layout-content、标题区、页眉、页脚、Logo、页码，以及 style pack 显式授权的前后层可复用装饰。你只生成当前页的动态主体内容，不得输出、重画、移动或覆盖这些固定元素。
 - 动态主体必须位于参考页正文区域内，避开顶部标题区和底部页脚区；不得新增另一套页眉、页脚、页码、Logo、顶栏、底栏或全页背景。
 - 参考页的标题坐标、配色、字体层级、视觉重心、分栏/卡片关系、留白、圆角和线条语言都是强约束；允许替换内容和调整卡片数量，但不得另起一套装饰系统。
 - 禁止复制参考页中的原始正文、数字、业务图片和可能的用户敏感信息。`style-reference-only/` 下的图片是明确不可用的原示例业务图片。
-- `images/style-pack/` 下的图片仅属于代码注入的固定母版/版式层；不要在输出中手工引用或复制。当前页新增图片只能使用上方“相关图片素材”明确列出的路径。"""
+- `images/style-pack/` 下的图片属于代码管理的继承外壳或已授权可复用装饰；不要在输出中手工引用或复制。当前页新增图片只能使用上方“相关图片素材”明确列出的路径。"""
     else:
         template_heading = "# 模板 SVG"
         template_rules = """# 模板使用规范（严格遵守，不是“仅供参考”）

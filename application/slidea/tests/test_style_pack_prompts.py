@@ -8,6 +8,10 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generat
 from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator import node as cover_node
 from core.ppt_generator.thought_to_ppt.svg_page_generators.toc_page_generator import node as toc_node
 
+# Prompt builders are intentionally internal workflow seams; these contract
+# tests call them directly so failures identify the exact prompt layer.
+# pylint: disable=protected-access
+
 
 SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"></svg>'
 
@@ -39,8 +43,10 @@ class StylePackPromptTests(unittest.TestCase):
                 page=page,
             )
         self.assertIn("精确注入参考页的 background、master-content、layout-content", prompt)
+        self.assertIn("显式授权的前后层可复用装饰", prompt)
         self.assertIn("style-reference-only/", prompt)
         self.assertIn("images/style-pack/", prompt)
+        self.assertIn("代码管理的继承外壳或已授权可复用装饰", prompt)
         self.assertIn("不得输出、重画、移动或覆盖这些固定元素", prompt)
 
     def test_special_page_style_prompts_remove_creative_redesign_permission(self):
