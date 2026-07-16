@@ -242,6 +242,28 @@ class RemoveFullSlideSolidBackdropTests(unittest.TestCase):
             self.assertIsNotNone(bg_srgb)
             self.assertEqual(bg_srgb.get("val").upper(), "3366FF")
 
+    def test_large_inset_panel_is_not_mistaken_for_the_background(self):
+        from lxml import etree
+
+        prs = _make_slide_xml_blank_pptx()
+        slide = prs.slides[0]
+        shape_tree = _shape_tree(slide)
+        inset_panel = _build_rect_xml(
+            off=(round(prs.slide_width * 0.05), round(prs.slide_height * 0.05)),
+            ext=(round(prs.slide_width * 0.90), round(prs.slide_height * 0.90)),
+            fill_hex="3366FF",
+            shape_id=302,
+        )
+        shape_tree.append(etree.fromstring(inset_panel))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "demo.pptx"
+            prs.save(str(path))
+            remove_full_slide_solid_backdrops(path)
+            prs2 = Presentation(str(path))
+
+        self.assertEqual(len(_shape_tree(prs2.slides[0]).findall(qn("p:sp"))), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

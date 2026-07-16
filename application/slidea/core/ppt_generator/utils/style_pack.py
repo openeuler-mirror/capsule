@@ -16,6 +16,7 @@ from urllib.parse import unquote, urlparse
 from langchain.messages import HumanMessage
 from pydantic import BaseModel, Field, TypeAdapter
 
+from core.ppt_generator.utils.svg_to_pptx.drawingml_transform import parse_transform_info
 from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
 from core.utils.logger import logger
 
@@ -219,6 +220,7 @@ def _prepare_runtime_reference(
     source: Path,
     target: Path,
     *,
+    page: Any,
     style_pack_root: Path,
     slides_root: Path,
     asset_dir: Path,
@@ -236,6 +238,11 @@ def _prepare_runtime_reference(
         group = _direct_child(root, group_id)
         if group is not None:
             fixed_nodes.update(id(item) for item in group.iter())
+    # Title text and its visual backdrop are sometimes separate slide-level
+    # OOXML shapes. They are part of the deterministic shell as well, so their
+    # texture/logo images must be published with the inherited fixed assets.
+    for group in _reference_title_shell_nodes(root, page):
+        fixed_nodes.update(id(item) for item in group.iter())
 
     for image in (item for item in root.iter() if _local_name(item.tag) == "image"):
         href = _image_href(image)
@@ -296,6 +303,7 @@ def prepare_style_runtime_references(
             _prepare_runtime_reference(
                 source,
                 target,
+                page=page,
                 style_pack_root=style_pack_root,
                 slides_root=slides_root,
                 asset_dir=asset_dir,
@@ -323,15 +331,121 @@ def _min_text_y(element: ET.Element) -> float:
     return min((_float_attr(text, "y", 10_000.0) for text in _text_elements(element)), default=10_000.0)
 
 
-def _reference_title_group(reference_root: ET.Element, page: Any) -> ET.Element | None:
-    # TOC/thanks titles are normally part of layout-content and are already
-    # preserved verbatim. A main-content title is selected for cover, separator
-    # and ordinary content references only.
-    reference_page_type = str(getattr(page, "style_reference_page_type", "") or "")
-    if reference_page_type in {"toc", "thanks"} or (
-        not reference_page_type and int(getattr(page, "type", 1)) == 2
-    ):
+def _multiply_matrix(
+    left: tuple[float, float, float, float, float, float],
+    right: tuple[float, float, float, float, float, float],
+) -> tuple[float, float, float, float, float, float]:
+    a1, b1, c1, d1, e1, f1 = left
+    a2, b2, c2, d2, e2, f2 = right
+    return (
+        a1 * a2 + c1 * b2,
+        b1 * a2 + d1 * b2,
+        a1 * c2 + c1 * d2,
+        b1 * c2 + d1 * d2,
+        a1 * e2 + c1 * f2 + e1,
+        b1 * e2 + d1 * f2 + f1,
+    )
+
+
+def _transform_point(
+    matrix: tuple[float, float, float, float, float, float],
+    x: float,
+    y: float,
+) -> tuple[float, float]:
+    a, b, c, d, e, f = matrix
+    return a * x + c * y + e, b * x + d * y + f
+
+
+def _number_list(value: str | None) -> list[float]:
+    return [
+        float(item)
+        for item in re.findall(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?", value or "")
+    ]
+
+
+def _local_geometry_points(element: ET.Element) -> list[tuple[float, float]]:
+    tag = _local_name(element.tag)
+    if tag in {"rect", "image"}:
+        x, y = _float_attr(element, "x"), _float_attr(element, "y")
+        width, height = _float_attr(element, "width"), _float_attr(element, "height")
+        return [(x, y), (x + width, y), (x, y + height), (x + width, y + height)]
+    if tag == "text":
+        x, y = _float_attr(element, "x"), _float_attr(element, "y")
+        size = max(1.0, _float_attr(element, "font-size", 16.0))
+        width = max(
+            _float_attr(element, "textLength"),
+            _float_attr(element, "data-measured-width"),
+            len(element.text or "") * size * 0.55,
+        )
+        return [(x, y - size), (x + width, y)]
+    if tag == "line":
+        return [
+            (_float_attr(element, "x1"), _float_attr(element, "y1")),
+            (_float_attr(element, "x2"), _float_attr(element, "y2")),
+        ]
+    if tag == "circle":
+        cx, cy, radius = (
+            _float_attr(element, "cx"),
+            _float_attr(element, "cy"),
+            abs(_float_attr(element, "r")),
+        )
+        return [(cx - radius, cy - radius), (cx + radius, cy + radius)]
+    if tag == "ellipse":
+        cx, cy = _float_attr(element, "cx"), _float_attr(element, "cy")
+        rx, ry = abs(_float_attr(element, "rx")), abs(_float_attr(element, "ry"))
+        return [(cx - rx, cy - ry), (cx + rx, cy + ry)]
+    if tag in {"polygon", "polyline"}:
+        values = _number_list(element.get("points"))
+        return list(zip(values[0::2], values[1::2]))
+    if tag == "path":
+        # ooxml-svg emits absolute M/L/C/Q paths for custom DrawingML geometry.
+        values = _number_list(element.get("d"))
+        return list(zip(values[0::2], values[1::2]))
+    return []
+
+
+def _visual_bounds(element: ET.Element) -> tuple[float, float, float, float] | None:
+    points: list[tuple[float, float]] = []
+
+    def visit(
+        node: ET.Element,
+        parent_matrix: tuple[float, float, float, float, float, float],
+    ) -> None:
+        matrix = _multiply_matrix(
+            parent_matrix,
+            parse_transform_info(node.get("transform", "")).matrix,
+        )
+        points.extend(_transform_point(matrix, x, y) for x, y in _local_geometry_points(node))
+        for child in node:
+            visit(child, matrix)
+
+    visit(element, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
+    if not points:
         return None
+    xs, ys = zip(*points)
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _substantially_overlaps(
+    first: tuple[float, float, float, float] | None,
+    second: tuple[float, float, float, float] | None,
+) -> bool:
+    if first is None or second is None:
+        return False
+    left, top = max(first[0], second[0]), max(first[1], second[1])
+    right, bottom = min(first[2], second[2]), min(first[3], second[3])
+    intersection = max(0.0, right - left) * max(0.0, bottom - top)
+    first_area = max(0.0, first[2] - first[0]) * max(0.0, first[3] - first[1])
+    second_area = max(0.0, second[2] - second[0]) * max(0.0, second[3] - second[1])
+    smaller = min(first_area, second_area)
+    return smaller > 0 and intersection / smaller >= 0.35
+
+
+def _reference_title_group(reference_root: ET.Element, page: Any) -> ET.Element | None:
+    # Prefer an explicit main-content title for every page role. Some template
+    # producers serialize TOC/thanks titles on the slide itself rather than in
+    # layout-content; assuming those titles are inherited silently drops them.
+    reference_page_type = str(getattr(page, "style_reference_page_type", "") or "")
     main = _direct_child(reference_root, "main-content")
     if main is None:
         return None
@@ -339,8 +453,8 @@ def _reference_title_group(reference_root: ET.Element, page: Any) -> ET.Element 
     explicit = next((group for group in groups if group.get("data-role") == "header"), None)
     if explicit is not None:
         return explicit
-    if reference_page_type == "content" or (
-        not reference_page_type and int(getattr(page, "type", 1)) == 1
+    if reference_page_type in {"content", "toc"} or (
+        not reference_page_type and int(getattr(page, "type", 1)) in {1, 2}
     ):
         candidates = [
             group for group in groups
@@ -351,6 +465,25 @@ def _reference_title_group(reference_root: ET.Element, page: Any) -> ET.Element 
     # references normally carry data-role=header, but largest-text is a safe
     # fallback for converters that omitted placeholder metadata.
     return max(groups, key=_max_font_size, default=None)
+
+
+def _reference_title_shell_nodes(reference_root: ET.Element, page: Any) -> list[ET.Element]:
+    """Return the title text box plus separate overlapping visual backdrops."""
+    title = _reference_title_group(reference_root, page)
+    main = _direct_child(reference_root, "main-content")
+    if title is None or main is None:
+        return []
+    title_bounds = _visual_bounds(title)
+    result: list[ET.Element] = []
+    for child in main:
+        if child is title:
+            result.append(child)
+            continue
+        if _text_elements(child):
+            continue
+        if _substantially_overlaps(_visual_bounds(child), title_bounds):
+            result.append(child)
+    return result
 
 
 def _replace_group_text(group: ET.Element, value: str) -> None:
@@ -471,11 +604,14 @@ def _reference_body_top(reference_root: ET.Element) -> float:
     main = _direct_child(reference_root, "main-content")
     if main is None:
         return 0.0
-    candidates = [
-        _float_attr(item, "y", 10_000.0)
-        for item in main.iter()
-        if _local_name(item.tag) == "rect" and _float_attr(item, "height") > 40.0
-    ]
+    shell_ids = {id(item) for item in _reference_title_shell_nodes(reference_root, object())}
+    candidates = []
+    for child in main:
+        if id(child) in shell_ids:
+            continue
+        bounds = _visual_bounds(child)
+        if bounds is not None and bounds[1] >= 120.0 and bounds[3] - bounds[1] > 40.0:
+            candidates.append(bounds[1])
     return min(candidates, default=0.0)
 
 
@@ -489,11 +625,12 @@ def _remove_special_page_redesigns(generated_root: ET.Element, reference_root: E
         if _local_name(child.tag) != "g" or child.get(STYLE_SHELL_ATTR) == "true":
             continue
         remove = False
-        if reference_page_type in {"separator", "thanks"}:
+        if reference_page_type == "separator":
             remove = True
-        elif reference_page_type == "cover":
-            # Cover mode may keep simple subtitle/metadata text, but never a
-            # model-invented illustration, card system or concept diagram.
+        elif reference_page_type in {"cover", "thanks"}:
+            # Cover/thanks mode may keep simple subtitle/closing text, but
+            # never a model-invented illustration, card system or concept
+            # diagram.
             remove = not _text_elements(child) or _has_vector_graphics(child)
         elif reference_page_type == "toc":
             # Keep directory entries inside the source placeholder; discard
@@ -537,6 +674,7 @@ def apply_style_reference_shell(svg_content: str, page: Any) -> str:
             generated_root.remove(child)
 
     title = _reference_title_group(reference_root, page)
+    title_shell_nodes = _reference_title_shell_nodes(reference_root, page)
     for child in list(generated_root):
         if child is generated_defs or _local_name(child.tag) != "g":
             continue
@@ -553,9 +691,7 @@ def apply_style_reference_shell(svg_content: str, page: Any) -> str:
         group = _direct_child(reference_root, group_id)
         if group is not None:
             fixed_pairs.append((name, group))
-    reference_nodes = [group for _, group in fixed_pairs]
-    if title is not None:
-        reference_nodes.append(title)
+    reference_nodes = [group for _, group in fixed_pairs] + title_shell_nodes
     clones, definition_clones = _clone_reference_nodes(reference_root, reference_nodes)
     for definition in definition_clones:
         definition.set(STYLE_SHELL_DEF_ATTR, "true")
@@ -572,8 +708,18 @@ def apply_style_reference_shell(svg_content: str, page: Any) -> str:
             clone.set("id", f"slidea-style-{fixed_pairs[index][0]}")
             _update_page_number(clone, int(page.index) + 1, slide_height)
         else:
+            shell_source = title_shell_nodes[index - fixed_count]
+            if shell_source is not title:
+                clone.set("id", f"slidea-style-title-shell-{index - fixed_count + 1}")
+                generated_root.insert(insertion_index, clone)
+                insertion_index += 1
+                continue
             clone.set("id", "slidea-style-page-title")
-            _replace_group_text(clone, str(getattr(page, "title", "")))
+            # A selected thanks page already carries the template's deliberate
+            # closing phrase. Keep that generic fixed title verbatim; replacing
+            # it with an outline label such as “致谢页” degrades the result.
+            if str(getattr(page, "style_reference_page_type", "") or "") != "thanks":
+                _replace_group_text(clone, str(getattr(page, "title", "")))
         generated_root.insert(insertion_index, clone)
         insertion_index += 1
 

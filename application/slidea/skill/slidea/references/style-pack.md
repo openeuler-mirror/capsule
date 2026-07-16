@@ -33,6 +33,8 @@ Do not use screenshots or require visual capability. Read SVG source code to und
 
 Do not describe every converted slide. For a large deck, inspect SVGs in manageable batches and choose only a small, visually distinct set that covers the useful page roles and structures. Normally 4-10 representative pages are enough; use fewer when the source deck has little variation. Unselected SVGs may remain under `reference/` but must not appear in `pages`.
 
+Before assigning `page_type`, verify the selected SVG's actual `<text>` content and `main-content` structure. A cover, TOC or thanks reference must visibly contain that role's real title/content slots. Exclude template license, credits, FAQ, usage instructions, brand-resource and legal notice pages even when their layout looks decorative; never label one of those pages as `cover`, `toc`, `separator` or `thanks`.
+
 Create `<STYLE_PACK_DIR>/style-pack.json` yourself. Use this schema:
 
 ```json

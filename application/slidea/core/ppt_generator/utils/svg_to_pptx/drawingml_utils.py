@@ -238,18 +238,38 @@ def get_effective_filter_id(elem: ET.Element, ctx: ConvertContext) -> str | None
 # Font parsing
 # ---------------------------------------------------------------------------
 
-def parse_font_family(font_family_str: str) -> dict[str, str]:
+def parse_font_family(
+    font_family_str: str,
+    source_font: str | None = None,
+) -> dict[str, str]:
     """Parse CSS font-family into latin/ea typeface names.
 
-    Prioritizes Windows-available fonts since PPTX is primarily opened on
-    Windows. macOS/Linux-only fonts are mapped via FONT_FALLBACK_WIN.
+    CSS selects the first face that contains a glyph. CJK sans fonts such as
+    Microsoft YaHei and Noto Sans CJK also contain Latin glyphs, so a stack
+    like ``Microsoft YaHei, Arial`` must not silently render its digits and
+    Latin text in Arial. ``source_font`` preserves the original OOXML face
+    when ooxml-svg supplied that metadata.
     """
-    if not font_family_str:
+    if not font_family_str and not source_font:
         return {'latin': 'Segoe UI', 'ea': 'Microsoft YaHei'}
 
-    fonts = [f.strip().strip("'\"") for f in font_family_str.split(',')]
-    latin_font = None
-    ea_font = None
+    fonts = (
+        [f.strip().strip("'\"") for f in font_family_str.split(',')]
+        if font_family_str
+        else []
+    )
+    latin_font: str | None = None
+    ea_font: str | None = None
+
+    if source_font:
+        original = source_font.strip().strip("'\"")
+        if original and original not in SYSTEM_FONTS and original not in GENERIC_FONT_MAP:
+            resolved_source = FONT_FALLBACK_WIN.get(original, original)
+            if original in EA_FONTS or resolved_source in EA_FONTS:
+                ea_font = resolved_source
+                latin_font = resolved_source
+            else:
+                latin_font = resolved_source
 
     for font in fonts:
         if font in SYSTEM_FONTS:
@@ -262,6 +282,9 @@ def parse_font_family(font_family_str: str) -> dict[str, str]:
         win_font = FONT_FALLBACK_WIN.get(font, font)
         if font in EA_FONTS:
             ea_font = ea_font or win_font
+            # CJK fonts cover Latin too. Respect the CSS first-match semantics
+            # unless an explicit source face already selected the Latin font.
+            latin_font = latin_font or win_font
         else:
             latin_font = latin_font or win_font
 

@@ -221,6 +221,43 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("style-reference-only/business.png", runtime_text)
             self.assertNotIn("business-content", runtime_text)
 
+    def test_runtime_reference_publishes_separate_title_backdrop_assets(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720" fill="#fff"/></g>
+          <g id="master-content"/>
+          <g id="layout-content"/>
+          <g id="main-content">
+            <g id="title-backdrop"><rect x="40" y="40" width="1200" height="100"/><image href="images/title-texture.png" x="40" y="40" width="1200" height="100"/></g>
+            <g id="source-title" data-role="header"><text x="60" y="110" font-size="48">Source title</text></g>
+            <g id="source-body"><image href="images/business.png" x="100" y="220" width="400" height="300"/></g>
+          </g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pack = self._pack(root)
+            reference = pack / "reference"
+            (reference / "images").mkdir(exist_ok=True)
+            (reference / "images" / "title-texture.png").write_bytes(b"fixed-title-texture")
+            (reference / "images" / "business.png").write_bytes(b"business-content")
+            (reference / "content.svg").write_text(reference_svg, encoding="utf-8")
+            slides = root / "run" / "slides"
+            page = PPTPage(
+                title="New title",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=0,
+                style_reference_id="content",
+            )
+            bind_style_reference_paths([page], pack)
+            prepare_style_runtime_references([page], pack, slides)
+
+            runtime_text = Path(page.style_reference_svg).read_text(encoding="utf-8")
+            assets = list((slides / "images" / "style-pack").iterdir())
+            self.assertEqual(len(assets), 1)
+            self.assertEqual(assets[0].read_bytes(), b"fixed-title-texture")
+            self.assertIn("images/style-pack/", runtime_text)
+            self.assertIn("style-reference-only/business.png", runtime_text)
+
     def test_composer_restores_fixed_shell_title_and_page_number(self):
         reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
           <defs/>
@@ -308,6 +345,83 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("agenda", group_ids)
         self.assertNotIn("main-title", group_ids)
         self.assertNotIn("decor", group_ids)
+
+    def test_toc_composer_restores_slide_level_title(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720"/></g>
+          <g id="master-content"/>
+          <g id="layout-content"><rect x="0" y="0" width="50" height="720"/></g>
+          <g id="main-content">
+            <g id="source-title-backdrop"><rect x="45" y="44" width="1193" height="98" fill="#58C1DD"/></g>
+            <g id="source-toc-title" data-role="header"><text x="70" y="108" font-size="48">Table of contents.</text></g>
+            <g id="source-toc-body"><rect x="134" y="287" width="321" height="133"/><text x="160" y="340">Original item</text></g>
+          </g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="main-title"><text x="60" y="100" font-size="48">模型标题</text></g>
+          <g id="agenda"><rect x="134" y="287" width="321" height="133"/><text x="160" y="340">01 新目录项</text></g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "toc.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="新目录标题",
+                abstract="章节",
+                type=PageType.TOC,
+                index=1,
+                style_reference_svg=str(reference),
+                style_reference_page_type="toc",
+            )
+            root = ET.fromstring(apply_style_reference_shell(generated_svg, page))
+            groups = {child.get("id"): child for child in root if child.get("id")}
+            all_text = [text.text for text in root.iter() if text.tag.rsplit("}", 1)[-1] == "text"]
+
+        self.assertIn("slidea-style-page-title", groups)
+        self.assertIn("slidea-style-title-shell-1", groups)
+        self.assertIn("agenda", groups)
+        self.assertNotIn("main-title", groups)
+        self.assertIn("新目录标题", all_text)
+        self.assertNotIn("Table of contents.", all_text)
+        self.assertNotIn("Original item", all_text)
+
+    def test_thanks_composer_keeps_reference_title_and_simple_closing_copy(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720"/></g>
+          <g id="master-content"/>
+          <g id="layout-content"><rect x="0" y="0" width="50" height="720"/></g>
+          <g id="main-content">
+            <g id="source-thanks-title" data-role="header"><text x="100" y="300" font-size="80">Thank you!</text></g>
+            <g id="source-contact"><text x="100" y="500" font-size="24">private@example.com</text></g>
+          </g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="thanks-title"><text x="100" y="300" font-size="80">模型另画标题</text></g>
+          <g id="closing-copy"><text x="100" y="500" font-size="24">谢谢观看</text></g>
+          <g id="invented-cards"><rect x="100" y="550" width="300" height="100"/><text x="120" y="600">不要保留</text></g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "thanks.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="致谢页",
+                abstract="收束",
+                type=PageType.COVER_THANKS,
+                index=10,
+                style_reference_svg=str(reference),
+                style_reference_page_type="thanks",
+            )
+            root = ET.fromstring(apply_style_reference_shell(generated_svg, page))
+            groups = {child.get("id"): child for child in root if child.get("id")}
+            all_text = [text.text for text in root.iter() if text.tag.rsplit("}", 1)[-1] == "text"]
+
+        self.assertIn("slidea-style-page-title", groups)
+        self.assertIn("closing-copy", groups)
+        self.assertNotIn("thanks-title", groups)
+        self.assertNotIn("invented-cards", groups)
+        self.assertIn("Thank you!", all_text)
+        self.assertIn("谢谢观看", all_text)
+        self.assertNotIn("private@example.com", all_text)
+        self.assertNotIn("致谢页", all_text)
 
 
 if __name__ == "__main__":

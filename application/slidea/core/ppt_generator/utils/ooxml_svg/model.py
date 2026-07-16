@@ -60,6 +60,21 @@ class Rect:
     flip_v: bool = False
 
 
+@dataclass(frozen=True)
+class GeometryCommand:
+    kind: str
+    args: tuple[float, ...] = ()
+
+
+@dataclass
+class GeometryPath:
+    width: float
+    height: float
+    commands: list[GeometryCommand] = field(default_factory=list)
+    fill: bool = True
+    stroke: bool = True
+
+
 @dataclass
 class RunStyle:
     font_family: str = "Arial"
@@ -124,7 +139,9 @@ class Element:
     children: list["Element"] = field(default_factory=list)
     image_part: str | None = None
     image_href: str | None = None
+    image_opacity: float = 1.0
     crop: tuple[float, float, float, float] | None = None
+    custom_geometry: list[GeometryPath] = field(default_factory=list)
     table: Any = None
     chart: Any = None
     warnings: list[str] = field(default_factory=list)

@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-import math
 import re
+import copy
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -14,10 +14,11 @@ from core.utils.logger import logger
 
 from .drawingml_context import ConvertContext, ShapeResult
 from .drawingml_utils import (
-    SVG_NS,
-    _extract_inheritable_styles, resolve_url_id,
+    EMU_PER_PX, SVG_NS,
+    _extract_inheritable_styles, resolve_url_id, ctx_x, ctx_y, px_to_emu,
 )
 from .drawingml_styles import build_effect_xml
+from .drawingml_transform import parse_transform_info
 from .drawingml_elements import (
     convert_rect, convert_circle, convert_ellipse,
     convert_line, convert_path,
@@ -64,54 +65,12 @@ def parse_transform(transform_str: str) -> tuple[float, float, float, float, flo
     Returns:
         (dx, dy, sx, sy, angle_deg) tuple.
     """
-    if not transform_str:
-        return 0.0, 0.0, 1.0, 1.0, 0.0
-
-    dx, dy = 0.0, 0.0
-    sx, sy = 1.0, 1.0
-    angle_deg = 0.0
-
-    # ooxml-svg serializes group coordinate systems as affine matrices.  The
-    # normal PresentationML group case is axis-aligned (b=c=0), so it maps
-    # exactly onto the converter's accumulated translate/scale context.
-    matrix = re.search(
-        r'matrix\(\s*([-.\dEe+]+)[\s,]+([-.\dEe+]+)[\s,]+'
-        r'([-.\dEe+]+)[\s,]+([-.\dEe+]+)[\s,]+'
-        r'([-.\dEe+]+)[\s,]+([-.\dEe+]+)\s*\)',
-        transform_str,
-    )
-    if matrix:
-        a, b, c, d, e, f = (float(matrix.group(i)) for i in range(1, 7))
-        if abs(b) < 1e-9 and abs(c) < 1e-9:
-            return e, f, a, d, 0.0
-        # Rotation-only affine matrices can still be represented by the outer
-        # DrawingML group. Skew has no native equivalent in this converter;
-        # retain its scale/rotation decomposition instead of silently dropping
-        # the entire matrix.
-        scale_x = math.hypot(a, b)
-        determinant = a * d - b * c
-        scale_y = determinant / scale_x if scale_x else math.hypot(c, d)
-        angle_deg = math.degrees(math.atan2(b, a)) if scale_x else 0.0
+    info = parse_transform_info(transform_str)
+    if info.has_skew:
         logger.warning(
-            f"SVG matrix contains rotation/skew; using scale/rotation decomposition: {transform_str}"
+            f"SVG transform contains skew; using scale/rotation decomposition: {transform_str}"
         )
-        return e, f, scale_x or 1.0, scale_y or 1.0, angle_deg
-
-    m = re.search(r'translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)', transform_str)
-    if m:
-        dx = float(m.group(1))
-        dy = float(m.group(2))
-
-    m = re.search(r'scale\(\s*([-\d.]+)(?:[\s,]+([-\d.]+))?\s*\)', transform_str)
-    if m:
-        sx = float(m.group(1))
-        sy = float(m.group(2)) if m.group(2) else sx
-
-    m = re.search(r'rotate\(\s*([-\d.]+)', transform_str)
-    if m:
-        angle_deg = float(m.group(1))
-
-    return dx, dy, sx, sy, angle_deg
+    return info.dx, info.dy, info.sx, info.sy, info.angle_deg
 
 
 # ---------------------------------------------------------------------------
@@ -128,11 +87,24 @@ def convert_g(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
     keep their absolute slide coordinates unchanged.
     """
     transform = elem.get('transform', '')
-    dx, dy, sx, sy, angle_deg = parse_transform(transform)
+    transform_info = parse_transform_info(transform)
+    dx, dy = transform_info.dx, transform_info.dy
+    sx, sy = transform_info.sx, transform_info.sy
+    angle_deg = transform_info.angle_deg
+
+    # Axis-aligned translate/scale can be flattened directly into primitive
+    # coordinates. Rotation (including a 90-degree matrix) must stay on a
+    # DrawingML group; otherwise a nested non-uniform parent scale changes its
+    # pivot and turns a full-width texture into a misplaced rectangle.
+    a, b, c, d, _, _ = transform_info.matrix
+    has_linear_rotation = abs(b) > 1e-9 or abs(c) > 1e-9
 
     filter_id = resolve_url_id(elem.get('filter', ''))
     style_overrides = _extract_inheritable_styles(elem)
-    child_ctx = ctx.child(dx, dy, sx, sy, filter_id, style_overrides)
+    if has_linear_rotation:
+        child_ctx = ctx.child(0, 0, 1, 1, filter_id, style_overrides)
+    else:
+        child_ctx = ctx.child(dx, dy, sx, sy, filter_id, style_overrides)
 
     child_results: list[ShapeResult] = []
     for child in elem:
@@ -151,7 +123,8 @@ def convert_g(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
     # Single-child non-semantic groups are flattened to reduce nesting. Top-level
     # semantic groups are preserved so animations target the group, not its
     # individual child shapes.
-    if len(child_results) == 1 and not should_animate_group:
+    preserves_group_semantics = should_animate_group or has_linear_rotation or bool(filter_id)
+    if len(child_results) == 1 and not preserves_group_semantics:
         return child_results[0]
 
     # Multiple children, or a top-level semantic one-child group: wrap in
@@ -171,10 +144,79 @@ def convert_g(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
     if min_x == float('inf'):
         return ShapeResult(xml='\n'.join(result.xml for result in child_results))
 
-    group_x = int(min_x)
-    group_y = int(min_y)
-    group_w = max(int(max_x - min_x), 1)
-    group_h = max(int(max_y - min_y), 1)
+    group_bounds = (int(min_x), int(min_y), int(max_x), int(max_y))
+    ch_off_x, ch_off_y = int(min_x), int(min_y)
+    ch_ext_w = max(int(max_x - min_x), 1)
+    ch_ext_h = max(int(max_y - min_y), 1)
+    flip_h = flip_v = False
+
+    if has_linear_rotation:
+        parent_sx = ctx.scale_x or 1.0
+        parent_sy = ctx.scale_y or 1.0
+        # Conjugate the SVG linear transform into the already-flattened parent
+        # coordinate system: S_parent * M * inverse(S_parent).
+        effective_a = a
+        effective_b = parent_sy * b / parent_sx
+        effective_c = parent_sx * c / parent_sy
+        effective_d = d
+        effective_info = parse_transform_info(
+            f'matrix({effective_a} {effective_b} {effective_c} {effective_d} 0 0)'
+        )
+        if effective_info.has_skew:
+            logger.warning(
+                f"SVG affine transform contains skew not representable by DrawingML; "
+                f"using the closest scale/rotation group: {transform}"
+            )
+
+        min_px_x, min_px_y = min_x / EMU_PER_PX, min_y / EMU_PER_PX
+        max_px_x, max_px_y = max_x / EMU_PER_PX, max_y / EMU_PER_PX
+        center_parent_x = (min_px_x + max_px_x) / 2
+        center_parent_y = (min_px_y + max_px_y) / 2
+        center_local_x = (center_parent_x - ctx.translate_x) / parent_sx
+        center_local_y = (center_parent_y - ctx.translate_y) / parent_sy
+        ma, mb, mc, md, me, mf = transform_info.matrix
+        transformed_center_x = ma * center_local_x + mc * center_local_y + me
+        transformed_center_y = mb * center_local_x + md * center_local_y + mf
+        center_x = px_to_emu(ctx_x(transformed_center_x, ctx))
+        center_y = px_to_emu(ctx_y(transformed_center_y, ctx))
+
+        group_w = max(round((max_x - min_x) * abs(effective_info.sx)), 1)
+        group_h = max(round((max_y - min_y) * abs(effective_info.sy)), 1)
+        group_x = round(center_x - group_w / 2)
+        group_y = round(center_y - group_h / 2)
+        angle_deg = effective_info.angle_deg
+        flip_h = effective_info.sx < 0
+        flip_v = effective_info.sy < 0
+
+        transformed_corners = []
+        for parent_x, parent_y in (
+            (min_px_x, min_px_y), (max_px_x, min_px_y),
+            (max_px_x, max_px_y), (min_px_x, max_px_y),
+        ):
+            local_x = (parent_x - ctx.translate_x) / parent_sx
+            local_y = (parent_y - ctx.translate_y) / parent_sy
+            target_x = ma * local_x + mc * local_y + me
+            target_y = mb * local_x + md * local_y + mf
+            transformed_corners.append((ctx_x(target_x, ctx), ctx_y(target_y, ctx)))
+        xs, ys = zip(*transformed_corners)
+        group_bounds = (
+            px_to_emu(min(xs)), px_to_emu(min(ys)),
+            px_to_emu(max(xs)), px_to_emu(max(ys)),
+        )
+    elif angle_deg and transform_info.pivot_x is not None:
+        pivot_x = px_to_emu(ctx_x(transform_info.pivot_x, ctx))
+        pivot_y = px_to_emu(ctx_y(transform_info.pivot_y, ctx))
+        half_w = max(abs(min_x - pivot_x), abs(max_x - pivot_x), 0.5)
+        half_h = max(abs(min_y - pivot_y), abs(max_y - pivot_y), 0.5)
+        group_x = round(pivot_x - half_w)
+        group_y = round(pivot_y - half_h)
+        group_w = max(round(half_w * 2), 1)
+        group_h = max(round(half_h * 2), 1)
+    else:
+        group_x = int(min_x)
+        group_y = int(min_y)
+        group_w = max(int(max_x - min_x), 1)
+        group_h = max(int(max_y - min_y), 1)
 
     shapes_xml = '\n'.join(result.xml for result in child_results)
     group_id = ctx.next_id()
@@ -193,6 +235,8 @@ def convert_g(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
 
     rot_emu = int(angle_deg * 60000)
     rot_attr = f' rot="{rot_emu}"' if rot_emu else ''
+    flip_h_attr = ' flipH="1"' if flip_h else ''
+    flip_v_attr = ' flipV="1"' if flip_v else ''
 
     return ShapeResult(xml=f'''<p:grpSp>
 <p:nvGrpSpPr>
@@ -201,16 +245,16 @@ def convert_g(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
 <p:nvPr/>
 </p:nvGrpSpPr>
 <p:grpSpPr>
-<a:xfrm{rot_attr}>
+<a:xfrm{rot_attr}{flip_h_attr}{flip_v_attr}>
 <a:off x="{group_x}" y="{group_y}"/>
 <a:ext cx="{group_w}" cy="{group_h}"/>
-<a:chOff x="{group_x}" y="{group_y}"/>
-<a:chExt cx="{group_w}" cy="{group_h}"/>
+<a:chOff x="{ch_off_x}" y="{ch_off_y}"/>
+<a:chExt cx="{ch_ext_w}" cy="{ch_ext_h}"/>
 </a:xfrm>
 {group_effect}
 </p:grpSpPr>
 {shapes_xml}
-</p:grpSp>''', bounds_emu=(group_x, group_y, group_x + group_w, group_y + group_h))
+</p:grpSp>''', bounds_emu=group_bounds)
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +297,18 @@ def collect_defs(root: ET.Element) -> dict[str, ET.Element]:
 def convert_element(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
     """Dispatch an SVG element to the appropriate converter."""
     tag = elem.tag.replace(f'{{{SVG_NS}}}', '')
+
+    # Treat an element-level transform exactly like a one-child SVG group.
+    # This centralizes ordered transform handling and, importantly, preserves
+    # non-center rotation pivots instead of every primitive parsing only the
+    # first rotate() angle independently.
+    transform = elem.get('transform')
+    if transform and tag != 'g':
+        wrapper = ET.Element(f'{{{SVG_NS}}}g', {'transform': transform})
+        child = copy.deepcopy(elem)
+        child.attrib.pop('transform', None)
+        wrapper.append(child)
+        return convert_g(wrapper, ctx)
 
     converter = _CONVERTERS.get(tag)
     if converter:

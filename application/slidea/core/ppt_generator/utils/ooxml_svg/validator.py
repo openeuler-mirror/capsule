@@ -10,7 +10,18 @@ from .namespaces import SVG
 
 
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
-FORBIDDEN = {"style", "foreignObject", "mask", "script", "iframe", "animate", "animateMotion", "animateTransform", "set", "tspan"}
+FORBIDDEN = {
+    "style",
+    "foreignObject",
+    "mask",
+    "script",
+    "iframe",
+    "animate",
+    "animateMotion",
+    "animateTransform",
+    "set",
+    "tspan",
+}
 
 
 @dataclass
@@ -50,7 +61,9 @@ def validate_svg(path: str | Path) -> ValidationResult:
         result.error("first-visible-group-must-be-background")
     else:
         rect = top_groups[0].find(f"{{{SVG}}}rect")
-        if rect is None or any(rect.get(k) != v for k, v in {"x":"0","y":"0","width":"1280","height":"720"}.items()):
+        if rect is None or any(
+            rect.get(k) != v for k, v in {"x": "0", "y": "0", "width": "1280", "height": "720"}.items()
+        ):
             result.error("background-must-cover-canvas")
     ids: set[str] = set()
     for element in root.iter():
@@ -62,7 +75,12 @@ def validate_svg(path: str | Path) -> ValidationResult:
         if local == "g" and element.get("opacity") is not None:
             result.error("group-opacity-forbidden")
         if local == "image" and element.get("opacity") is not None:
-            result.error("image-opacity-forbidden")
+            try:
+                opacity = float(element.get("opacity"))
+                if not 0 <= opacity <= 1:
+                    result.error(f"image-opacity-out-of-range:{opacity}")
+            except ValueError:
+                result.error(f"invalid-image-opacity:{element.get('opacity')}")
         if local != "image" and element.get("clip-path") is not None:
             result.error(f"clip-path-only-supported-on-image:{local}")
         element_id = element.get("id")
@@ -74,7 +92,9 @@ def validate_svg(path: str | Path) -> ValidationResult:
             if "rgba(" in value.lower():
                 result.error(f"rgba-forbidden:{local}:{etree.QName(key).localname}")
             attr = etree.QName(key).localname
-            if attr in {"fill", "stroke", "stop-color"} and value not in {"none"} and not value.startswith("url(") and not HEX_RE.fullmatch(value):
+            is_paint = attr in {"fill", "stroke", "stop-color"}
+            is_literal_color = value != "none" and not value.startswith("url(")
+            if is_paint and is_literal_color and not HEX_RE.fullmatch(value):
                 result.error(f"non-hex-color:{local}:{attr}:{value}")
         if local == "image":
             href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")

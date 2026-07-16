@@ -16,10 +16,7 @@ from pathlib import Path
 from core.utils.logger import logger
 from core.ppt_generator.utils.svg_pipeline.finalize_svg import embed_local_images_in_file
 from core.ppt_generator.utils.svg_to_pptx import create_pptx_with_native_svg
-from core.ppt_generator.utils.pptx_postprocess import (
-    flatten_all_groups,
-    remove_full_slide_solid_backdrops,
-)
+from core.ppt_generator.utils.pptx_postprocess import remove_full_slide_solid_backdrops
 
 
 async def svgs_to_pptx(
@@ -65,7 +62,6 @@ async def svgs_to_pptx(
     if not ok or not output_path.exists():
         raise Exception("SVG 转 PPTX 失败，请检查 SVG 内容和转换日志。")
 
-    await asyncio.to_thread(flatten_all_groups, output_path)
     await asyncio.to_thread(remove_full_slide_solid_backdrops, output_path)
 
     return "", str(output_path)

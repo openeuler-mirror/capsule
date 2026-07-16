@@ -297,7 +297,8 @@ def build_stroke_xml(
     if not stroke or stroke == 'none':
         return '<a:ln><a:noFill/></a:ln>'
 
-    width = _f(_get_attr(elem, 'stroke-width', ctx), 1.0)
+    stroke_scale = math.sqrt(abs(ctx.scale_x * ctx.scale_y))
+    width = _f(_get_attr(elem, 'stroke-width', ctx), 1.0) * stroke_scale
     width_emu = px_to_emu(width)
 
     # Dash pattern
@@ -310,13 +311,25 @@ def build_stroke_xml(
         else:
             # Unknown pattern → build custDash proportional to stroke width
             try:
-                parts = re.split(r'[\s,]+', dasharray.strip())
-                d_raw = float(parts[0])
-                sp_raw = float(parts[1]) if len(parts) > 1 else d_raw
+                values = [
+                    float(part) * stroke_scale
+                    for part in re.split(r'[\s,]+', dasharray.strip())
+                    if part
+                ]
+                if not values or any(value < 0 for value in values):
+                    raise ValueError('invalid SVG dash array')
+                # SVG repeats an odd-length dash list before applying it.  DrawingML
+                # instead stores explicit dash/space pairs, so emit the whole list
+                # rather than silently keeping only the first pair.
+                if len(values) % 2:
+                    values *= 2
                 sw = max(width, 0.001)
-                d_pct = int(d_raw / sw * 100000)
-                sp_pct = int(sp_raw / sw * 100000)
-                dash_xml = f'<a:custDash><a:ds d="{d_pct}" sp="{sp_pct}"/></a:custDash>'
+                pairs = []
+                for index in range(0, len(values), 2):
+                    d_pct = max(1, int(values[index] / sw * 100000))
+                    sp_pct = max(1, int(values[index + 1] / sw * 100000))
+                    pairs.append(f'<a:ds d="{d_pct}" sp="{sp_pct}"/>')
+                dash_xml = f'<a:custDash>{"".join(pairs)}</a:custDash>'
             except (ValueError, IndexError):
                 dash_xml = '<a:prstDash val="sysDash"/>'
 

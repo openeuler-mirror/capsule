@@ -110,22 +110,34 @@ class Converter:
         validations = [validate_svg(path) for path in svg_files]
         report = {
             "source": source.name,
-            "profile": {"width": self.width, "height": self.height, "semantic_top_groups": True, "embedded_assets": False},
+            "profile": {
+                "width": self.width,
+                "height": self.height,
+                "semantic_top_groups": True,
+                "embedded_assets": False,
+            },
             "stats": asdict(stats),
             "font_resolution": renderer.text_layouter.metrics.audit(),
             "assets": copied_parts,
             "derived_cropped_assets": cropped_parts,
             "slides": [
-                {"number": p.number, "source_part": p.source_part, "warnings": p.warnings,
-                 "elements": len(list(self._walk(p.all_elements))), "file": f"slide{p.number}.svg"}
+                {
+                    "number": p.number,
+                    "source_part": p.source_part,
+                    "warnings": p.warnings,
+                    "elements": len(list(self._walk(p.all_elements))),
+                    "file": f"slide{p.number}.svg",
+                }
                 for p in pages
             ],
             "validation": [asdict(v) for v in validations],
             "limitations": [
                 "Animations, transitions, audio and video are not represented.",
                 "SmartArt, OLE and unknown graphicFrame payloads are reported and omitted.",
-                "Preset geometry outside the implemented registry falls back to a rectangle and is marked data-geometry-fallback.",
-                "Text layout uses an exact source font when available, otherwise the explicitly configured portable fallback font.",
+                "Unsupported preset geometry falls back to a rectangle and is marked "
+                "data-geometry-fallback; explicit numeric custom paths are preserved.",
+                "Text layout uses an exact source font when available, otherwise the "
+                "explicitly configured portable fallback font.",
             ],
         }
         report_file = output_dir / "conversion-report.json"
@@ -152,16 +164,12 @@ class Converter:
                 x1 = max(x0 + 1, min(image.width, round((1 - right) * image.width)))
                 y1 = max(y0 + 1, min(image.height, round((1 - bottom) * image.height)))
                 cropped = image.crop((x0, y0, x1, y1))
-                tag = hashlib.sha1(
-                    f"{source_part}:{left:.8f}:{top:.8f}:{right:.8f}:{bottom:.8f}".encode()
-                ).hexdigest()[:10]
+                crop_signature = f"{source_part}:{left:.8f}:{top:.8f}:{right:.8f}:{bottom:.8f}"
+                tag = hashlib.sha1(crop_signature.encode()).hexdigest()[:10]
                 stem = PurePosixPath(source_part).stem
                 name = f"{stem}-crop-{tag}.png"
                 if name in used_names and used_names[name] != source_part:
-                    name = (
-                        f"{stem}-crop-{tag}-"
-                        f"{hashlib.sha1(source_part.encode()).hexdigest()[:6]}.png"
-                    )
+                    name = f"{stem}-crop-{tag}-" f"{hashlib.sha1(source_part.encode()).hexdigest()[:6]}.png"
                 used_names[name] = source_part
                 cropped.save(images_dir / name, format="PNG")
                 return name
@@ -172,13 +180,20 @@ class Converter:
         stats = ConversionStats(slides=len(pages))
         for page in pages:
             for element in self._walk(page.all_elements):
-                if element.kind == "shape": stats.shapes += 1
-                elif element.kind == "image": stats.pictures += 1
-                elif element.kind == "group": stats.groups += 1
-                elif element.kind == "connector": stats.connectors += 1
-                elif element.kind == "table": stats.tables += 1
-                elif element.kind == "chart": stats.charts += 1
-                elif element.kind == "unsupported": stats.unsupported += 1
+                if element.kind == "shape":
+                    stats.shapes += 1
+                elif element.kind == "image":
+                    stats.pictures += 1
+                elif element.kind == "group":
+                    stats.groups += 1
+                elif element.kind == "connector":
+                    stats.connectors += 1
+                elif element.kind == "table":
+                    stats.tables += 1
+                elif element.kind == "chart":
+                    stats.charts += 1
+                elif element.kind == "unsupported":
+                    stats.unsupported += 1
                 if element.text:
                     stats.text_runs += sum(len(p.runs) for p in element.text.paragraphs)
                 for warning in element.warnings:

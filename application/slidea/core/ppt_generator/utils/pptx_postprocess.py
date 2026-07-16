@@ -76,7 +76,7 @@ def remove_full_slide_solid_backdrops(pptx_path) -> None:
     logger.info(f"Successfully cleaned bottom backdrop shapes in '{pptx_path}'")
 
 
-def _full_slide_solid_fill_rgb(shape, slide_w, slide_h, tol_ratio=0.1):
+def _full_slide_solid_fill_rgb(shape, slide_w, slide_h, tol_ratio=0.01):
     """Return shape's solid-fill RGB iff it has one AND covers the whole slide
     within ``tol_ratio`` of slide dimensions. Otherwise None."""
     rgb = _extract_solid_fill_rgb(shape)
@@ -102,8 +102,16 @@ def _full_slide_solid_fill_rgb(shape, slide_w, slide_h, tol_ratio=0.1):
 def _extract_solid_fill_rgb(shape):
     """Return the shape's solid-fill RGB color, or None if absent/unsupported."""
     shape_element = getattr(shape, "_element")
-    srgb = shape_element.find(f".//{qn('a:solidFill')}/{qn('a:srgbClr')}")
+    # Inspect the shape fill itself, not an arbitrary descendant such as the
+    # outline or text color. The old descendant search could promote a stroke
+    # color to the slide background.
+    srgb = shape_element.find(
+        f"./{qn('p:spPr')}/{qn('a:solidFill')}/{qn('a:srgbClr')}"
+    )
     if srgb is None:
+        return None
+    alpha = srgb.find(qn("a:alpha"))
+    if alpha is not None and int(alpha.get("val", "100000")) < 100000:
         return None
     val = srgb.get("val")
     if not val:

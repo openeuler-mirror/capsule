@@ -7,7 +7,18 @@ from pathlib import PurePosixPath
 from lxml import etree
 
 from .model import (
-    Chart, ChartSeries, Element, Matrix, Page, Paint, Rect, Table, TableCell, TextBody,
+    Chart,
+    ChartSeries,
+    Element,
+    GeometryCommand,
+    GeometryPath,
+    Matrix,
+    Page,
+    Paint,
+    Rect,
+    Table,
+    TableCell,
+    TextBody,
 )
 from .namespaces import A, C, NS, P, R, qn
 from .package import OpcPackage, PackageError
@@ -20,6 +31,22 @@ from .util import flip_matrix, rotate_matrix, safe_id
 class PartShape:
     node: etree._Element
     part: str
+
+
+@dataclass(frozen=True)
+class ParseContext:
+    theme: Theme
+    master: etree._Element | None
+    page_number: int
+    provenance: str
+
+
+@dataclass(frozen=True)
+class ElementIdentity:
+    rect: Rect
+    element_id: str
+    name: str
+    role: str
 
 
 class PresentationParser:
@@ -76,11 +103,15 @@ class PresentationParser:
         show_master = show_master and (layout is None or layout.get("showMasterSp", "1") != "0")
         if show_master and master is not None and master_part:
             page.master_elements = self._parse_static_tree(
-                master, master_part, theme, master, number, "master"
+                master,
+                master_part,
+                ParseContext(theme, master, number, "master"),
             )
         if layout is not None and layout_part:
             page.layout_elements = self._parse_static_tree(
-                layout, layout_part, theme, master, number, "layout"
+                layout,
+                layout_part,
+                ParseContext(theme, master, number, "layout"),
             )
         sp_tree = slide.find("p:cSld/p:spTree", NS)
         if sp_tree is not None:
@@ -95,13 +126,17 @@ class PresentationParser:
                     if layout_match is not None and layout_part:
                         inherited.append(PartShape(layout_match, layout_part))
                         layout_ph = layout_match.find(".//p:ph", NS)
-                        master_match = self._match_placeholder(layout_ph if layout_ph is not None else ph, master_placeholders)
+                        master_match = self._match_placeholder(
+                            layout_ph if layout_ph is not None else ph, master_placeholders
+                        )
                     else:
                         master_match = self._match_placeholder(ph, master_placeholders)
                     if master_match is not None and master_part:
                         inherited.append(PartShape(master_match, master_part))
                 element = self._parse_element(
-                    PartShape(child, slide_part), inherited, theme, master, number, "slide"
+                    PartShape(child, slide_part),
+                    inherited,
+                    ParseContext(theme, master, number, "slide"),
                 )
                 if element is not None:
                     page.slide_elements.append(element)
@@ -132,10 +167,7 @@ class PresentationParser:
         self,
         root: etree._Element,
         part: str,
-        theme: Theme,
-        master: etree._Element | None,
-        page_number: int,
-        provenance: str,
+        context: ParseContext,
     ) -> list[Element]:
         result: list[Element] = []
         sp_tree = root.find("p:cSld/p:spTree", NS)
@@ -146,7 +178,9 @@ class PresentationParser:
             if local in {"nvGrpSpPr", "grpSpPr"} or child.find(".//p:ph", NS) is not None:
                 continue
             element = self._parse_element(
-                PartShape(child, part), [], theme, master, page_number, provenance
+                PartShape(child, part),
+                [],
+                context,
             )
             if element is not None:
                 result.append(element)
@@ -156,8 +190,10 @@ class PresentationParser:
     def _non_visual(node: etree._Element) -> etree._Element | None:
         local = etree.QName(node).localname
         paths = {
-            "sp": "p:nvSpPr/p:cNvPr", "pic": "p:nvPicPr/p:cNvPr",
-            "cxnSp": "p:nvCxnSpPr/p:cNvPr", "grpSp": "p:nvGrpSpPr/p:cNvPr",
+            "sp": "p:nvSpPr/p:cNvPr",
+            "pic": "p:nvPicPr/p:cNvPr",
+            "cxnSp": "p:nvCxnSpPr/p:cNvPr",
+            "grpSp": "p:nvGrpSpPr/p:cNvPr",
             "graphicFrame": "p:nvGraphicFramePr/p:cNvPr",
         }
         return node.find(paths.get(local, ""), NS) if local in paths else None
@@ -215,7 +251,8 @@ class PresentationParser:
             base = rotate_matrix(rotation, center_x, center_y) @ base
         return base
 
-    def _font_ref_color(self, nodes: list[etree._Element], theme: Theme) -> str | None:
+    @staticmethod
+    def _font_ref_color(nodes: list[etree._Element], theme: Theme) -> str | None:
         for node in nodes:
             ref = node.find("p:style/a:fontRef", NS)
             if ref is None:
@@ -223,6 +260,101 @@ class PresentationParser:
             child = next(iter(ref), None)
             return theme.resolve_color(child)[0] if child is not None else None
         return None
+
+    @staticmethod
+    def _blip_opacity(blip: etree._Element | None) -> float:
+        """Resolve DrawingML image alpha modifiers into one SVG opacity."""
+        opacity = 1.0
+        if blip is None:
+            return opacity
+        for effect in blip:
+            kind = etree.QName(effect).localname
+            try:
+                value = float(effect.get("amt", "100000")) / 100000
+            except ValueError:
+                continue
+            if kind in {"alphaModFix", "alphaMod"}:
+                opacity *= value
+            elif kind == "alphaOff":
+                opacity += value
+        return max(0.0, min(1.0, opacity))
+
+    @staticmethod
+    def _custom_geometry(nodes: list[etree._Element]) -> list[GeometryPath]:
+        """Read explicit DrawingML custom paths.
+
+        Exporters such as Google Slides commonly serialize even simple circles
+        and stripes as numeric ``a:custGeom`` paths. Numeric move/line/Bezier
+        commands can be preserved exactly without evaluating guide formulas.
+        """
+        geometry = None
+        for node in nodes:
+            geometry = node.find("p:spPr/a:custGeom", NS)
+            if geometry is not None:
+                break
+        if geometry is None:
+            return []
+
+        result: list[GeometryPath] = []
+        for path in geometry.findall("a:pathLst/a:path", NS):
+            try:
+                width = float(path.get("w", "21600"))
+                height = float(path.get("h", "21600"))
+            except ValueError:
+                continue
+            if width == 0 or height == 0:
+                continue
+            commands: list[GeometryCommand] = []
+            valid = True
+            for command in path:
+                kind = etree.QName(command).localname
+                points = command.findall("a:pt", NS)
+                try:
+                    if kind == "moveTo" and len(points) == 1:
+                        commands.append(GeometryCommand("M", (float(points[0].get("x")), float(points[0].get("y")))))
+                    elif kind == "lnTo" and len(points) == 1:
+                        commands.append(GeometryCommand("L", (float(points[0].get("x")), float(points[0].get("y")))))
+                    elif kind == "cubicBezTo" and len(points) == 3:
+                        commands.append(
+                            GeometryCommand(
+                                "C",
+                                tuple(
+                                    coordinate
+                                    for point in points
+                                    for coordinate in (float(point.get("x")), float(point.get("y")))
+                                ),
+                            )
+                        )
+                    elif kind == "quadBezTo" and len(points) == 2:
+                        commands.append(
+                            GeometryCommand(
+                                "Q",
+                                tuple(
+                                    coordinate
+                                    for point in points
+                                    for coordinate in (float(point.get("x")), float(point.get("y")))
+                                ),
+                            )
+                        )
+                    elif kind == "close":
+                        commands.append(GeometryCommand("Z"))
+                    else:
+                        valid = False
+                        break
+                except (TypeError, ValueError):
+                    valid = False
+                    break
+            if valid and commands:
+                result.append(
+                    GeometryPath(
+                        width=width,
+                        height=height,
+                        commands=commands,
+                        fill=path.get("fill", "norm") != "none",
+                        stroke=path.get("stroke", "1") not in {"0", "false"},
+                    )
+                )
+        return result
 
     def _role(self, node: etree._Element, rect: Rect, ph_type: str | None, provenance: str) -> str:
         if ph_type in {"title", "ctrTitle", "subTitle"}:
@@ -242,10 +374,7 @@ class PresentationParser:
         self,
         own: PartShape,
         inherited: list[PartShape],
-        theme: Theme,
-        master: etree._Element | None,
-        page_number: int,
-        provenance: str,
+        context: ParseContext,
     ) -> Element | None:
         node = own.node
         local = etree.QName(node).localname
@@ -262,7 +391,7 @@ class PresentationParser:
         rect = self._rect(xfrm)
         ph = node.find(".//p:ph", NS)
         ph_type = ph.get("type", "body") if ph is not None else None
-        role = self._role(node, rect, ph_type, provenance)
+        role = self._role(node, rect, ph_type, context.provenance)
         if local == "grpSp":
             element = Element(element_id, name, "group", rect, source_part=own.part, source_id=source_id, role=role)
             element.parent_matrix = self._group_matrix(xfrm)
@@ -271,17 +400,20 @@ class PresentationParser:
                 if child_local in {"nvGrpSpPr", "grpSpPr"}:
                     continue
                 parsed = self._parse_element(
-                    PartShape(child, own.part), [], theme, master, page_number, provenance
+                    PartShape(child, own.part),
+                    [],
+                    context,
                 )
                 if parsed is not None:
                     element.children.append(parsed)
             return element
         if local == "graphicFrame":
-            return self._parse_graphic_frame(own, rect, element_id, name, theme, master, page_number, role)
+            identity = ElementIdentity(rect, element_id, name, role)
+            return self._parse_graphic_frame(own, identity, context)
 
         shape_nodes = [s.node for s in sources]
         inherited_text_nodes = [s.node for s in inherited]
-        style = theme.shape_style(shape_nodes)
+        style = context.theme.shape_style(shape_nodes)
         preset = "line" if local == "cxnSp" else "rect"
         geometry_node = None
         for source in shape_nodes:
@@ -292,9 +424,17 @@ class PresentationParser:
                 break
         kind = {"sp": "shape", "pic": "image", "cxnSp": "connector"}[local]
         element = Element(
-            element_id, name, kind, rect, style=style, preset=preset,
-            source_part=own.part, source_id=source_id, role=role,
+            element_id,
+            name,
+            kind,
+            rect,
+            style=style,
+            preset=preset,
+            source_part=own.part,
+            source_id=source_id,
+            role=role,
         )
+        element.custom_geometry = self._custom_geometry(shape_nodes)
         if geometry_node is not None:
             for guide in geometry_node.findall("a:avLst/a:gd", NS):
                 formula = guide.get("fmla", "").split()
@@ -307,6 +447,7 @@ class PresentationParser:
             element.warnings.append("missing-transform")
         if local == "pic":
             blip = node.find("p:blipFill/a:blip", NS)
+            element.image_opacity = self._blip_opacity(blip)
             rel_id = blip.get(qn(R, "embed"), "") if blip is not None else ""
             rel = self.pkg.related(own.part, rel_id) if rel_id else None
             if rel and not rel.external:
@@ -318,81 +459,101 @@ class PresentationParser:
                 element.crop = tuple(float(src_rect.get(k, "0")) / 100000 for k in ("l", "t", "r", "b"))
             return element
         tx_body = node.find("p:txBody", NS)
-        text_parser = TextParser(theme, master)
+        text_parser = TextParser(context.theme, context.master)
         element.text = text_parser.parse(
             tx_body,
             inherited_text_nodes,
             ph_type,
-            page_number,
-            self._font_ref_color(shape_nodes, theme),
+            context.page_number,
+            self._font_ref_color(shape_nodes, context.theme),
         )
-        if node.find("p:spPr/a:custGeom", NS) is not None:
+        if node.find("p:spPr/a:custGeom", NS) is not None and not element.custom_geometry:
             element.warnings.append("custom-geometry-fallback")
         return element
 
     def _parse_graphic_frame(
         self,
         own: PartShape,
-        rect: Rect,
-        element_id: str,
-        name: str,
-        theme: Theme,
-        master: etree._Element | None,
-        page_number: int,
-        role: str,
+        identity: ElementIdentity,
+        context: ParseContext,
     ) -> Element:
         data = own.node.find("a:graphic/a:graphicData", NS)
         uri = data.get("uri", "") if data is not None else ""
         if data is not None and data.find("a:tbl", NS) is not None:
-            element = Element(element_id, name, "table", rect, source_part=own.part, role=role)
-            element.table = self._parse_table(data.find("a:tbl", NS), theme, master, page_number)
+            element = Element(
+                identity.element_id,
+                identity.name,
+                "table",
+                identity.rect,
+                source_part=own.part,
+                role=identity.role,
+            )
+            element.table = self._parse_table(data.find("a:tbl", NS), context)
             return element
         chart_ref = data.find("c:chart", NS) if data is not None else None
         if chart_ref is not None:
-            element = Element(element_id, name, "chart", rect, source_part=own.part, role="chart")
+            element = Element(
+                identity.element_id,
+                identity.name,
+                "chart",
+                identity.rect,
+                source_part=own.part,
+                role="chart",
+            )
             rel = self.pkg.related(own.part, chart_ref.get(qn(R, "id"), ""))
             if rel and not rel.external:
                 element.chart = self._parse_chart(rel.target)
             else:
                 element.warnings.append("missing-chart-relationship")
             return element
-        element = Element(element_id, name, "unsupported", rect, source_part=own.part, role=role)
+        element = Element(
+            identity.element_id,
+            identity.name,
+            "unsupported",
+            identity.rect,
+            source_part=own.part,
+            role=identity.role,
+        )
         element.warnings.append(f"unsupported-graphic-frame:{uri}")
         return element
 
+    @staticmethod
     def _parse_table(
-        self,
         table_node: etree._Element,
-        theme: Theme,
-        master: etree._Element | None,
-        page_number: int,
+        context: ParseContext,
     ) -> Table:
         widths = [float(col.get("w", "0")) for col in table_node.findall("a:tblGrid/a:gridCol", NS)]
         heights: list[float] = []
         rows: list[list[TableCell]] = []
-        text_parser = TextParser(theme, master)
+        text_parser = TextParser(context.theme, context.master)
         for tr in table_node.findall("a:tr", NS):
             heights.append(float(tr.get("h", "0")))
             row: list[TableCell] = []
             for tc in tr.findall("a:tc", NS):
                 tx_body = tc.find("a:txBody", NS)
-                text = text_parser.parse(tx_body, [], None, page_number) or TextBody()
+                text = text_parser.parse(tx_body, [], None, context.page_number) or TextBody()
                 tc_pr = tc.find("a:tcPr", NS)
-                fill = theme.parse_paint(tc_pr)
-                row.append(TableCell(
-                    text=text,
-                    fill=fill,
-                    row_span=int(tc.get("rowSpan", "1")),
-                    col_span=int(tc.get("gridSpan", "1")),
-                ))
+                fill = context.theme.parse_paint(tc_pr)
+                row.append(
+                    TableCell(
+                        text=text,
+                        fill=fill,
+                        row_span=int(tc.get("rowSpan", "1")),
+                        col_span=int(tc.get("gridSpan", "1")),
+                    )
+                )
             rows.append(row)
         return Table(widths, heights, rows)
 
     def _parse_chart(self, chart_part: str) -> Chart:
         root = self.pkg.xml(chart_part)
         type_map = {
-            "barChart": "bar", "lineChart": "line", "pieChart": "pie",
-            "doughnutChart": "doughnut", "areaChart": "area", "scatterChart": "scatter",
+            "barChart": "bar",
+            "lineChart": "line",
+            "pieChart": "pie",
+            "doughnutChart": "doughnut",
+            "areaChart": "area",
+            "scatterChart": "scatter",
         }
         chart_node = None
         chart_type = "unknown"
