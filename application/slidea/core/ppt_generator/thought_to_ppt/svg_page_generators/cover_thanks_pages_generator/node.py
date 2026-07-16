@@ -8,6 +8,7 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_ge
     CoverThanksPagesState,
 )
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.graph import generate_ppt_page_app
+from core.ppt_generator.utils.style_pack import reference_svg_for_page
 
 
 def _svg_prompt_header() -> str:
@@ -19,6 +20,23 @@ def _svg_prompt_header() -> str:
 
 
 def _build_cover_prompt(*, query, outline, save_dir, ppt_prompt, template, language, page) -> str:
+    template, is_style_reference = reference_svg_for_page(page, template)
+    if is_style_reference:
+        design_requirements = """- 这是用户示例 PPT 中预分配的封面参考页。代码会精确注入其背景、母版、版式、Logo、固定图片、装饰和标题位置。
+- 不要输出或重画主标题、全页背景、Logo、页眉页脚和固定装饰；只生成参考页可替换区域中的最少必要副标题、作者、部门、日期等动态文字。
+- 动态文字必须沿用参考页现有文字槽的坐标、对齐、字体层级和留白；没有相应文字槽就不要擅自新增。
+- 禁止复制原示例中的部门、作者、日期、密级等具体内容，禁止引用 `style-reference-only/` 或 `images/style-pack/` 图片路径。
+- 不得新增概念图、流程图、卡片、时间线或另一套视觉装饰；封面构图应与参考页基本一致。"""
+        template_heading = "# 用户示例 PPT 封面参考 SVG"
+    else:
+        design_requirements = """- 这是内置模板示意。
+- 只包含标题与最少必要副标题，不要堆叠正文。
+- 配色必须与下方模板示意 SVG 中的配色保持一致!
+- 不要参考模板中的具体文字内容，只参考视觉风格。
+- 这是封面，不是内容页；模板中关于内容页标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
+- 需要保留同套 PPT 的主要视觉装饰与识别特征，包括主要装饰、主色、背景和字体气质；除此之外可以发挥创造力，设计符合用户要求的封面版式。
+- 不要为了遵守内容页模板而强行使用内容页标题栏布局。"""
+        template_heading = "# 模板 SVG"
     return f"""
 {_svg_prompt_header()}
 
@@ -27,22 +45,34 @@ def _build_cover_prompt(*, query, outline, save_dir, ppt_prompt, template, langu
 {page.abstract}
 
 # 设计要求
-- 只包含标题与最少必要副标题，不要堆叠正文。
-- 配色必须与下方模板示意 SVG 中的配色保持一致!
-- 不要参考模板中的具体文字内容，只参考视觉风格。
-- 这是封面，不是内容页；模板中关于内容页标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
-- 需要保留同套 PPT 的主要视觉装饰与识别特征，包括主要装饰、主色、背景和字体气质；除此之外可以发挥创造力，设计符合用户要求的封面版式。
-- 不要为了遵守内容页模板而强行使用内容页标题栏布局。
+{design_requirements}
 
 # 语言
 生成页面文字必须使用：{language}
 
-# 模板 SVG
+{template_heading}
 {template}
 """
 
 
 def _build_thanks_prompt(*, query, outline, save_dir, ppt_prompt, template, language, page) -> str:
+    template, is_style_reference = reference_svg_for_page(page, template)
+    if is_style_reference:
+        design_requirements = """- 这是用户示例 PPT 中预分配的致谢/收束页。代码会精确注入其背景、母版、版式、Logo、固定图片、固定致谢标题和装饰。
+- 不要输出或重画大号致谢标题、全页背景、Logo、版权区、页眉页脚和固定装饰；只在参考页确有可替换正文槽时生成一句简短收束语。
+- 可替换文字必须沿用参考页对应文字槽的坐标、对齐、字体层级和留白；没有正文槽时可以不增加任何动态元素。
+- 禁止复制原示例中的业务文字、公司信息和图片路径；禁止引用 `style-reference-only/` 或 `images/style-pack/`。
+- 不得新增时间线、流程、卡片、图标阵列或另一套视觉装饰；致谢页构图应与参考页基本一致。"""
+        template_heading = "# 用户示例 PPT 致谢页参考 SVG"
+    else:
+        design_requirements = """- 这是内置模板示意。
+- 内容简洁，主体是一句致谢/收束语，不要堆叠正文。
+- 配色必须与下方模板示意 SVG 中的配色保持一致!
+- 不要参考模板中的具体文字内容，只参考视觉风格。
+- 这是致谢页，不是内容页；模板中关于内容页标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
+- 需要保留同套 PPT 的主要视觉装饰与识别特征，包括主色、背景和字体气质；除此之外可以发挥创造力，设计符合用户要求的致谢/收束页版式。
+- 不要为了遵守内容页模板而强行使用内容页标题栏布局。"""
+        template_heading = "# 模板 SVG"
     return f"""
 {_svg_prompt_header()}
 
@@ -54,17 +84,12 @@ PPT 整体大纲如下：
 {outline}
 
 # 设计要求
-- 内容简洁，主体是一句致谢/收束语，不要堆叠正文。
-- 配色必须与下方模板示意 SVG 中的配色保持一致!
-- 不要参考模板中的具体文字内容，只参考视觉风格。
-- 这是致谢页，不是内容页；模板中关于内容页标题位置、标题字体字号、main-content-safe-area、content-placeholder、正文安全区等要求不适用于本页。
-- 需要保留同套 PPT 的主要视觉装饰与识别特征，包括主色、背景和字体气质；除此之外可以发挥创造力，设计符合用户要求的致谢/收束页版式。
-- 不要为了遵守内容页模板而强行使用内容页标题栏布局。
+{design_requirements}
 
 # 语言
 生成页面文字必须使用：{language}
 
-# 模板 SVG
+{template_heading}
 {template}
 """
 

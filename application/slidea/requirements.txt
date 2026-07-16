@@ -19,4 +19,6 @@ PyMuPDF
 python-pptx
 python-docx
 cairosvg
+Pillow>=10
+lxml>=5
 beautifulsoup4

@@ -48,6 +48,8 @@ python3 scripts/run_ppt_pipeline.py --text "<request>"
 | `--research-mode` | No | Runtime override for research routing: `skip`, `simple`, `deep` |
 | `--use-cache` | No | String boolean controlling cache-backed reuse |
 | `--image-search` | No | String boolean override for web image search |
+| `--style-pack` | No | Prepared style-pack directory. The pack is validated and copied into the run. |
+| `--allow-style-source-content` | No | Explicitly allow the style pack's source PPTX to also be read as content. Use only for intentional dual use. |
 | `--run-id` | No | Explicit run id override. Rarely needed — staged execution and resume auto-recover `run_id` from `--session-id`. |
 | `--recursion-limit` | No | LangGraph recursion limit, default `500` |
 | `--dry-run` | No | Run preflight only and skip generation |
@@ -55,6 +57,8 @@ python3 scripts/run_ppt_pipeline.py --text "<request>"
 Any additional render-backend flag is intentionally not advertised here. The default and only route exposed through this doc is SVG; alternative backends are opt-in and documented only in the repository README.
 
 At least one of `--text` or `--resume` is required.
+
+`--text` is both the natural-language request and the content-source channel: document paths and URLs found there are parsed and added to the writing references. When `--style-pack` is used, do not include the reference PPTX path/URL in `--text`; style is already supplied by the pack. If the pack's `source` PPTX is found in `--text`, the CLI returns `invalid_request` before generation. The rare intentional dual-use case requires `--allow-style-source-content`.
 
 ### Request validity rules
 
@@ -449,3 +453,18 @@ This document covers:
 - the distinction between stable CLIs and internal executable helpers.
 
 If a new entrypoint is added later, update this file and keep the distinction between public and developer-only interfaces explicit.
+
+To follow a prepared reference-PPT style pack:
+
+```bash
+SESSION_ID=<new-unique-id>
+.venv/bin/python scripts/pptx_to_style_pack.py reference.pptx --session-id "$SESSION_ID"
+# Agent reads selected SVG files and authors /tmp/slidea/style-packs/$SESSION_ID/style-pack.json.
+.venv/bin/python scripts/validate_style_pack.py "/tmp/slidea/style-packs/$SESSION_ID"
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --text "<request>" \
+  --session-id "$SESSION_ID" \
+  --style-pack "/tmp/slidea/style-packs/$SESSION_ID"
+```
+
+The conversion command always writes to `/tmp/slidea/style-packs/<session-id>` and creates SVG material only; it does not create a manifest or previews. The Agent selects a small representative subset and writes the manifest from SVG source. At pipeline startup, the validated pack is copied to `output/<run_id>/style_pack/`. Reference ids are selected during outline generation and saved in `outline/outline.json`. Before parallel generation, only fixed master/layout images are copied into `slides/images/style-pack`; body images from the source deck remain reference-only. Generated style-mode pages receive the assigned reference background, master/layout, title, header/footer, fixed logos and page-number format through deterministic composition after generation and repair. Invalid packs, assignments or fixed-asset preflight fall back to the built-in template workflow for the entire run.

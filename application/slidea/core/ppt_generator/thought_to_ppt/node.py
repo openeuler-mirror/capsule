@@ -7,6 +7,10 @@ from core.ppt_generator.thought_to_ppt.outline_generator.node import (
 )
 from core.ppt_generator.thought_to_ppt.state import PPTState, PageType, PPTPage
 from core.ppt_generator.thought_to_ppt.outline_generator.graph import generate_outline_app
+from core.ppt_generator.utils.style_pack import (
+    assign_style_references_for_outline,
+    bind_style_reference_paths,
+)
 
 from core.utils.cache import get_run_id, run_dir_from_config, load_json, save_json
 from core.utils.config import app_base_dir
@@ -51,17 +55,45 @@ def _normalize_outline_list(outline_list: list) -> list:
     return cleaned
 
 
+def _outline_page_dump(page: PPTPage, *, include_style_reference: bool) -> dict:
+    """Keep the saved outline portable and expose style fields only in style mode."""
+    data = page.model_dump()
+    data.pop("style_reference_svg", None)
+    data.pop("style_reference_page_type", None)
+    if not include_style_reference:
+        data.pop("style_reference_id", None)
+    return data
+
+
 async def generate_outline_node(state: PPTState, config: RunnableConfig | None = None):
     """generate ppt outline"""
     run_dir = run_dir_from_config(config, str(app_base_dir))
     run_id = get_run_id(config)
+    style_pack_dir = state.get("style_pack_dir", "")
     if run_dir:
         cached = load_json(f"{run_dir}/outline/outline.json")
         if cached:
             outline = [PPTPage(**item) for item in cached.get("outline", [])]
             topic = cached.get("topic")
             if outline and topic:
-                return {"outline": outline, "topic": topic}
+                if style_pack_dir:
+                    try:
+                        bind_style_reference_paths(outline, style_pack_dir)
+                        return {
+                            "outline": outline,
+                            "topic": topic,
+                            "style_pack_dir": style_pack_dir,
+                        }
+                    except Exception as error:
+                        logger.warning(
+                            "cached outline has no complete style assignment; "
+                            f"using built-in templates instead: {error}"
+                        )
+                for page in outline:
+                    page.style_reference_id = ""
+                    page.style_reference_svg = ""
+                    page.style_reference_page_type = ""
+                return {"outline": outline, "topic": topic, "style_pack_dir": ""}
 
     task_payload = {
         "user_query": state["query"],
@@ -109,20 +141,43 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
                            abstract=ppt["abstract"],
                            type=ppt["type"],
                            index=idx,
+                           source=chapter_idx,
                            reference_doc=reference_doc,
                            reference_images=images,
                            reference_doc_is_full_context=reference_doc_is_full_context)
         outline.append(ppt_page)
 
+    if style_pack_dir:
+        try:
+            await assign_style_references_for_outline(outline, style_pack_dir)
+            logger.info(
+                "style references were selected during outline generation and saved with outline.json"
+            )
+        except Exception as error:
+            logger.warning(
+                "outline style assignment failed; using the built-in template workflow: "
+                f"{error}"
+            )
+            style_pack_dir = ""
+            for page in outline:
+                page.style_reference_id = ""
+                page.style_reference_svg = ""
+                page.style_reference_page_type = ""
+
     result = {
         "outline": outline,
         "topic": outline_results["final_output"][0]["title"],
+        "style_pack_dir": style_pack_dir,
     }
     if run_dir:
         save_json(f"{run_dir}/outline/outline.json", {
             "run_id": run_id,
             "topic": result["topic"],
-            "outline": [p.model_dump() for p in outline]
+            "style_pack_dir": style_pack_dir,
+            "outline": [
+                _outline_page_dump(p, include_style_reference=bool(style_pack_dir))
+                for p in outline
+            ],
         })
 
     return result

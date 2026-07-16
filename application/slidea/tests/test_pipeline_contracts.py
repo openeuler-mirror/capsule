@@ -19,6 +19,24 @@ class PipelineContractTests(unittest.TestCase):
         self.assertIn("`ppt.json`", content)
         self.assertIn("output/<run_id>/ppt.json", content)
 
+    def test_skill_separates_style_source_from_content_request(self):
+        content = (ROOT / "skill/slidea/SKILL.md").read_text(encoding="utf-8")
+        style_reference = (ROOT / "skill/slidea/references/style-pack.md").read_text(encoding="utf-8")
+
+        self.assertIn("must not appear in Phase 2 `--text`", content)
+        self.assertIn("Keep style and content channels separate", style_reference)
+        self.assertIn("--allow-style-source-content", style_reference)
+
+    def test_style_pack_preparation_uses_session_scoped_tmp_directory(self):
+        skill = (ROOT / "skill/slidea/SKILL.md").read_text(encoding="utf-8")
+        style_reference = (ROOT / "skill/slidea/references/style-pack.md").read_text(encoding="utf-8")
+        converter = (ROOT / "scripts/pptx_to_style_pack.py").read_text(encoding="utf-8")
+
+        self.assertIn("`/tmp/slidea/style-packs/<SESSION_ID>`", skill)
+        self.assertIn("--session-id <SESSION_ID>", style_reference)
+        self.assertIn('STYLE_PACK_TEMP_ROOT = Path("/tmp/slidea/style-packs")', converter)
+        self.assertIn('"--session-id",', converter)
+
     def test_deep_research_context_declares_os_import(self):
         source = (ROOT / "core/deep_research/context.py").read_text(encoding="utf-8")
         module = ast.parse(source)

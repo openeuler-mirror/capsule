@@ -22,6 +22,7 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generat
     ImageScoreResult,
 )
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.graph import generate_ppt_page_app
+from core.ppt_generator.utils.style_pack import reference_svg_for_page
 
 
 def _svg_prompt_header() -> str:
@@ -39,6 +40,25 @@ def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
         if page.reference_doc_is_full_context
         else "# 可参考的相关资料（含本页文档要点 + 已检索/评分排序后的图片素材）如下："
     )
+    template, is_style_reference = reference_svg_for_page(page, template)
+    if is_style_reference:
+        template_heading = "# 用户示例 PPT 中为本页预分配的参考页 SVG"
+        template_rules = """# Style pack 参考页使用规范
+- 代码会在生成后精确注入参考页的 background、master-content、layout-content、标题区、页眉、页脚、Logo 和页码。你只生成当前页的动态主体内容，不得输出、重画、移动或覆盖这些固定元素。
+- 动态主体必须位于参考页正文区域内，避开顶部标题区和底部页脚区；不得新增另一套页眉、页脚、页码、Logo、顶栏、底栏或全页背景。
+- 参考页的标题坐标、配色、字体层级、视觉重心、分栏/卡片关系、留白、圆角和线条语言都是强约束；允许替换内容和调整卡片数量，但不得另起一套装饰系统。
+- 禁止复制参考页中的原始正文、数字、业务图片和可能的用户敏感信息。`style-reference-only/` 下的图片是明确不可用的原示例业务图片。
+- `images/style-pack/` 下的图片仅属于代码注入的固定母版/版式层；不要在输出中手工引用或复制。当前页新增图片只能使用上方“相关图片素材”明确列出的路径。"""
+    else:
+        template_heading = "# 模板 SVG"
+        template_rules = """# 模板使用规范（严格遵守，不是“仅供参考”）
+- 严格保留模板的标题栏、装饰元素、页眉页脚、页码格式、配色、字体与卡片骨架（如果有的话）。
+- 模板 SVG 中的 id 与 data-description 是强约束说明：id 为 background、slide-background、header、page-title-text、main-content-frame，或以 template-、top-accent、bottom-accent、content-frame、title-accent 开头的元素代表固定模板结构，内容页必须复用并保持其位置、尺寸、颜色、字体和层级关系。
+- 对于 header / page-title-text：内容页标题区必须沿用模板给定的位置、字体、字号、字重、颜色和顶部蓝条，只替换标题文字为本页标题；禁止新增标题装饰。
+- 对于 main-content-safe-area / content-safe-area-guide：正式输出时必须删除这个辅助边界框；实际内容应布局在它描述的安全范围内。
+- 对于 main-content-frame 及 content-frame-*：如果 data-description 标注为主体装饰框，正式输出时必须保留。
+- 对于 content-placeholder 及其子元素：它们只是占位提示，正式输出时必须删除。
+- 并行生成的不同内容页必须保持模板基础格式一致；其他内容可以按当前页需求发挥。"""
     return f"""
 {_svg_prompt_header()}
 
@@ -65,25 +85,12 @@ def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
 - 严禁编造图片文件名，包括 `图片1.png`、`图片2.png`、`image1.jpg`、`pic.png` 等占位名；只能逐字引用上方列出的真实文件名。
 - 当资料里给出了图片时，可适度使用 <image> 提升表达，但宁可不用，也不要拼凑。
 
-# 模板使用规范（严格遵守，不是"仅供参考"）
-- 严格保留模板的标题栏、装饰元素、页眉页脚、页码格式、配色、字体与卡片骨架（如果有的话）。
-- 模板 SVG 中的 id 与 data-description 是强约束说明：id 为 background、slide-background、header、
-  page-title-text、main-content-frame，或以 template-、top-accent、bottom-accent、content-frame、
-  title-accent 开头的元素代表固定模板结构，内容页必须复用并保持其位置、尺寸、颜色、字体和层级关系。
-- 对于 header / page-title-text：内容页标题区必须沿用模板给定的位置、字体、字号、字重、颜色和顶部蓝条，
-  只替换标题文字为本页标题；特别是标题不要有额外样式设计，禁止新增标题下横线、左侧竖条、图标、徽标、
-  阴影、标题背景块、渐变或其他装饰，不要重新设计标题区。
-- 对于 main-content-safe-area / content-safe-area-guide：该虚线 rect 只说明主要内容可撰写范围，
-  正式输出时必须删除这个辅助边界框；正文、图表、图片、卡片等实际内容应布局在它描述的安全范围内。
-- 对于 main-content-frame 及 content-frame-*：如果 data-description 标注为主体装饰框，正式输出时必须保留，不要当作辅助边界框删除。
-- 对于 content-placeholder 及其子元素：它们只是占位提示，正式输出时必须删除，不要保留 CONTENT_AREA、实际内容或类似占位文字。
-- 并行生成同一套 PPT 的不同内容页时，必须保持模板基础格式一致：标题区、装饰条、背景、字体层级、主色、留白节奏一致；除模板已有装饰外，不要额外发挥出新的页面装饰系统。
-- 其他内容可以尽情发挥，撰写一页能满足用户内容要求的PPT！
+{template_rules}
 
 # 语言
 生成页面文字必须使用：{language}
 
-# 模板 SVG
+{template_heading}
 {template}
 """
 

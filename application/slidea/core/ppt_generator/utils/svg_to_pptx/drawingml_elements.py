@@ -20,9 +20,10 @@ from .drawingml_utils import (
     px_to_emu, _f, _get_attr,
     ctx_x, ctx_y, ctx_w, ctx_h,
     parse_hex_color, resolve_url_id, get_effective_filter_id,
-    parse_font_family, is_cjk_char, estimate_text_width,
+    parse_font_family,
     _xml_escape,
 )
+from .font_metrics import ascent_descent, measure_runs
 from .drawingml_styles import (
     build_solid_fill, build_gradient_fill,
     build_fill_xml, build_stroke_xml, build_effect_xml, classify_filter_effect,
@@ -656,13 +657,21 @@ def _override_run_attrs(
         if c:
             run_attrs['fill'] = c
     if tspan.get('font-size'):
-        run_attrs['font_size'] = _f(tspan.get('font-size'), run_attrs['font_size'])
+        run_attrs['font_size'] = (
+            _f(tspan.get('font-size'), run_attrs['font_size'])
+            * run_attrs.get('_scale_y', 1.0)
+        )
     if tspan.get('font-family'):
         run_attrs['font_family'] = tspan.get('font-family')
     if tspan.get('font-style'):
         run_attrs['font_style'] = tspan.get('font-style')
     if tspan.get('text-decoration'):
         run_attrs['text_decoration'] = tspan.get('text-decoration')
+    if tspan.get('letter-spacing'):
+        run_attrs['letter_spacing'] = (
+            _f(tspan.get('letter-spacing'), run_attrs.get('letter_spacing', 0.0))
+            * run_attrs.get('_scale_x', 1.0)
+        )
     return run_attrs
 
 
@@ -740,12 +749,17 @@ def _build_run_xml(
     opacity = run.get('opacity')
 
     text_dec = run.get('text_decoration', '')
+    letter_spacing = float(run.get('letter_spacing', 0) or 0)
 
     sz = round(fs_px * FONT_PX_TO_HUNDREDTHS_PT)
     b_attr = ' b="1"' if fw in ('bold', '600', '700', '800', '900') else ''
     i_attr = ' i="1"' if fstyle == 'italic' else ''
     u_attr = ' u="sng"' if 'underline' in text_dec else ''
     strike_attr = ' strike="sngStrike"' if 'line-through' in text_dec else ''
+    spc_attr = (
+        f' spc="{round(letter_spacing * FONT_PX_TO_HUNDREDTHS_PT)}"'
+        if abs(letter_spacing) > 1e-9 else ''
+    )
 
     fonts = parse_font_family(ff) if ff else default_fonts
 
@@ -760,7 +774,7 @@ def _build_run_xml(
         fill_xml = f'<a:solidFill><a:srgbClr val="{fill}">{alpha_xml}</a:srgbClr></a:solidFill>'
 
     return f'''<a:r>
-<a:rPr lang="zh-CN" sz="{sz}"{b_attr}{i_attr}{u_attr}{strike_attr} dirty="0">
+<a:rPr lang="zh-CN" sz="{sz}"{b_attr}{i_attr}{u_attr}{strike_attr}{spc_attr} dirty="0">
 {fill_xml}
 {effect_xml}
 <a:latin typeface="{_xml_escape(fonts['latin'])}"/>
@@ -784,6 +798,7 @@ def convert_text(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
     opacity = get_fill_opacity(elem, ctx)
     font_style = _get_attr(elem, 'font-style', ctx) or ''
     text_decoration = _get_attr(elem, 'text-decoration', ctx) or ''
+    letter_spacing = _f(_get_attr(elem, 'letter-spacing', ctx), 0) * ctx.scale_x
 
     fonts = parse_font_family(font_family_str)
 
@@ -795,6 +810,9 @@ def convert_text(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
         'font_family': font_family_str,
         'font_style': font_style,
         'text_decoration': text_decoration,
+        'letter_spacing': letter_spacing,
+        '_scale_x': ctx.scale_x,
+        '_scale_y': ctx.scale_y,
         'opacity': opacity,
     }
     runs = _build_text_runs(elem, parent_attrs)
@@ -806,32 +824,41 @@ def convert_text(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
     if not full_text.strip():
         return None
 
-    # Estimate text dimensions
-    text_width = estimate_text_width(full_text, font_size, font_weight) * 1.15
-    text_height = font_size * 1.5
-    padding = font_size * 0.1
+    # ooxml-svg emits an exact measured-width contract. Prefer it over any
+    # local re-measurement. Native Slidea SVGs do not carry this metadata, so
+    # they are measured using the same bundled Noto face used for preview.
+    width_raw = elem.get('textLength') or elem.get('data-measured-width')
+    try:
+        text_width = float(width_raw) * ctx.scale_x if width_raw else measure_runs(runs)
+    except (TypeError, ValueError):
+        text_width = measure_runs(runs)
+
+    ascent_raw = elem.get('data-font-ascent')
+    descent_raw = elem.get('data-font-descent')
+    try:
+        ascent = float(ascent_raw) * ctx.scale_y if ascent_raw else 0.0
+        descent = float(descent_raw) * ctx.scale_y if descent_raw else 0.0
+    except (TypeError, ValueError):
+        ascent = descent = 0.0
+    if ascent <= 0:
+        ascent, descent = ascent_descent(font_size, font_weight)
+
+    # A small right/bottom guard prevents the final YaHei mapping from
+    # clipping on hosts whose glyph bounds differ slightly from Noto. It does
+    # not shift the SVG anchor point.
+    guard = max(1.0, font_size * 0.08)
+    box_w = max(1.0, text_width + guard)
+    box_h = max(1.0, ascent + descent + guard)
 
     # Adjust position based on text-anchor
     if text_anchor == 'middle':
-        box_x = x - text_width / 2 - padding
+        box_x = x - box_w / 2
     elif text_anchor == 'end':
-        box_x = x - text_width - padding
+        box_x = x - box_w
     else:
-        box_x = x - padding
+        box_x = x
 
-    box_y = y - font_size * 0.85
-    box_w = text_width + padding * 2
-    box_h = text_height + padding
-
-    # Letter spacing
-    spc_attr = ''
-    letter_spacing = _get_attr(elem, 'letter-spacing', ctx)
-    if letter_spacing:
-        try:
-            spc_val = float(letter_spacing) * 100
-            spc_attr = f' spc="{int(spc_val)}"'
-        except ValueError:
-            pass
+    box_y = y - ascent
 
     # Text rotation. SVG's rotate(angle [cx cy]) rotates around (cx, cy), but
     # DrawingML's <a:xfrm rot="..."> rotates the shape around its own center.
@@ -901,11 +928,11 @@ def convert_text(elem: ET.Element, ctx: ConvertContext) -> ShapeResult | None:
 </p:spPr>
 <p:txBody>
 <a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t" anchorCtr="0">
-<a:spAutoFit/>
+<a:noAutofit/>
 </a:bodyPr>
 <a:lstStyle/>
 <a:p>
-<a:pPr algn="{algn}"/>
+<a:pPr algn="{algn}"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc></a:pPr>
 {runs_xml}
 </a:p>
 </p:txBody>

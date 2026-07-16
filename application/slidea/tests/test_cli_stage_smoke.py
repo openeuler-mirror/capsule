@@ -8,6 +8,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+# CLI guard helpers are exercised directly to keep these tests fast and isolated.
+# pylint: disable=protected-access
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "run_ppt_pipeline.py"
@@ -167,6 +170,44 @@ class CliStageSmokeTests(unittest.TestCase):
         self.assertEqual(run_payload["render_mode"], "svg")
         self.assertEqual(run_payload["text"], "demo")
         self.assertFalse(run_payload["resume"])
+
+    def test_style_source_pptx_in_text_is_rejected_before_generation(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pack = Path(tmp_dir) / "style-pack"
+            pack.mkdir()
+            (pack / "style-pack.json").write_text(
+                json.dumps({"version": 1, "source": "demo.pptx", "pages": []}),
+                encoding="utf-8",
+            )
+            payload = self._run_main(
+                [
+                    "--text",
+                    "Create an AI Agent deck and follow file:///data/demo.pptx",
+                    "--style-pack",
+                    str(pack),
+                    "--session-id",
+                    "style-source-guard",
+                ],
+                cwd=tmp_dir,
+            )
+
+        self.assertEqual(payload["stage"], "invalid_request")
+        self.assertIn("style source PPTX", payload["output"]["message"])
+        self.assertIn("--allow-style-source-content", payload["output"]["message"])
+
+    def test_style_source_guard_does_not_crash_on_malformed_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pack = Path(tmp_dir) / "style-pack"
+            pack.mkdir()
+            (pack / "style-pack.json").write_text("{", encoding="utf-8")
+            module = self._load_script_module()
+
+            result = module._style_source_in_request(
+                "Create a deck from file:///data/demo.pptx",
+                str(pack),
+            )
+
+        self.assertEqual(result, "")
 
     def test_outline_stage_persists_svg_render_mode(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

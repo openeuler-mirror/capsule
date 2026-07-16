@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -69,6 +70,32 @@ def parse_transform(transform_str: str) -> tuple[float, float, float, float, flo
     dx, dy = 0.0, 0.0
     sx, sy = 1.0, 1.0
     angle_deg = 0.0
+
+    # ooxml-svg serializes group coordinate systems as affine matrices.  The
+    # normal PresentationML group case is axis-aligned (b=c=0), so it maps
+    # exactly onto the converter's accumulated translate/scale context.
+    matrix = re.search(
+        r'matrix\(\s*([-.\dEe+]+)[\s,]+([-.\dEe+]+)[\s,]+'
+        r'([-.\dEe+]+)[\s,]+([-.\dEe+]+)[\s,]+'
+        r'([-.\dEe+]+)[\s,]+([-.\dEe+]+)\s*\)',
+        transform_str,
+    )
+    if matrix:
+        a, b, c, d, e, f = (float(matrix.group(i)) for i in range(1, 7))
+        if abs(b) < 1e-9 and abs(c) < 1e-9:
+            return e, f, a, d, 0.0
+        # Rotation-only affine matrices can still be represented by the outer
+        # DrawingML group. Skew has no native equivalent in this converter;
+        # retain its scale/rotation decomposition instead of silently dropping
+        # the entire matrix.
+        scale_x = math.hypot(a, b)
+        determinant = a * d - b * c
+        scale_y = determinant / scale_x if scale_x else math.hypot(c, d)
+        angle_deg = math.degrees(math.atan2(b, a)) if scale_x else 0.0
+        logger.warning(
+            f"SVG matrix contains rotation/skew; using scale/rotation decomposition: {transform_str}"
+        )
+        return e, f, scale_x or 1.0, scale_y or 1.0, angle_deg
 
     m = re.search(r'translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)', transform_str)
     if m:

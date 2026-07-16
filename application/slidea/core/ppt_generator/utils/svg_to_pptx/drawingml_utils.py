@@ -37,6 +37,7 @@ EA_FONTS = {
     'STHeiti', 'STSong', 'STFangsong', 'STXihei', 'STZhongsong',
     'Hiragino Sans', 'Hiragino Sans GB', 'Hiragino Mincho ProN',
     'Noto Sans SC', 'Noto Sans TC', 'Noto Serif SC', 'Noto Serif TC',
+    'Noto Sans CJK SC', 'Noto Serif CJK SC',
     'Source Han Sans SC', 'Source Han Sans TC',
     'Source Han Serif SC', 'Source Han Serif TC',
     'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei',
@@ -62,8 +63,10 @@ FONT_FALLBACK_WIN = {
     'Songti SC': 'SimSun',
     'Songti TC': 'SimSun',
     'Noto Sans SC': 'Microsoft YaHei',
+    'Noto Sans CJK SC': 'Microsoft YaHei',
     'Noto Sans TC': 'Microsoft JhengHei',
     'Noto Serif SC': 'SimSun',
+    'Noto Serif CJK SC': 'SimSun',
     'Noto Serif TC': 'SimSun',
     'Source Han Sans SC': 'Microsoft YaHei',
     'Source Han Sans TC': 'Microsoft JhengHei',
@@ -273,36 +276,6 @@ def parse_font_family(font_family_str: str) -> dict[str, str]:
         ea_font = 'SimSun' if final_latin in _SERIF_LATIN else 'Microsoft YaHei'
 
     return {'latin': final_latin, 'ea': ea_font}
-
-
-def is_cjk_char(ch: str) -> bool:
-    """Check if a character is CJK (Chinese/Japanese/Korean)."""
-    cp = ord(ch)
-    return (0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF or
-            0x2E80 <= cp <= 0x2EFF or 0x3000 <= cp <= 0x303F or
-            0xFF00 <= cp <= 0xFFEF or 0xF900 <= cp <= 0xFAFF or
-            0x20000 <= cp <= 0x2A6DF)
-
-
-def estimate_text_width(text: str, font_size: float, font_weight: str = '400') -> float:
-    """Estimate text width in SVG pixels."""
-    width = 0.0
-    for ch in text:
-        if is_cjk_char(ch):
-            width += font_size
-        elif ch == ' ':
-            width += font_size * 0.3
-        elif ch in 'mMwWOQ':
-            width += font_size * 0.75
-        elif ch in 'iIlj1!|':
-            width += font_size * 0.3
-        else:
-            width += font_size * 0.55
-
-    if font_weight in ('bold', '600', '700', '800', '900'):
-        width *= 1.05
-
-    return width
 
 
 def _xml_escape(text: str) -> str:

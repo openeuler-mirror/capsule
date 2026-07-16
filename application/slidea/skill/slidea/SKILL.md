@@ -25,6 +25,24 @@ Slidea renders slides as SVG and exports native editable PPTX. The SVG route is 
 - **User wants to review**: Execute Phase 1 **Research & Speech Script**, then proceed to Phase 2: **PPT Generation**.
 - **User does not need to review** (Recommended): Skip Phase 1 and directly execute Phase 2: **PPT Generation**.
 
+If the user supplied a reference PPTX and explicitly wants the new deck to follow its style, execute **Phase 0: Reference Style Material Preparation** before Phase 1/2. If no reference PPTX was supplied, or the user did not request style imitation, skip Phase 0 and keep the existing workflow unchanged.
+
+For style mode, choose one new unique `<SESSION_ID>` before Phase 0. Use that exact id for both the temporary style-pack directory and the Phase 2 `--session-id`; do not generate or substitute a different id between phases.
+
+---
+
+## Phase 0: Reference Style Material Preparation
+
+Read [references/style-pack.md](references/style-pack.md) and follow it completely.
+
+Phase 0 converts the user's reference PPTX into editable SVG material only. The converter must not generate `style-pack.json` or PNG previews. The Agent reads SVG code, chooses a small set of structurally distinct pages, authors their page type/density/structure descriptions in `style-pack.json`, and runs the validator. Do not rewrite converted SVG geometry.
+
+The Phase 0 working directory is fixed at `/tmp/slidea/style-packs/<SESSION_ID>`. Do not place converted style material in the repository, the user's source directory, another temporary directory, or a prior PPT run.
+
+The resulting `<STYLE_PACK_DIR>` is passed to Phase 2 with `--style-pack` before outline generation. In style mode, outline generation uses an additional prompt and output field to choose `style_reference_id` by page type, density and structure; long decks follow the existing chapter split and bounded batches. The choices are saved in `outline/outline.json` before parallel page generation. Before fan-out, code copies only master/layout fixed images into `slides/images/style-pack`; source-slide body images remain unavailable. After each page generation/repair, code restores the reference background, master/layout, title, header/footer, fixed logos and page-number format. Any missing/invalid pack, assignment or fixed-asset preflight error falls back to the existing built-in template workflow for the whole run.
+
+Keep style input and content input strictly separate. The reference PPTX path/URL is used only in Phase 0 and must not appear in Phase 2 `--text`. `--text` is parsed for content documents and URLs; putting the style source there causes its original business text to become writing material. Carry style into Phase 2 only through `--style-pack`. Read the isolation and explicit dual-use rules in [references/style-pack.md](references/style-pack.md).
+
 ---
 
 ## Phase 1: Research & Speech Script
@@ -73,6 +91,10 @@ This rule applies to **every** command in this section.
   --text <PPT request> \
   --session-id <id>
 ```
+
+When Phase 0 produced a style pack, append `--style-pack <STYLE_PACK_DIR>` as shown in [references/style-pack.md](references/style-pack.md).
+
+Before running a style-mode command, inspect the final `--text` value and remove the reference PPTX path/URL, `<STYLE_PACK_DIR>`, converted SVG paths, and `style-pack.json` path. Include only the requested topic, purpose, audience, content requirements, and content sources the user actually wants read for facts. Never add a style source to `--text` merely to remind the pipeline which visual style to follow.
 
 If Phase 1 was run previously, set `--research-mode "skip"`, and `<PPT request>` must contain:
 - PPT Original Request

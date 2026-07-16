@@ -53,7 +53,7 @@ def _load_screenshot_module():
 
 
 class ScreenshotSvgFontTests(unittest.TestCase):
-    def test_add_cjk_font_fallbacks_prepends_detected_system_font(self):
+    def test_add_cjk_font_fallbacks_prepends_portable_bundled_font(self):
         screenshot = _load_screenshot_module()
         svg = '''<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
 <text x="60" y="65" font-family="Microsoft YaHei, Arial, sans-serif">中文</text>
@@ -64,7 +64,8 @@ class ScreenshotSvgFontTests(unittest.TestCase):
         root = ET.fromstring(patched)
         text = next(elem for elem in root.iter() if elem.tag.rsplit("}", 1)[-1] == "text")
 
-        self.assertTrue(text.get("font-family").startswith('"Source Han Sans SC"'))
+        self.assertTrue(text.get("font-family").startswith('"Noto Sans CJK SC"'))
+        self.assertIn("Source Han Sans SC", text.get("font-family"))
         self.assertIn("Microsoft YaHei", text.get("font-family"))
 
     def test_add_cjk_font_fallbacks_keeps_existing_available_cjk_stack(self):

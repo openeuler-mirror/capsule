@@ -5,6 +5,7 @@ import sys
 import os
 from pathlib import Path
 import logging
+from urllib.parse import unquote, urlparse
 
 class NoUnregisteredTypeFilter(logging.Filter):
     def filter(self, record):
@@ -196,6 +197,7 @@ async def _try_export_cached_svg(state, out_dir: str, run_id: str) -> bool:
         "svg_dir": state["save_dir"],
         "pdf_path": pdf_path,
         "pptx_path": pptx_path,
+        "style_pack_dir": state.get("style_pack_dir", ""),
     })
     state["final_pdf_path"] = pdf_path
     state["final_pptx_path"] = pptx_path
@@ -235,6 +237,36 @@ def _apply_runtime_overrides(args):
         settings.USE_WEB_IMG_SEARCH = args.image_search.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _reference_basename(value: str) -> str:
+    """Return a comparable filename for local paths, file URLs and web URLs."""
+    parsed = urlparse(value)
+    path = parsed.path if parsed.scheme else value
+    normalized = unquote(path).replace("\\", "/").rstrip("/")
+    return normalized.rsplit("/", 1)[-1]
+
+
+def _style_source_in_request(text: str, style_pack_dir: str) -> str:
+    """Detect accidental reuse of a style pack's source PPTX as request content."""
+    if not text or not style_pack_dir:
+        return ""
+    try:
+        manifest = load_json(Path(style_pack_dir) / "style-pack.json")
+    except (OSError, ValueError):
+        # Invalid packs are handled later by _resolve_style_pack, which preserves
+        # the established built-in-template fallback instead of crashing here.
+        return ""
+    if not isinstance(manifest, dict):
+        return ""
+    source = manifest.get("source")
+    if not isinstance(source, str) or not source.strip():
+        return ""
+    source_name = _reference_basename(source.strip())
+    if not source_name.lower().endswith(".pptx"):
+        return ""
+    request_text = unquote(text).casefold()
+    return source_name if source_name.casefold() in request_text else ""
+
+
 def _build_run_metadata(args, run_id: str):
     return {
         "run_id": run_id,
@@ -246,6 +278,8 @@ def _build_run_metadata(args, run_id: str):
         "research_mode": args.research_mode,
         "use_cache": args.use_cache,
         "image_search": args.image_search,
+        "style_pack_dir": args.style_pack,
+        "allow_style_source_content": bool(args.allow_style_source_content),
     }
 
 
@@ -274,6 +308,41 @@ def _resolve_render_mode(args, cached_run: dict) -> str:
     return "svg"
 
 
+def _resolve_style_pack(args, cached_run: dict, out_dir: str) -> str:
+    """Snapshot a requested pack into the run; invalid packs safely disable it."""
+    cached_style_pack = cached_run.get("style_pack_dir") or ""
+    if cached_style_pack:
+        if args.style_pack and Path(args.style_pack).resolve() != Path(cached_style_pack).resolve():
+            logger.warning(
+                "ignoring a different --style-pack during resume/staged execution; "
+                "the run keeps its original immutable snapshot"
+            )
+        try:
+            from core.ppt_generator.utils.style_pack import validate_style_pack
+            validate_style_pack(cached_style_pack)
+            return str(Path(cached_style_pack).resolve())
+        except Exception as error:
+            logger.warning(f"cached style pack is invalid; using built-in template fallback: {error}")
+            return ""
+    run_snapshot = Path(out_dir) / "style_pack"
+    if run_snapshot.is_dir():
+        try:
+            from core.ppt_generator.utils.style_pack import validate_style_pack
+            validate_style_pack(run_snapshot)
+            return str(run_snapshot.resolve())
+        except Exception as error:
+            logger.warning(f"run style-pack snapshot is invalid; using built-in template fallback: {error}")
+            return ""
+    if not args.style_pack:
+        return ""
+    try:
+        from core.ppt_generator.utils.style_pack import copy_style_pack_into_run
+        return copy_style_pack_into_run(args.style_pack, out_dir)
+    except Exception as error:
+        logger.warning(f"failed to prepare --style-pack; using built-in template fallback: {error}")
+        return ""
+
+
 async def _run_all_stages(args, run_id: str, out_dir: str):
     from langgraph.types import Command
     from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -281,7 +350,11 @@ async def _run_all_stages(args, run_id: str, out_dir: str):
     from scripts.utils.pipeline import extract_resume_input, run_thinkflow_app
 
     if args.text:
-        graph_input = {"request": args.text, "render_mode": args.render_mode}
+        graph_input = {
+            "request": args.text,
+            "render_mode": args.render_mode,
+            "style_pack_dir": args.style_pack,
+        }
     else:
         resume_value = extract_resume_input({"text": args.resume})
         graph_input = Command(resume=resume_value)
@@ -386,6 +459,7 @@ async def _run_staged_pipeline(args, stages: list[str], run_id: str, out_dir: st
     state: PPTState = {
         "query": args.text or "",
         "render_mode": args.render_mode,
+        "style_pack_dir": args.style_pack,
         "ori_doc": "",
         "is_markdown_doc": False,
         "outline": [],
@@ -467,6 +541,23 @@ async def main():
     parser.add_argument("--use-cache", type=str, default="true")
     parser.add_argument("--image-search", type=str, default="on")
     parser.add_argument("--render-mode", type=str, choices=["html", "svg"], default=None)
+    parser.add_argument(
+        "--style-pack",
+        type=str,
+        default="",
+        help=(
+            "Prepared style-pack directory. It is validated and copied into the run; "
+            "failures fall back to built-in templates."
+        ),
+    )
+    parser.add_argument(
+        "--allow-style-source-content",
+        action="store_true",
+        help=(
+            "Explicitly allow the PPTX named by style-pack.json 'source' to also be "
+            "parsed as a content reference from --text. Use only when this dual role is intentional."
+        ),
+    )
     parser.add_argument("--run-id", type=str, default="")
     parser.add_argument("--recursion-limit", type=int, default=500)
     parser.add_argument("--dry-run", action="store_true")
@@ -516,6 +607,23 @@ async def main():
         emit_stage_payload("invalid_request", {"stage": "invalid_request", "message": "missing --text or --resume"})
         return
 
+    style_source = _style_source_in_request(args.text, args.style_pack)
+    if style_source and not args.allow_style_source_content:
+        emit_stage_payload(
+            "invalid_request",
+            {
+                "stage": "invalid_request",
+                "message": (
+                    f"--text contains the style source PPTX {style_source!r}. Files and URLs in "
+                    "--text are parsed as content references, which can leak the template's business "
+                    "content into the new deck. Remove that PPTX from --text and pass only its prepared "
+                    "directory via --style-pack. If the same PPTX is intentionally also a content source, "
+                    "rerun with --allow-style-source-content."
+                ),
+            },
+        )
+        return
+
     _apply_runtime_overrides(args)
 
     if args.run_id:
@@ -551,12 +659,18 @@ async def main():
     out_dir = run_dir(run_id)
     cached_run = _cached_run_metadata(out_dir)
     args.render_mode = _resolve_render_mode(args, cached_run)
+    args.style_pack = _resolve_style_pack(args, cached_run, out_dir)
     # run.json is the snapshot of the INITIAL run that started this session.
     # Subsequent resume calls must not overwrite it — otherwise the resume:true
     # marker hides the original record and breaks session-id-based lookup.
     run_json_path = Path(out_dir) / "run.json"
     if not run_json_path.exists():
         save_json(run_json_path, _build_run_metadata(args, run_id))
+    elif args.style_pack and not cached_run.get("style_pack_dir"):
+        # A staged render may add a pack after parse/research/outline. Preserve
+        # all original metadata and record only the immutable run snapshot.
+        cached_run["style_pack_dir"] = args.style_pack
+        save_json(run_json_path, cached_run)
 
     if stages == ["all"]:
         await _run_all_stages(args, run_id, out_dir)

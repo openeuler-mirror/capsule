@@ -21,6 +21,7 @@ from core.ppt_generator.utils.svg import (
     validate_svg_content,
 )
 from core.ppt_generator.utils.svg_pipeline.finalize_svg import embed_local_images_in_content
+from core.ppt_generator.utils.style_pack import apply_style_reference_shell
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.state import SVGWorkerState
 
 
@@ -152,6 +153,8 @@ async def generate_ppt_page_node(state: SVGWorkerState):
         [HumanMessage(content=state["generate_ppt_prompt"])],
     )
     svg_content = await _svg_process_llm_response(response, page_index=state.get("index", 0))
+    svg_content = apply_style_reference_shell(svg_content, state.get("page"))
+    validate_svg_content(svg_content)
 
     return {"content": svg_content}
 
@@ -299,6 +302,8 @@ async def vlm_modify_node(state: SVGWorkerState):
     if not new_svg:
         logger.warning(f"page {index} vlm_modify returned empty content, keep current")
         return {"vlm_iteration": vlm_iteration + 1}
+    new_svg = apply_style_reference_shell(new_svg, state.get("page"))
+    validate_svg_content(new_svg)
 
     return {
         "content": new_svg,
@@ -412,14 +417,18 @@ def ppt_submitter_node(state: SVGWorkerState):
     best_file_path = state.get("best_file_path")
     best_svg_content = state.get("best_content")
     file_path = best_file_path or state["final_file_path"]
+    final_content = best_svg_content or state.get("content")
 
-    if best_file_path and best_svg_content and best_svg_content != state.get("content"):
+    if final_content:
         try:
-            with open(best_file_path, "w", encoding="utf-8") as f:
-                f.write(best_svg_content)
-            logger.info(f'page {state["index"]} restored best version to {best_file_path}')
+            final_content = apply_style_reference_shell(final_content, state.get("page"))
+            validate_svg_content(final_content)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(final_content)
+            if best_file_path and best_svg_content and best_svg_content != state.get("content"):
+                logger.info(f'page {state["index"]} restored best version to {best_file_path}')
         except Exception as error:
-            logger.warning(f"write best_svg_content failed: {error}")
+            logger.warning(f"write final svg content failed: {error}")
 
     _write_vlm_review_json(state, file_path)
 

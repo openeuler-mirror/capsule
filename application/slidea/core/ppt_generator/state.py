@@ -9,6 +9,7 @@ except ImportError:  # pragma: no cover - Python 3.11+ fallback
 class GenPPTState(TypedDict):
     request: str 
     render_mode: NotRequired[Literal["html", "svg"]]
+    style_pack_dir: NotRequired[str]
 
     thought:str
     deep_report:str
@@ -24,3 +25,4 @@ class GenPPTState(TypedDict):
 class PPTInputSchema(TypedDict):
     request: str
     render_mode: NotRequired[Literal["html", "svg"]]
+    style_pack_dir: NotRequired[str]

@@ -68,9 +68,20 @@ def _embed_images_in_root(root: ET.Element, search_dir: Path, source_dir: Path) 
     for elem in root.iter():
         if _local_name(elem.tag) != "image":
             continue
-        attr_name = "href" if elem.get("href") is not None else f"{{{XLINK_NS}}}href"
-        href = elem.get(attr_name)
-        if not href or href.startswith("data:image/"):
+        xlink_attr = f"{{{XLINK_NS}}}href"
+        href = elem.get("href") or elem.get(xlink_attr)
+        if not href:
+            continue
+        if href.startswith("data:image/"):
+            # Some SVG renderers still prefer xlink:href over SVG2 href. Keep
+            # both declarations synchronized so screenshots and PPTX export
+            # consume the same embedded image.
+            if elem.get("href") != href:
+                elem.set("href", href)
+                changed = True
+            if xlink_attr in elem.attrib and elem.get(xlink_attr) != href:
+                elem.set(xlink_attr, href)
+                changed = True
             continue
         if urlparse(href).scheme in {"http", "https"}:
             continue
@@ -80,7 +91,10 @@ def _embed_images_in_root(root: ET.Element, search_dir: Path, source_dir: Path) 
             continue
         mime_type = mimetypes.guess_type(image_path.name)[0] or "image/png"
         encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
-        elem.set(attr_name, f"data:{mime_type};base64,{encoded}")
+        data_uri = f"data:{mime_type};base64,{encoded}"
+        elem.set("href", data_uri)
+        if xlink_attr in elem.attrib:
+            elem.set(xlink_attr, data_uri)
         changed = True
     return changed
 

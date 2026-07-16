@@ -71,6 +71,27 @@ class EmbedLocalImagesTests(unittest.TestCase):
             inlined = embed_local_images_in_content(svg_content, base)
             self.assertIn("data:image/png;base64,", inlined)
 
+    def test_embed_local_images_keeps_href_and_xlink_href_in_sync(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            images_dir = base / "images"
+            images_dir.mkdir()
+            (images_dir / "pixel.png").write_bytes(PNG_BYTES)
+            svg_content = (
+                f'<svg xmlns="{SVG_NS}" xmlns:xlink="http://www.w3.org/1999/xlink">'
+                '<image href="images/pixel.png" xlink:href="images/pixel.png"/>'
+                '</svg>'
+            )
+
+            inlined = embed_local_images_in_content(svg_content, base)
+            root = ET.fromstring(inlined)
+            image = next(elem for elem in root.iter() if elem.tag.rsplit("}", 1)[-1] == "image")
+            href = image.get("href")
+            xlink_href = image.get("{http://www.w3.org/1999/xlink}href")
+
+            self.assertTrue(href.startswith("data:image/png;base64,"))
+            self.assertEqual(xlink_href, href)
+
 
 if __name__ == "__main__":
     unittest.main()

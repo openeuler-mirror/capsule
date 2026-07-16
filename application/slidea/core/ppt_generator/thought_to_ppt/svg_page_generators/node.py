@@ -2,6 +2,7 @@ import os
 import copy
 import json
 import asyncio
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
@@ -41,6 +42,11 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generat
 )
 from core.ppt_generator.thought_to_ppt.svg_page_generators.toc_page_generator.graph import generate_toc_page_app
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.node import strip_unresolvable_images
+from core.ppt_generator.utils.style_pack import (
+    apply_style_reference_shell_file,
+    bind_style_reference_paths,
+    prepare_style_runtime_references,
+)
 
 
 SVG_QUALITY_REPAIR_PROMPT = "svg_quality_repair_prompt.txt"
@@ -51,8 +57,8 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
     SVG-route preparation: build save_dir, pick an SVG template, download
     outline images, set language and ppt_prompt, load template content into state.
     """
+    cache_dir = run_dir_from_config(config, str(app_base_dir))
     if not state.get("save_dir", None):
-        cache_dir = run_dir_from_config(config, str(app_base_dir))
         if not cache_dir:
             # config must carry the run_id so we can place SVGs inside the active
             # run's cache directory. Reaching this branch means the caller forgot
@@ -83,6 +89,10 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
         logger.error(f"读取svg模板文件失败 {cached_name}: {e}")
         raise Exception("获取PPT模板失败") from e
 
+    outline = state["outline"]
+    style_pack_dir = state.get("style_pack_dir", "")
+    style_pack_active = False
+
     prompt_dir = app_base_dir / "core" / "ppt_generator" / "assets" / "prompts" / "ppt_generator_prompt.txt"
     try:
         with open(prompt_dir, "r", encoding="utf-8") as f:
@@ -96,12 +106,40 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
         [HumanMessage(content=f"根据'{state['query']}'确定使用的语言,只回答'中文'、'英文'等结果。")],
     )
 
-    outline = await download_outline_images(state["outline"], images_dir)
+    outline = await download_outline_images(outline, images_dir)
+
+    # Reference ids were selected and saved as part of outline generation.
+    # This node only resolves ids to the immutable run snapshot; it does not
+    # score or search reference pages before fan-out.
+    if style_pack_dir:
+        try:
+            bind_style_reference_paths(outline, style_pack_dir)
+            prepare_style_runtime_references(outline, style_pack_dir, save_dir)
+            style_pack_active = True
+            logger.info(
+                "using style references stored in outline.json; "
+                "fixed master/layout assets prepared under slides/images/style-pack"
+            )
+        except Exception as error:
+            logger.warning(
+                "outline style references are unavailable; "
+                f"falling back to the built-in template workflow: {error}"
+            )
+            shutil.rmtree(Path(save_dir) / "style_references", ignore_errors=True)
+            shutil.rmtree(Path(save_dir) / "images" / "style-pack", ignore_errors=True)
+            style_pack_dir = ""
+            for page in outline:
+                page.style_reference_id = ""
+                page.style_reference_svg = ""
+                page.style_reference_page_type = ""
 
     writer(
         {
             "step": "准备生成所需上下文",
-            "text": f"已创建输出目录，选择模板: {cached_name}，检测语言: {response}。",
+            "text": (
+                f"已创建输出目录，选择模板: {cached_name}，检测语言: {response}。"
+                + (" 已读取 outline 中固定的逐页 style pack 参考。" if style_pack_active else "")
+            ),
         }
     )
 
@@ -113,6 +151,7 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
         "render_mode": "svg",
         "template_name": cached_name,
         "template": template_content,
+        "style_pack_dir": style_pack_dir,
     }
 
 
@@ -400,6 +439,7 @@ async def ppt_synthesizer_node(state: PPTState, writer: StreamWriter):
 async def quality_check_node(state: PPTState, writer: StreamWriter):
     """SVG quality gate. Run check_svg_files; on failure, attempt LLM repair and re-check."""
     files = state.get("page_files") or []
+    _restore_style_shells(state, files)
     results = check_svg_files(files)
     failed = [item for item in results if not item.get("passed")]
 
@@ -411,6 +451,7 @@ async def quality_check_node(state: PPTState, writer: StreamWriter):
             }
         )
         await _repair_failed_svg_files(failed)
+        _restore_style_shells(state, files)
         results = check_svg_files(files)
         failed = [item for item in results if not item.get("passed")]
 
@@ -433,6 +474,21 @@ async def quality_check_node(state: PPTState, writer: StreamWriter):
         }
     )
     return {"svg_quality_report": results}
+
+
+def _restore_style_shells(state: PPTState, files: list[str]) -> None:
+    """Re-apply deterministic shells after any VLM/quality-repair rewrite."""
+    pages = sorted(state.get("outline") or [], key=lambda page: int(page.index))
+    if not any(getattr(page, "style_reference_svg", "") for page in pages):
+        return
+    if len(pages) != len(files):
+        raise ValueError(
+            f"cannot restore style shells: {len(pages)} outline pages != {len(files)} SVG files"
+        )
+    for page, svg_path in zip(pages, files):
+        if not getattr(page, "style_reference_svg", ""):
+            continue
+        apply_style_reference_shell_file(svg_path, page)
 
 
 async def _repair_failed_svg_files(failed: list[dict]) -> None:
@@ -497,6 +553,7 @@ async def export_node(state: PPTState, writer: StreamWriter, config: RunnableCon
             "slides_dir": save_dir,
             "svg_dir": save_dir,
             "template_name": state.get("template_name", ""),
+            "style_pack_dir": state.get("style_pack_dir", ""),
             "pdf_path": pdf_path,
             "pptx_path": pptx_path,
         }
