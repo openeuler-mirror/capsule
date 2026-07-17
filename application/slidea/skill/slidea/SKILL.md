@@ -62,22 +62,17 @@ Keep style input and content input strictly separate. The reference PPTX path/UR
 
 ## Phase 1: Document Processing
 
-**When to use**: When the user provides documents (local files, URLs, or directories) for PPT generation. The pipeline consolidates the corpus into a single `structured.md` (H1 = topic, 5-10 H2 chapters, detailed content, relevant images embedded via `![](path)`), which is the sole material fed into the PPT pipeline — **do not pass the original document paths to the pipeline**.
+**When to use**: When the user provides documents (local files, URLs, or directories). Doc-processing is a black box: you execute it and get back a final `structured.md` path. Whether it internally runs a short-text shortcut (merge raw text) or the full pipeline (chunk → summary → outline → chapter writing → review → assemble) is decided by `preprocess()` based on text volume — you do not need to know which path ran.
 
-**Read [references/doc_processor/process-doc.md](references/doc_processor/process-doc.md) for the complete pipeline instructions (steps 0-9).** The final output is `<task_dir>/structured.md`. When calling `preprocess()`, pass the confirmed "understood PPT request" (from Step 0) as the `topic` argument — it flows into the summarization LLM prompt and shapes which document content is treated as relevant to the audience/goal.
+**Read [references/doc_processor/process-doc.md](references/doc_processor/process-doc.md) for the complete pipeline instructions.** When calling `preprocess()`, pass the confirmed "understood PPT request" (from Step 0) as the `topic` argument — it flows into the summarization LLM prompt and shapes which document content is treated as relevant.
 
-### Handling the output
+### Output contract
 
-- **Mandatory user review**: After the pipeline produces `structured.md`, notify the user of its path and ask them to read and confirm it. Example:
-
-  > Document processing finished. The consolidated structured markdown is at:
-  > `<abs_path_to_task_dir>/structured.md`
-  > Please review it. If you want changes, tell me which chapter/section to adjust; if it looks good, reply "accept" and I'll proceed to PPT generation.
-
-- **Revision loop**: If the user requests changes, follow the revision workflow in [references/doc_processor/process-doc.md](references/doc_processor/process-doc.md) to edit chapter content and regenerate `structured.md`. Every revision round must be re-confirmed by the user — only when the user explicitly accepts do you move on to Phase 2.
-
-The final accepted artifact is `<task_dir>/structured.md`.
-
+- The return value always contains `structured_md_path` — the final `<task_dir>/structured.md`.
+- The return value contains `short_circuit` (bool): `True` means the short-text shortcut ran (raw merged document, no review needed); `False` means the full pipeline ran (review/revision already closed inside doc-process).
+- The return value contains `doc_images` (list): when non-empty, each item has `{path, description, score}` — pass the `doc_images.json` file path to the PPT pipeline via `--image-json`.
+- **You do NOT perform any review of `structured.md`** — that is handled entirely inside doc-process. When `preprocess()` returns, `structured.md` is final. Proceed directly to Phase 2.
+- **Do not pass the original document paths to the PPT pipeline** — only the `structured.md` produced by doc-processing.
 ---
 
 ## Phase 2: PPT Generation
@@ -147,6 +142,10 @@ Before running a style-mode command, inspect the final `--text` value and remove
 `--research-mode`:
 - **Phase 1 ran (documents provided)**: pass `--research-mode "skip"`. The material is already consolidated in `structured.md`, so the PPT must be generated directly from it — **no additional data searching / research**.
 - **Phase 1 skipped (topic only)**: omit the flag (or set it explicitly per `references/advanced-params.md`), so the pipeline may research the topic online as needed.
+
+`--image-json`:
+- **Phase 1 ran and `doc_images` is non-empty**: pass `--image-json <abs_path_to_doc_images.json>`. The pipeline copies this file into the run directory and uses it as a document image pool — each PPT page can select relevant images from it. If `doc_images` is empty, omit the flag.
+- **Phase 1 skipped**: omit the flag. No document images are available.
 
 **Resume after `input_required`**:
 ```bash

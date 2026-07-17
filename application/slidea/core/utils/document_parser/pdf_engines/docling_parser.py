@@ -95,6 +95,7 @@ class DoclingPDFParser(PDFParserBase):
 
         text = "\n\n".join(markdown_lines)
         md_path = os.path.join(self.output_dir, Path(pdf_path).stem + ".md")
+        os.makedirs(self.output_dir, exist_ok=True)
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(text)
 

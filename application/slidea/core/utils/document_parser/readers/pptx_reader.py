@@ -15,7 +15,6 @@ class PptxReader:
         self.config = config
         self.extract_images = config.extract_images
         self.output_dir = config.output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
 
     def parse(self, file_path: str) -> ParseResult:
         logger.debug("PptxReader 开始解析: {}", file_path)
@@ -36,6 +35,7 @@ class PptxReader:
         name = Path(file_path).stem
         md_filename = name + ".md"
         md_path = os.path.join(self.output_dir, md_filename)
+        os.makedirs(self.output_dir, exist_ok=True)
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_text)
 

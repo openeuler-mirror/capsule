@@ -68,7 +68,7 @@ def _collect_files(path: str) -> list[str]:
 # ── Chunk 拆分 ───────────────────────────────────────────
 
 class _StructuredChunker:
-    def __init__(self, max_chunk_chars: int = 65536, overlap_ratio: float = 0.05):
+    def __init__(self, max_chunk_chars: int = 32768, overlap_ratio: float = 0.05):
         self.max_chunk_chars = max_chunk_chars
         self.overlap_ratio = overlap_ratio
 
@@ -180,7 +180,7 @@ class _StructuredChunker:
 def _chunk_and_save(parsed_dir: str, chunks_dir: str) -> dict:
     """读取 parsed_docs/ 下所有文档,切分 chunk 并落盘到 chunks/。
 
-    断点: _chunk_index.json 已存在则跳过。
+    若 _chunk_index.json 已存在则跳过。
     返回: {"chunks_total": N, "chunk_ids": [...]}
     """
     index_path = os.path.join(chunks_dir, "_chunk_index.json")
@@ -232,81 +232,24 @@ shutil_copy = shutil.copy
 os_path_exists = os.path.exists
 
 
-async def _filter_images_by_topic(all_images: list, topic: str, output_dir: str,
-                                  max_concurrency: int = 5) -> list:
-    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
-        return []
-    os.makedirs(output_dir, exist_ok=True)
-    logger.info("图片收集完成: 共 {} 张图片，来自 {} 个解析文档", len(all_images), len(set([img.get("source_path", "") for img in all_images])))
-    logger.info("开始图片相关性过滤（并发 {}），当前主题: {}", max_concurrency, topic)
-    sem = asyncio.Semaphore(max_concurrency)
-    results = []
-
-    async def _one(idx: int, img: dict) -> dict | None:
-        async with sem:
-            path = img.get("path", "")
-            source_path = img.get("source_path", "未知文档")
-            if not path or not os.path.isfile(path):
-                logger.warning("[{}/{}] 跳过无效图片: {} (路径不存在)", idx, len(all_images), path)
-                return None
-            file_size = os.path.getsize(path)
-            if file_size < 10 * 1024:
-                logger.debug("[{}/{}] 跳过小尺寸图片: {} (大小: {}字节 < 10KB阈值)", idx, len(all_images), path, file_size)
-                return None
-            logger.info("[{}/{}] 正在判断图片相关性: {} (来自文档: {})", idx, len(all_images), os.path.basename(path), os.path.basename(source_path))
-            result = await _judge_one(path, topic, source_path)
-            if not result:
-                logger.warning("[{}/{}] 图片处理失败: {}，VLM返回空结果", idx, len(all_images), path)
-                return None
-            relevant = result.get("relevant", False)
-            if relevant:
-                desc = result.get("description", "")
-                short_desc = desc[:80] + "..." if len(desc) > 80 else desc
-                logger.info("[{}/{}] ✅ 图片相关: {}，内容: {}", idx, len(all_images), os.path.basename(path), short_desc)
-            else:
-                reason = result.get("reason", "")
-                short_reason = reason[:60] + "..." if len(reason) > 60 else reason
-                logger.info("[{}/{}] ❌ 图片无关: {}，理由: {}", idx, len(all_images), os.path.basename(path), short_reason)
-                return None
-            source_hash = img.get("source_hash") or ""
-            dest = os.path.join(output_dir, f"{source_hash}_{os.path.basename(path)}" if source_hash else os.path.basename(path))
-            try:
-                shutil_copy(path, dest)
-                logger.debug("[{}/{}] 已保存相关图片到: {}", idx, len(all_images), dest)
-            except Exception as e:
-                logger.warning("[{}/{}] 图片保存失败: {}，错误: {}", idx, len(all_images), path, str(e))
-                return None
-            return {
-                "path": dest,
-                "original_path": path,
-                "source_path": source_path,
-                "source_hash": img.get("source_hash"),
-                "relevant": True,
-                "description": result.get("description", ""),
-                "reason": result.get("reason", ""),
-            }
-
-    tasks = [_one(idx, img) for idx, img in enumerate(all_images, 1)]
-    done = await asyncio.gather(*tasks)
-    survivors = [r for r in done if r is not None]
-    logger.info("图片过滤完成: 共处理 {} 张，幸存 {} 张相关图片", len(all_images), len(survivors))
-    return survivors
-
-
 # VLM 可直接接受字节(base64)的格式;其余格式需经 PIL 转 PNG 后再喂给 VLM。
 _VLM_NATIVE_EXTS = {"png", "jpg", "jpeg"}
 # 声明给 VLM 的 MIME 子类型(仅对 _VLM_NATIVE_EXTS 生效)。
 _VLM_MIME = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png"}
 
+# 每次 VLM 调用同时判断的图片数量。
+_BATCH_SIZE = 3
 
-async def _judge_one(image_path: str, topic: str, source_path: str = "") -> dict:
+
+def _encode_image(image_path: str) -> str | None:
+    """将图片编码为 VLM 可接受的 data URL。编码失败返回 None。"""
     ext = os.path.splitext(image_path)[1].lstrip(".").lower() or "png"
     if ext in _VLM_NATIVE_EXTS:
         try:
             with open(image_path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode()
         except Exception:
-            return {}
+            return None
         mime = _VLM_MIME[ext]
     else:
         # svg/avif/tiff/webp/bmp/gif 等多数 VLM 端点不接受,用 PIL 转 PNG 再喂。
@@ -319,11 +262,95 @@ async def _judge_one(image_path: str, topic: str, source_path: str = "") -> dict
                 im.save(buf, format="PNG")
             b64 = base64.b64encode(buf.getvalue()).decode()
         except Exception:
-            # 无法转码的图(纯矢量 SVG 无光栅化能力等)无法走 VLM,宁缺勿滥跳过。
-            return {}
+            return None
         mime = "png"
-    data_url = f"data:image/{mime};base64,{b64}"
-    source_name = os.path.basename(source_path) if source_path else "未知文档"
+    return f"data:image/{mime};base64,{b64}"
+
+
+def _build_batch_prompt(images: list[dict], topic: str) -> str:
+    """构造批量图片相关性判断的 prompt。"""
+    n = len(images)
+    source_lines = []
+    for i, img in enumerate(images, 1):
+        source_name = os.path.basename(img.get("source_path", "")) or "未知文档"
+        source_lines.append(f"{i}. {source_name}")
+    return (
+        f"判断以下 {n} 张图片是否与 PPT 主题「{topic}」相关。\n"
+        "图片按序号 1~" + str(n) + " 排列，请对每张图分别判断。\n"
+        "图片来源文档:\n" + "\n".join(source_lines) + "\n"
+        "需要详细描述每张图片内容(文字/图表/场景/元素)。\n"
+        "判断规则(按优先级从高到低,命中任一即照此判定):\n"
+        "1. 图片质量/有效性: 若图片是纯黑/纯白/空白页/加载失败/渲染异常,或完全无法辨识任何文字、图表、场景或元素,relevant 一律置为 false(这类图片无任何信息价值,不应保留)。\n"
+        "2. 无实际意义: 若图片仅为纯色块、单一像素、极低分辨率模糊不清、或无可读信息的装饰性内容,relevant 置为 false。\n"
+        "3. 主题相关性(仅当 1、2 均未命中、图片内容有效时才考虑): 除非可以肯定图片与 PPT 主题完全无关,否则 relevant 置为 true(即内容有效但主题相关性相关或无法确定时,一律置为 true,宁可保留有效图表)。\n"
+        "reason 需说明命中的规则编号及依据。\n"
+        "严格输出 JSON 数组,长度必须为 " + str(n) + ",按序号对应:\n"
+        '[{"relevant": boolean, "description": "详细描述", "reason": "判断理由"}, ...]'
+    )
+
+
+_SINGLE_JUDGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "relevant": {"type": "boolean"},
+        "description": {"type": "string"},
+        "reason": {"type": "string"},
+    },
+    "required": ["relevant", "description", "reason"],
+}
+
+_BATCH_JUDGE_SCHEMA = {
+    "type": "array",
+    "items": _SINGLE_JUDGE_SCHEMA,
+}
+
+
+async def _judge_batch(images: list[dict], topic: str) -> list[dict | None]:
+    """批量判断图片相关性(最多 _BATCH_SIZE 张)。
+
+    Args:
+        images: 每项含 path、source_path;已预编码为 data_url。
+    Returns:
+        长度与 images 一致的列表,每项为判断 dict 或 None(失败)。
+    """
+    n = len(images)
+    content_parts: list[dict] = [{"type": "text", "text": _build_batch_prompt(images, topic)}]
+    for img in images:
+        data_url = img.get("data_url")
+        if not data_url:
+            # 编码失败的图不应进入 batch,防御性检查
+            return [None] * n
+        content_parts.append({"type": "image_url", "image_url": {"url": data_url}})
+
+    msg = HumanMessage(content=content_parts)
+    try:
+        result = await vlm_invoke(
+            ModelRoute.DEFAULT,
+            [msg],
+            InvokeOptions(json_schema=_BATCH_JUDGE_SCHEMA, work_node="image_relevance"),
+        )
+    except Exception:
+        return [None] * n
+
+    if not isinstance(result, list):
+        return [None] * n
+
+    # 对齐长度: 截断或补 None
+    aligned: list[dict | None] = []
+    for i in range(n):
+        if i < len(result) and isinstance(result[i], dict):
+            aligned.append(result[i])
+        else:
+            aligned.append(None)
+    return aligned
+
+
+async def _judge_single(img: dict, topic: str) -> dict | None:
+    """单图 fallback: 编码 + VLM 调用,失败返回 None。"""
+    data_url = img.get("data_url") or _encode_image(img.get("path", ""))
+    if not data_url:
+        return None
+    source_name = os.path.basename(img.get("source_path", "")) or "未知文档"
     prompt = (
         f"判断下面这张图是否与 PPT 主题「{topic}」相关。"
         f"该图片来自文档: {source_name}。\n"
@@ -343,18 +370,102 @@ async def _judge_one(image_path: str, topic: str, source_path: str = "") -> dict
         return await vlm_invoke(
             ModelRoute.DEFAULT,
             [msg],
-            InvokeOptions(json_schema={
-                "type": "object",
-                "properties": {
-                    "relevant": {"type": "boolean"},
-                    "description": {"type": "string"},
-                    "reason": {"type": "string"},
-                },
-                "required": ["relevant", "description", "reason"],
-            }, work_node="image_relevance"),
+            InvokeOptions(json_schema=_SINGLE_JUDGE_SCHEMA, work_node="image_relevance"),
         )
     except Exception:
-        return {}
+        return None
+
+
+async def _filter_images_by_topic(all_images: list, topic: str, output_dir: str,
+                                  max_concurrency: int = 5) -> list:
+    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
+        return []
+    os.makedirs(output_dir, exist_ok=True)
+    total = len(all_images)
+    logger.info("图片收集完成: 共 {} 张图片，来自 {} 个解析文档", total, len(set(img.get("source_path", "") for img in all_images)))
+    logger.info("开始图片相关性过滤（批量 {} 张/次，并发 {}），当前主题: {}", _BATCH_SIZE, max_concurrency, topic)
+
+    # ── 预处理: 过滤无效/小图 + 编码 ──
+    valid_images: list[dict] = []
+    for idx, img in enumerate(all_images, 1):
+        path = img.get("path", "")
+        source_path = img.get("source_path", "未知文档")
+        if not path or not os.path.isfile(path):
+            logger.warning("[{}/{}] 跳过无效图片: {} (路径不存在)", idx, total, path)
+            continue
+        file_size = os.path.getsize(path)
+        if file_size < 10 * 1024:
+            logger.debug("[{}/{}] 跳过小尺寸图片: {} (大小: {}字节 < 10KB阈值)", idx, total, path, file_size)
+            continue
+        data_url = _encode_image(path)
+        if not data_url:
+            logger.warning("[{}/{}] 跳过编码失败图片: {}", idx, total, path)
+            continue
+        valid_images.append({**img, "data_url": data_url})
+
+    if not valid_images:
+        logger.info("图片过滤完成: 无有效图片可判断")
+        return []
+
+    # ── 分批 + 并发判断 ──
+    batches = [valid_images[i:i + _BATCH_SIZE] for i in range(0, len(valid_images), _BATCH_SIZE)]
+    sem = asyncio.Semaphore(max_concurrency)
+    survivors: list[dict] = []
+
+    async def _process_batch(batch_idx: int, batch: list[dict]):
+        batch_start = batch_idx * _BATCH_SIZE + 1
+        batch_end = min(batch_start + len(batch) - 1, len(valid_images))
+        batch_label = f"{batch_start}-{batch_end}/{len(valid_images)}"
+
+        async with sem:
+            logger.info("[{}] 正在批量判断图片相关性 ({} 张)", batch_label, len(batch))
+            results = await _judge_batch(batch, topic)
+
+            # 检查是否全部失败 → fallback 单图
+            if all(r is None for r in results):
+                logger.warning("[{}] 批量判断全部失败,回退为单图判断", batch_label)
+                single_tasks = [_judge_single(img, topic) for img in batch]
+                results = await asyncio.gather(*single_tasks)
+
+            # 处理每张图的结果
+            for img, result in zip(batch, results):
+                path = img.get("path", "")
+                source_path = img.get("source_path", "未知文档")
+                if not result:
+                    logger.warning("[{}] 图片处理失败: {}，VLM返回空结果", batch_label, os.path.basename(path))
+                    continue
+                relevant = result.get("relevant", False)
+                if relevant:
+                    desc = result.get("description", "")
+                    short_desc = desc[:80] + "..." if len(desc) > 80 else desc
+                    logger.info("[{}] ✅ 图片相关: {}，内容: {}", batch_label, os.path.basename(path), short_desc)
+                else:
+                    reason = result.get("reason", "")
+                    short_reason = reason[:60] + "..." if len(reason) > 60 else reason
+                    logger.info("[{}] ❌ 图片无关: {}，理由: {}", batch_label, os.path.basename(path), short_reason)
+                    continue
+
+                source_hash = img.get("source_hash") or ""
+                dest = os.path.join(output_dir, f"{source_hash}_{os.path.basename(path)}" if source_hash else os.path.basename(path))
+                try:
+                    shutil_copy(path, dest)
+                    logger.debug("[{}] 已保存相关图片到: {}", batch_label, dest)
+                except Exception as e:
+                    logger.warning("[{}] 图片保存失败: {}，错误: {}", batch_label, path, str(e))
+                    continue
+                survivors.append({
+                    "path": dest,
+                    "original_path": path,
+                    "source_path": source_path,
+                    "source_hash": img.get("source_hash"),
+                    "relevant": True,
+                    "description": result.get("description", ""),
+                    "reason": result.get("reason", ""),
+                })
+
+    await asyncio.gather(*[_process_batch(i, batch) for i, batch in enumerate(batches)])
+    logger.info("图片过滤完成: 共处理 {} 张有效图片，幸存 {} 张相关图片", len(valid_images), len(survivors))
+    return survivors
 
 
 def _dedup_images_cross_doc(images: list) -> list:
@@ -397,7 +508,7 @@ def _dedup_images_cross_doc(images: list) -> list:
 async def _filter_and_save(parsed_dir: str, images_dir: str, topic: str) -> list:
     """从 parsed_docs/ 收集图片 -> 跨文档去重 -> 尺寸闸门 + VLM 过滤 -> 保存 images.json + 复制幸存图。
 
-    断点: images.json 已存在则跳过。
+    若 images.json 已存在则跳过。
     """
     images_json_path = os.path.join(images_dir, "images.json")
     if os.path.isfile(images_json_path):
@@ -477,7 +588,7 @@ async def _summarize_one(chunk: dict, topic: str) -> dict | None:
 async def _summarize_all(chunks_dir: str, topic: str,
                           max_concurrency: int = 5) -> dict:
     """从 chunks/_chunk_index.json 读取 chunk 列表，逐 chunk 加载->摘要->汇总到chunks/summaries.json。
-    断点：chunks/summaries.json 已存在则跳过已处理的chunk。
+    若 chunks/summaries.json 已存在则跳过已处理的chunk。
     返回：{"summaries_total": N, "failed_chunks": [...]}
     """
     sem = asyncio.Semaphore(max_concurrency)
@@ -489,7 +600,7 @@ async def _summarize_all(chunks_dir: str, topic: str,
     if not isinstance(chunk_index, list):
         chunk_index = []
 
-    # 断点逻辑：读取已有的summaries.json，跳过已处理的chunk
+    # 读取已有的summaries.json，跳过已处理的chunk
     summaries_json_path = os.path.join(chunks_dir, "summaries.json")
     if os.path.isfile(summaries_json_path):
         existing_results = postprocess.load_json(summaries_json_path)
@@ -552,8 +663,8 @@ async def preprocess(
         topic: PPT 主题。
         task_id: 任务唯一 ID。
         force: 若为 True 且 ``<task_id>`` 目录已存在,先整体删除再重建
-            (清除旧的 chunks/summaries/images 等,全新跑一遍,忽略断点恢复)。
-            默认 False:已存在则按断点续跑(已生成的 chunk/summary 跳过)。
+            (清除旧的 chunks/summaries/images 等,全新跑一遍)。
+            默认 False:已存在则跳过已生成的 chunk/summary。
         enable_vlm: 是否启用图片提取与 VLM 主题相关性筛选。**默认 False(不启用)**:
             不从文档提取图片、不调 VLM、images.json 写空 -> 纯文本 PPT。
             仅当用户明确要求"用文档中的图片作为 PPT 插图"时才置 True;
@@ -591,7 +702,7 @@ async def preprocess(
     meta_path = os.path.join(task_dir, "meta.json")
 
     # force 模式: 删除已存在的整个 task_dir(连同旧 chunks/summaries/images/structured.md 等),
-    # 全新重建。用于 task_id 复用、清除上一次残留(含孤儿目录)。默认 False 保留断点续跑语义。
+    # 全新重建。用于 task_id 复用、清除上一次残留(含孤儿目录)。默认 False 保留已生成产物(按文件存在性跳过)。
     if force and os.path.isdir(task_dir):
         try:
             shutil.rmtree(task_dir)
@@ -657,6 +768,55 @@ async def preprocess(
     meta["stages_completed"].append("collect")
     postprocess.save_json(meta_path, meta)
 
+    # ── 短文本分流: 解析后若合并文本 < 单 chunk 上限且不需要图片 ──
+    # 直接将合并裸文档写成 structured.md,跳过 chunk/summary/outline/章节写作/review,
+    # 对上层(doc-process / SKILL.md)表现为黑盒: 同样产出 structured.md 并返回路径,
+    # 仅通过 short_circuit=True 告知 process-doc.md 后续步骤(step 5-9)无需执行。
+    structured_md_path = os.path.join(task_dir, "structured.md")
+    if not enable_vlm:
+        merged_text = ""
+        for _pf in sorted(os.listdir(parsed_dir)):
+            if not _pf.endswith(".json"):
+                continue
+            _pdoc = postprocess.load_json(os.path.join(parsed_dir, _pf))
+            if _pdoc and _pdoc.get("text"):
+                merged_text += _pdoc["text"] + "\n\n"
+        _threshold = _StructuredChunker().max_chunk_chars * 3
+        if len(merged_text) < _threshold:
+            postprocess.save_text(
+                structured_md_path,
+                f"# {topic}\n\n{merged_text.strip()}\n",
+            )
+            meta["stages_completed"].extend(["short_circuit"])
+            meta["chunks_total"] = 1
+            postprocess.save_json(meta_path, meta)
+            try:
+                if os.path.isdir(parsed_dir):
+                    shutil.rmtree(parsed_dir)
+            except Exception:
+                pass
+            logger.info(
+                "短文本分流: 合并文本 {} 字符 < {}, 直接产出 structured.md, 跳过后续步骤",
+                len(merged_text), _threshold,
+            )
+            return {
+                "task_dir": task_dir,
+                "structured_md_path": structured_md_path,
+                "chunks_dir": chunks_dir,
+                "chunk_index_path": os.path.join(chunks_dir, "_chunk_index.json"),
+                "summaries_json_path": os.path.join(chunks_dir, "summaries.json"),
+                "images_json_path": os.path.join(images_dir, "images.json"),
+                "images_dir": images_dir,
+                "meta_json_path": meta_path,
+                "chunks_total": 1,
+                "summaries_total": 0,
+                "images_relevant": 0,
+                "failed_chunks": [],
+                "vlm_enabled": False,
+                "short_circuit": True,
+                "doc_images": [],
+            }
+
     # ── 步骤 2 · chunk 拆分 ──
     chunk_result = _chunk_and_save(parsed_dir, chunks_dir)
     meta["chunks_total"] = chunk_result["chunks_total"]
@@ -718,6 +878,9 @@ async def preprocess(
         "images_relevant": meta["images_relevant"],
         "failed_chunks": meta["failed_chunks"],
         "vlm_enabled": enable_vlm,
+        "structured_md_path": None,
+        "short_circuit": False,
+        "doc_images": [],
     }
     logger.info("预处理完成: task_dir={}", task_dir)
     return result

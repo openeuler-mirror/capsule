@@ -542,6 +542,10 @@ async def main():
     parser.add_argument("--run-id", type=str, default="")
     parser.add_argument("--recursion-limit", type=int, default=500)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--image-json", type=str, default="",
+                        help="Path to a doc_images.json file (with path+description per image). "
+                             "Copied into the run directory so the PPT pipeline can use it "
+                             "as an image pool for page generation.")
 
     args = parser.parse_args()
     logger.debug(f"All arguments: {vars(args)}")
@@ -689,6 +693,13 @@ async def main():
         run_id = await new_semantic_run_id(args.text or "")
 
     out_dir = run_dir(run_id)
+    # Copy --image-json into the run directory so the PPT pipeline can find it
+    # at a well-known path: <out_dir>/doc_images.json
+    if args.image_json and os.path.isfile(args.image_json):
+        import shutil as _shutil
+        _dst = os.path.join(out_dir, "doc_images.json")
+        _shutil.copy2(args.image_json, _dst)
+        logger.info(f"Copied --image-json to {_dst}")
     cached_run = _cached_run_metadata(out_dir)
     if args.resume or args.continue_run:
         cached_session_id = cached_run.get("session_id") or ""

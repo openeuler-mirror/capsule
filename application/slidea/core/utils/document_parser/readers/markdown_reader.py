@@ -13,7 +13,6 @@ class MarkdownReader:
         self.config = config
         self.extract_images = config.extract_images
         self.output_dir = config.output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
 
     @staticmethod
     def _is_url(path: str) -> bool:

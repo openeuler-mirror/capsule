@@ -12,7 +12,6 @@ class PDFParserBase(ABC):
     def __init__(self, config: PDFEngineConfig):
         self.config = config
         self.output_dir = config.output_dir or "./outputs"
-        os.makedirs(self.output_dir, exist_ok=True)
 
     @classmethod
     def support_file_type(cls) -> Set[str]:

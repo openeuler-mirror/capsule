@@ -153,7 +153,6 @@ class DocumentParser:
 
         task_name = self._compute_task_name(file_path)
         task_output_dir = os.path.join(self.config.output_dir, task_name)
-        os.makedirs(task_output_dir, exist_ok=True)
         logger.debug("任务输出目录: {}", task_output_dir)
 
         if self._is_url(file_path):

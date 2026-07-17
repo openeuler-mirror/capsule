@@ -1,3 +1,5 @@
+from typing import Any
+
 from core.utils.logger import logger
 
 from core.ppt_generator.utils.markdown import get_markdown_images
@@ -126,7 +128,7 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
     use_simple_reference_doc = outline_results["target_page_count"] <= SIMPLE_CONTENT_PAGE_MAX_COUNT
     simple_reference_doc = state["ori_doc"][:SIMPLE_REFERENCE_DOC_CHAR_LIMIT]
     outline = []
-    for idx, ppt in enumerate(outline_list):
+    for idx, ppt in enumerate[Any](outline_list):
         chapter_idx = ppt["source"]
         if use_simple_reference_doc and ppt["type"] == PageType.CONTENT:
             reference_doc = simple_reference_doc

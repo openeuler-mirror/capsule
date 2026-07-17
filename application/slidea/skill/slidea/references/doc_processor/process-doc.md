@@ -1,6 +1,6 @@
 # Process Documents into Structured Markdown
 
-The doc-processor pipeline converts a user-provided document corpus into a single `structured.md` (H1=topic, 5-10 H2 chapters, detailed content, relevant images embedded via `![](path)`), which feeds into the PPT generation pipeline as the `--text` input.
+The doc-processor pipeline converts a user-provided document corpus into a single `structured.md` (H1=topic, 3-7 H2 chapters, detailed content), which feeds into the PPT generation pipeline as the `--text` input.
 
 ## Runtime Environment
 
@@ -11,12 +11,6 @@ All Python commands **must** use the interpreter inside `.venv` (located in `<SL
 
 `output_files_dir` (where artifacts land under `output_files_dir/documents/<task_id>/`) is resolved by `core.utils.config`: defaults to `<SLIDEA_DIR>/output`, overridable via `OUTPUT_DIR` in `.env` — same root as the PPT pipeline.
 
-## Critical Rules
-
-1. **Checkpoint recovery**: Every step checks for output file existence before executing. Never delete or overwrite existing intermediate artifacts unless the user explicitly asks for a full re-run.
-2. **No images during chapter writing** (step 6): Chapters are pure text. Images are placed later in step 8.
-3. **Chapter files start with `## `**: Never include H1 in chapter files — H1 is reserved for the topic and added during assembly (step 9).
-4. **`force=True` deletes the entire `<task_dir>`** (including `structured.md`) before rebuilding — a full re-run with no resume. Use only when the corpus changed or orphan artifacts need clearing. **Never use `force=True` during the revision loop** — it wipes all reviewed chapters.
 
 ## Directory Structure
 
@@ -24,7 +18,6 @@ All intermediate artifacts live under `output_files_dir/documents/<task_id>/`:
 
 ```
 output_files_dir/documents/<task_id>/
-  files/                              # Scattered file collection dir (agent-maintained; preprocess does not write)
   chunks/<chunk_id>.json              # Step 2 output (self-contained: text/images/source_path)
   chunks/_chunk_index.json            # Step 2 index
   chunks/summaries.json               # Step 4 merged summaries
@@ -32,12 +25,10 @@ output_files_dir/documents/<task_id>/
   images.json                         # Step 3 output
   outline_new.json                    # Step 5 agent-generated
   chapters/chapter_<index>.md         # Step 6 agent-generated
-  chapters_reviewed/chapter_<index>.md  # Step 7 agent-revised
-  structured.md                       # Step 9 final product
+  structured.md                       # Step 7 final product (assembled + reviewed)
+  doc_images.json                     # Step 8 top-30 scored images (passed to PPT pipeline)
   meta.json                           # Global metadata (preprocess maintains, agent appends)
 ```
-
-> **`parsed_docs/` lifecycle**: A transient bridge between collect→chunk and collect→image-filter. Once `preprocess()` finishes (chunks are self-contained; surviving images copied to `images/`), `parsed_docs/` is **deleted automatically**. Downstream steps read only `chunks/` and `images.json` — never `parsed_docs/`. If a run is interrupted before `preprocess()` returns, `parsed_docs/` may linger and is cleaned on the next successful completion.
 
 ## Utility Functions
 
@@ -45,31 +36,29 @@ output_files_dir/documents/<task_id>/
 |---|---|---|---|
 | 1-4 | Utility | `preprocess.preprocess(docs, topic, task_id)` | One-pass: collect & parse → chunk → image filter → summary |
 | 5 | agent | reads `summaries.json` → generates `outline_new.json` | See Step 5 |
-| 6 | agent | reads outline+chunks+summaries → writes `chapters/` | See Step 6 |
-| 7 | agent | reads `chapters/` → rewrites to `chapters_reviewed/` | **Serial** (global dedup/ordering) |
-| 8 | Utility | `postprocess.place_images_from_files(outline_path, images_path, enable_vlm)` | Reads outline+images → matches → writes back outline |
-| 9 | Utility | `postprocess.assemble_structured_md(outline_path, chapters_dir, output_path, topic)` | Reads outline+chapters → writes `structured.md` |
+| 6 | agent | reads outline+chunks+summaries → writes `structured.md` incrementally | See Step 6 |
+| 7 | agent | reads `structured.md` → 1 global review call (diff) → writes back `structured.md` | **Serial** (cross-chapter dedup/ordering) |
+| 8 | Utility | `postprocess.score_images_from_files(outline_path, images_path, output_path, enable_vlm)` | Reads outline+images → scores → writes doc_images.json |
 
 ## End-to-end Call Sequence
 
 1. `preprocess()` (step 1-4) → returns path dict incl. `vlm_enabled`, `chunks_dir`, `summaries_json_path`, `images_json_path`.
 2. Agent writes `outline_new.json` (step 5).
-3. Agent writes `chapters/chapter_<index>.md` (step 6).
-4. Agent rewrites into `chapters_reviewed/` **serially** (step 7).
-5. `place_images_from_files(...)` (step 8) — no-op when `vlm_enabled` is `False`.
-6. `assemble_structured_md(...)` (step 9) — pass `chapters_reviewed/` if it exists, else `chapters/`.
+3. Agent writes chapters into `structured.md` (step 6: grouped by weight, parallel).
+4. Agent runs 1 global review on `structured.md` (step 7: serial, diff-based).
+5. `score_images_from_files(...)` (step 8) — scores & filters images → writes `doc_images.json`; no-op when `vlm_enabled` is `False`.
 
 ## Pipeline Steps
 
-Each step only reads/writes on-disk artifacts, with checkpoint recovery (file-exists → skip).
+Each step only reads/writes on-disk artifacts; existing output files are skipped (file-exists → skip).
 
 ### Step 0: Pre-check [agent]
 
 1. Validate input: `topic` empty → ask user; `docs` empty → abort with error.
    - **`topic` must carry audience + goal**, not just a bare subject. It flows into the summarization LLM prompt (`_build_summary_prompt`) and the chunk relevance judgment, so richer context here → better-targeted summaries and outline. Use the "understood PPT request" confirmed in SKILL.md Step 0 (e.g. "面向技术团队，深入讲解 Agent 架构原理与实现细节").
 2. **File collection** [agent]: If all documents are in one directory → pass that path as `docs`. If scattered → copy all files to `output_files_dir/documents/<task_id>/files/`, then pass that `files/` path as `docs`. (This is agent-side because it may involve user interaction.)
-3. Generate or obtain `task_id` (recommended format: `timestamp_slug`, e.g. `202607151430_market_report`). Reusing an existing `task_id` resumes from checkpoints.
-4. **Decide `enable_vlm`** [agent]: Default `False` (plain-text PPT, fast). Set `True` **only** when the user explicitly asks to use document images as illustrations. ⚠️ Warn the user first — VLM filtering calls once per image and is slow for image-heavy corpora. `enable_vlm=True` but VLM unconfigured → auto-degrades to `False` (logged, no hard error).
+3. Generate or obtain `task_id` (recommended format: `<timestamp>_<slug>`, where `<timestamp>` is local time **truncated to the minute** in `%Y%m%d%H%M` — e.g. `202607151430_market_report`). When the user asks to continue a previous run, reuse the existing `task_id` of that run.
+4. **Decide `enable_vlm`** [agent]: Default `False` (plain-text PPT, fast). Set `True` **only** when the user explicitly asks to use document images as illustrations. Warn the user first — VLM filtering calls once per image and is slow for image-heavy corpora.
 
 ### Step 1-4: Preprocessing [preprocess() one-pass]
 
@@ -81,35 +70,47 @@ result = asyncio.run(preprocess(
     docs="path/to/docs_dir",   # Directory path (str) or file path list (list[str])
     topic="User PPT topic",
     task_id="<unique task ID>",
-    force=False,               # True: delete <task_dir> first (full re-run, no resume)
+    force=False,               # True: delete <task_dir> first (full re-run)
     enable_vlm=False,          # True: extract images + VLM filtering (slow); False: plain text (default)
 ))
 ```
 
-`preprocess()` runs internally in sequence (each sub-step has checkpoint recovery):
+`preprocess()` runs internally in sequence (each sub-step skips existing output files):
 
-1. **Collect & parse**: Parse each file via `get_contents`, save to `parsed_docs/<hash>.json` keyed by md5. Concurrency 3. Checkpoint: `<hash>.json` exists → skip.
-2. **Chunk split**: `StructuredChunker` (max 65536 chars, 0.05 overlap). Detection: ≥2 `#{1,3}` headings → split by H2/H3 headings; otherwise character-based with overlap. Each chunk is self-contained (full `text`/`images`/`source_path`). Checkpoint: `_chunk_index.json` exists → skip.
-3. **Image filter** (concurrent with step 4): collect images from `parsed_docs/` → size gate (drop if width<200 or height<100) → VLM topic relevance judgment → copy survivors to `images/` + write `images.json`. Auto-disabled when VLM unconfigured (`images.json=[]`). Checkpoint: `images.json` exists → skip.
-4. **Summary generation** (concurrent with step 3): concurrency 5, per-chunk `llm_invoke` → merge into `chunks/summaries.json` (single aggregated file, the only summary artifact). Chunks **clearly unrelated** to the topic are marked `relevant=false` and excluded; related/uncertain chunks are summarized normally. Checkpoint: `summaries.json` exists → load and skip already-processed `chunk_id`s, summarize only new ones. Single chunk failure → `failed_chunks[]`, others unaffected.
+1. **Collect & parse**: Parse each file via `get_contents`, save to `parsed_docs/<hash>.json` keyed by md5. Concurrency 3. Skip if `<hash>.json` already exists.
+2. **Chunk split**: `StructuredChunker` (max 65536 chars, 0.05 overlap). Detection: ≥2 `#{1,3}` headings → split by H2/H3 headings; otherwise character-based with overlap. Each chunk is self-contained (full `text`/`images`/`source_path`). Skip if `_chunk_index.json` already exists.
+3. **Image filter** (concurrent with step 4): collect images from `parsed_docs/` → size gate (drop if width<200 or height<100) → VLM topic relevance judgment → copy survivors to `images/` + write `images.json`. Auto-disabled when VLM unconfigured (`images.json=[]`). Skip if `images.json` already exists.
+4. **Summary generation** (concurrent with step 3): concurrency 5, per-chunk `llm_invoke` → merge into `chunks/summaries.json` (single aggregated file, the only summary artifact). Chunks **clearly unrelated** to the topic are marked `relevant=false` and excluded; related/uncertain chunks are summarized normally. If `summaries.json` already exists, load it and skip already-processed `chunk_id`s, summarizing only new ones. Single chunk failure → `failed_chunks[]`, others unaffected.
 
 Steps 3 and 4 **run concurrently** (`asyncio.gather`).
 
-**`preprocess()` returns** a dict: `task_dir`, `chunks_dir`, `chunk_index_path`, `summaries_json_path`, `images_json_path`, `images_dir`, `meta_json_path`, `chunks_total`, `summaries_total`, `images_relevant`, `failed_chunks`, `vlm_enabled`.
+**`preprocess()` returns** a dict: `task_dir`, `structured_md_path`, `short_circuit`, `doc_images`, `chunks_dir`, `chunk_index_path`, `summaries_json_path`, `images_json_path`, `images_dir`, `meta_json_path`, `chunks_total`, `summaries_total`, `images_relevant`, `failed_chunks`, `vlm_enabled`.
+
+### Step 1.5: Short-text shortcut [auto, inside preprocess()]
+
+After parsing, `preprocess()` checks the merged text length against the chunker threshold (65536 chars). **If total text < 65536 AND `enable_vlm=False`**, it writes the merged raw text directly to `structured.md` (as `# {topic}` + the concatenated document text) and returns immediately with `short_circuit=True` and `structured_md_path` set. **Steps 2-9 are skipped entirely** — no chunking, no summary, no outline, no chapter writing, no review. The PPT pipeline's own outline stage will digest the raw document.
+
+In both paths the final artifact is `<task_dir>/structured.md`; only `short_circuit` in the return value tells you which path was taken. `doc_images` is always empty for the short-text path (no image extraction was performed).
 
 ### Step 5: Outline Generation [agent]
 
 1. Read `summaries.json` (path from `preprocess()` return). For large summary counts, read in batches and use `keywords` to aid categorization.
 2. Design H2 chapters around `topic`. If the user has provided an explicit document structure or PPT page count, align the outline chapters to match those requirements as closely as possible; otherwise use the user-specified chapter count if provided, defaulting to 3-7 when neither is given.
 3. For each chapter, assign `chunk_ids` by evaluating each chunk's `labels`/`keywords`/`summary` against the chapter topic and `writing_desc`. A chunk may belong to **multiple chapters**. Chunks unrelated to both `topic` and any chapter → **exclude**.
-4. Write `<task_dir>/outline_new.json`. Checkpoint: file exists → skip.
+4. For each chapter, assign a `weight` reflecting its importance and expected length:
+   - `"major"`: core chapter requiring detailed, in-depth treatment (e.g. key architecture, main workflow).
+   - `"minor"`: supporting chapter needing only a brief overview (e.g. background, terminology, future outlook).
+   Weight determines how chapters are grouped for writing in Step 6: each `major` chapter is written individually; two or more consecutive `minor` chapters may be merged into a single writing call.
+5. Write `<task_dir>/outline_new.json`. 
 
 **`outline_new.json` format**:
 ```json
 {"topic":"<user topic>","total_chunks":212,
  "chapters":[
    {"index":0,"title":"<chapter title>","chunk_ids":["a1b2c3_c2","e5f6_c0"],
-    "writing_desc":"<core content and logical order>","labels":["cost"],"order":0}
+    "writing_desc":"<core content and logical order>","labels":["cost"],"weight":"major","order":0},
+   {"index":1,"title":"<minor title>","chunk_ids":["abc_c0"],
+    "writing_desc":"<brief overview>","labels":["background"],"weight":"minor","order":1}
  ],
  "unassigned_chunks":[]}
 ```
@@ -118,77 +119,69 @@ Steps 3 and 4 **run concurrently** (`asyncio.gather`).
 
 ### Step 6: Chapter Writing [agent]
 
-1. Read `outline_new.json` for the chapter list and each chapter's `chunk_ids`.
-2. For each chapter:
-   - Read original fragments from `chunks/<chunk_id>.json` (path from `chunks_dir`).
-   - Read associated summaries from `chunks/summaries.json` (filter by `chunk_id`).
-   - Write detailed chapter content, fully covering key arguments/evidence — do not compress.
-   - Write to `chapters/chapter_<index>.md`, starting with `## <title>`. No H1, no images.
-3. Chapters may be processed in parallel (agent decides concurrency). Checkpoint: `chapter_<index>.md` exists → skip. Failure → `meta.failed_chapters[]`, others unaffected.
+1. Read `outline_new.json` for the chapter list and each chapter’s `chunk_ids` and `weight`.
+2. **chapters by weight for writing** — weight also governs target depth:
+   - Each `major` chapter requires **detailed, in-depth treatment**: develop every core point with supporting evidence (data, examples, mechanism), explain motivation / trade-offs / implications where the source supports it, and target substantive multi-paragraph coverage per key point.
+   - Consecutive `minor` chapters only need a **concise overview** (1-2 paragraphs per chapter) covering the essentials, without exhaustive depth. 
+3. For each writing call:
+   - Read the **full** `chunks/<chunk_id>.json` for the chapter(s) — summaries are only a topical index, never the writing material.
+   - Follow `writing_desc` as the chapter’s logical spine: every item it calls out must be developed in prose, in that order.
+   - Writing rules (a chapter violating any of these = rewrite before saving):
+     1. **Prose-first**: body is expository paragraphs (3+ sentences each); lists only for short enumerations or comparisons, never for substantive content.
+     2. **Argue, don’t mention**: each core point from `major` chapters must be developed with what / why / how / source-specific evidence / trade-offs; multi-paragraph, not one-liners. "Covered once" is failure.
+     3. **Anchor every claim to a source detail** — numbers, names, versions, datasets, config keys, latency. "Significant improvement" without the figure is filler.
+     4. **Technical voice**: no hollow verbs (介绍/阐述+名词), no "本节将..." preamble, consistent formal register.
+   - Write to `chapters/chapter_<index>.md`, starting with `## <title>`.
+4. Chapters may be processed in parallel (agent decides concurrency). 
 
-### Step 7: Review [agent — serial]
+### Step 7: Assembly + Global Document Review [agent — serial]
 
-⚠️ **Must run serially** — this step does global deduplication, logical reordering, and style unification across all chapters.
+**Must run serially** — assemble all chapters into one complete document, then review the full document for cross-chapter issues.
 
-1. Read all `chapters/chapter_*.md`.
-2. Global rewrite: deduplicate identical content / adjust logical order / fix errors / fill gaps / unify style. Do **not** change chapter split boundaries.
-3. Write to `chapters_reviewed/chapter_<index>.md`. Checkpoint: `chapters_reviewed/chapter_<index>.md` exists → skip. Failure → fall back to unreviewed `chapters/` (mark in `meta.warnings`).
+1. **Assemble**: read all `chapters/chapter_*.md` and concatenate into `<task_dir>/structured.md` (H1=topic + chapters in outline order).
+2. **Review**: one LLM call with the full `structured.md` as input; ask for **diff-style revisions** focusing on:
+   - Cross-chapter duplicated content
+   - Factual errors
+   - Do **not** change chapter split boundaries or titles. Do **not** nitpick wording or style — only fix substantive issues.
+3. Apply the diffs back to `structured.md`.
+4. **Cleanup**: delete `chapters/` directory (single-chapter files are no longer needed).
 
-### Step 8: Image Placement [utility]
+
+### Step 8: Image Scoring [utility]
+
+Scores images against the overall document content (topic + chapter overview) and selects the top-30 most relevant. Images are scored as a pool against the overall document and passed to the PPT pipeline; they are not embedded in `structured.md`.
 
 ```python
 import asyncio
-from references.doc_processor.utils.postprocess import place_images_from_files
+from references.doc_processor.utils.postprocess import score_images_from_files
 
-asyncio.run(place_images_from_files(
+doc_images = asyncio.run(score_images_from_files(
     outline_path,           # <task_dir>/outline_new.json
-    images_json_path,       # <task_dir>/images.json (path from preprocess() return)
-    enable_vlm=result["vlm_enabled"],   # False → no-op, returns outline unchanged
+    images_path,            # <task_dir>/images.json (path from preprocess() return)
+    output_path,            # <task_dir>/doc_images.json
+    enable_vlm=result["vlm_enabled"],   # False → returns empty list
 ))
 ```
 
-- `enable_vlm` **must** come from `preprocess()`'s `vlm_enabled` field (not the agent's input flag — the actual availability after auto-degrade).
-- Reads `outline_new.json` + `images.json` → LLM matches images to chapters (grouped by source file, batched at 10/call, max concurrency 5) → writes back `outline_new.json`.
+- `enable_vlm` **must** come from `preprocess()`'s `vlm_enabled` field.
+- Reads `outline_new.json` (for topic + chapter overview) + `images.json` → LLM scores each image's relevance → writes `<task_dir>/doc_images.json` (top-30, `{path, description, score}`).
+- `doc_images` is also returned in the `preprocess()` result dict for convenience.
 
-### Step 9: Assembly [utility]
 
-```python
-from references.doc_processor.utils.postprocess import assemble_structured_md
-
-# Pass chapters_reviewed/ if it exists, else chapters/ (fallback)
-chapters_dir = "chapters_reviewed" if os.path.isdir("chapters_reviewed") else "chapters"
-structured_path = assemble_structured_md(
-    outline_path,           # <task_dir>/outline_new.json (with image placements)
-    chapters_dir,
-    structured_md_path,      # <task_dir>/structured.md
-    topic,
-)
-```
-
-Reads `outline_new.json` (with image placements) + chapter files → mechanically assembles `structured.md` (H1=topic + `##` chapters + embedded images). Checkpoint: `structured.md` exists → skip.
-
-### Step 10: Output
+### Step 9: Output
 
 Return `structured_md_path` + `outline_new.json` path + `meta.json` summary.
 
-## Revision Loop
+## Review & Revision (full-flow path only)
+
+The review/revision loop applies **only when `short_circuit=False`** (full flow). When `short_circuit=True`, `structured.md` is the raw merged document — no review, no revision; proceed directly to Phase 2.
 
 After the user reviews `structured.md`, they may request changes to specific chapters. The revision workflow edits chapter content in place and regenerates `structured.md` — **without re-running preprocessing**.
 
 - **Never pass `force=True`** during revision — it wipes the entire `<task_dir>` including reviewed chapters.
 - **Keep outline boundaries intact** — do not change chapter splits or titles unless the user explicitly asks.
-- **Edit the affected chapter file** based on review state:
-  - If `chapters_reviewed/chapter_<index>.md` exists → edit it (consumed by assembly).
-  - Else edit `chapters/chapter_<index>.md`.
-- **Rewrite/supplement** the chapter using `chunks/`, `chunks/summaries.json`, `outline_new.json` plus the user's feedback. Fully cover the changes — do not compress. Unchanged chapters are skipped via checkpoint.
-
-### Regenerating `structured.md`
-
-Step 9 skips if `structured.md` already exists. To apply edits:
-
-1. **Delete `<task_dir>/structured.md`** first — required, or assembly is skipped and edits won't appear.
-2. Re-run step 8 **only if images changed**; otherwise the existing `outline_new.json` placements are reused.
-3. Re-run step 9 (assembly).
+- **Edit the affected chapter**: rewrite `chapters/chapter_<index>.md` (if still exists) or edit `structured.md` directly (if `chapters/` was already deleted).
+- **Rewrite/supplement** the chapter using `chunks/`, `chunks/summaries.json`, `outline_new.json` plus the user's feedback. Fully cover the changes — do not compress. Unchanged chapters are left as-is.
 
 ### User confirmation
 
@@ -198,10 +191,6 @@ Every revision round must be re-confirmed. After generating or regenerating `str
 2. **A concise document overview** — including the `topic`, total chapter count, chapter titles in order, and total chunk coverage.
 
 Only when the user explicitly accepts, the doc-processing phase complete.
-
-## Fallback Path
-
-- **No VLM**: `preprocess()` auto-detects → step 3 `images.json=[]`, step 8 no-op → plain text MD. `meta.vlm_enabled=false`.
 
 ## Artifact Formats
 
@@ -264,8 +253,19 @@ Single aggregated file — there are **no per-chunk summary files**. Located in 
 | `chunk_ids` | list[str] | Associated chunk ID list |
 | `writing_desc` | str | Core content and logical order this chapter should cover |
 | `labels` | list[str] | Chapter topic labels |
+| `weight` | str | `"major"` or `"minor"` — determines writing group size in Step 6 |
 | `order` | int | Sort order |
 | `images` | list[str] | Image path list (written by step 8) |
+
+### `doc_images.json` (step 8 output)
+
+| Field | Type | Description |
+|---|---|---|
+| `path` | str | Image path |
+| `description` | str | Image content description |
+| `score` | float | Relevance score (higher = more relevant) |
+
+Top-30 sorted by score descending.
 
 ### `meta.json` (global metadata)
 

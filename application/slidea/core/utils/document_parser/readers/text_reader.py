@@ -10,7 +10,6 @@ class TextReader:
     def __init__(self, config: TextConfig):
         self.output_dir = config.output_dir
         self.encoding = config.encoding
-        os.makedirs(self.output_dir, exist_ok=True)
 
     def parse(self, file_path: str) -> ParseResult:
         logger.debug("TextReader 开始解析: {}", file_path)
@@ -20,6 +19,7 @@ class TextReader:
         md_filename = Path(file_path).stem + ".md"
         md_path = os.path.join(self.output_dir, md_filename)
 
+        os.makedirs(self.output_dir, exist_ok=True)
         with open(md_path, "w", encoding=self.encoding) as f:
             f.write(text)
 

@@ -52,163 +52,113 @@ def load_text(path: str) -> str:
         return f.read()
 
 
-# ── 图片嵌图(步骤 8) ────────────────────────────────────
 
-def _doc_hash_from_chunk_id(chunk_id: str) -> str:
-    """从 chunk_id (<doc_hash>_c<seq>) 提取 doc_hash。"""
-    if "_c" in chunk_id:
-        return chunk_id.rsplit("_c", 1)[0]
-    return chunk_id
+async def score_images(topic: str, images: list, batch_size: int = 20,
+                       max_concurrency: int = 5) -> list[dict]:
+    """Score images against overall document content (topic + outline), return sorted list.
 
+    Images are no longer matched per-chapter (they are not embedded in structured.md).
+    Instead, globally evaluate each image's relevance to the PPT topic / overall document
+    content and return top-N (default 20) as the PPT image pool.
 
-async def place_images(outline: dict, images: list, batch_size: int = 10,
-                       max_concurrency: int = 5) -> dict:
-    """按来源文件(source_hash)分组,每组图片独立匹配到相关章节。
-
-    每个文件的图片只和与该文件相关的章节(chunk_ids 的 doc_hash 匹配)一起送 LLM,
-    避免一次性全量匹配导致正确性下降。单组图片超过 batch_size 时分批执行。
-    所有批次通过 Semaphore(max_concurrency) 并发执行。
+    Each item: {path, description, score}; higher score = more relevant.
     """
     if not images:
-        return outline
-    chapters = outline.get("chapters", [])
-    if not chapters:
-        return outline
-
-    # 预计算每章关联的 doc_hash 集合
-    chapter_doc_hashes = []
-    for ch in chapters:
-        doc_hashes = {_doc_hash_from_chunk_id(cid) for cid in ch.get("chunk_ids", [])}
-        chapter_doc_hashes.append(doc_hashes)
-
-    # 按来源文件分组图片
-    groups: dict[str, list] = {}
-    for im in images:
-        key = im.get("source_hash") or ""
-        groups.setdefault(key, []).append(im)
+        return []
 
     sem = asyncio.Semaphore(max_concurrency)
-    tasks: list = []
+    scored: list[dict] = []
 
-    async def _match_batch(batch: list, chapters_desc: str) -> None:
+    async def _score_batch(batch: list) -> None:
         async with sem:
-            images_desc = "\n".join(f"{im['path']}: {im.get('description', '')}" for im in batch)
-            prompt = (
-                "把每张图片匹配到最契合的章节(返回该章节的序号)。每图恰好归入一章节;无契合则不放入。"
-                "严格输出 JSON: {\"placement\": [{\"image\": path, \"chapter\": index}]}。\n"
-                f"章节:\n{chapters_desc}\n图片:\n{images_desc}"
+            images_desc = "\n".join(
+                f"{im['path']}: {im.get('description', '')}" for im in batch
             )
+            prompt_lines = [
+                f"Score each image's relevance to the PPT topic: {topic}",
+                "Rules:",
+                "- Directly relevant, contains key info (data/architecture/flow) -> 7-10",
+                "- Indirectly relevant, has reference value -> 4-6",
+                "- Irrelevant or no information value -> 0-3",
+                'Strict JSON output: {"scores": [{"image": path, "score": float}]}',
+                f"Images:\n{images_desc}",
+            ]
+            prompt = "\n".join(prompt_lines)
             try:
-                res = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)],
-                                       InvokeOptions(json_schema={
-                                           "type": "object",
-                                           "properties": {
-                                               "placement": {
-                                                   "type": "array",
-                                                   "items": {
-                                                       "type": "object",
-                                                       "properties": {
-                                                           "image": {"type": "string"},
-                                                           "chapter": {"type": "integer"},
-                                                       },
-                                                       "required": ["image", "chapter"],
-                                                   },
-                                               },
-                                           },
-                                           "required": ["placement"],
-                                       }, work_node="place_images"))
+                res = await llm_invoke(
+                    ModelRoute.DEFAULT, [HumanMessage(content=prompt)],
+                    InvokeOptions(json_schema={
+                        "type": "object",
+                        "properties": {
+                            "scores": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "image": {"type": "string"},
+                                        "score": {"type": "number"},
+                                    },
+                                    "required": ["image", "score"],
+                                },
+                            },
+                        },
+                        "required": ["scores"],
+                    }, work_node="place_images"),
+                )
             except Exception:
                 return
             try:
-                for item in res.get("placement", []):
-                    idx = item.get("chapter")
+                for item in res.get("scores", []):
                     path = item.get("image")
-                    if idx is None or path is None:
+                    score = item.get("score", 0)
+                    if path is None:
                         continue
-                    if 0 <= idx < len(chapters):
-                        chapters[idx]["images"] = list(
-                            dict.fromkeys(chapters[idx].get("images", []) + [path])
-                        )
+                    scored.append({"path": path, "score": float(score)})
             except Exception:
                 return
 
-    for source_hash, group_images in groups.items():
-        if source_hash:
-            relevant_indices = [i for i, dh in enumerate(chapter_doc_hashes) if source_hash in dh]
-            if not relevant_indices:
-                continue
-        else:
-            # 无来源信息的图片,用全部章节兜底
-            relevant_indices = list(range(len(chapters)))
+    for start_i in range(0, len(images), batch_size):
+        batch = images[start_i:start_i + batch_size]
+        await _score_batch(batch)
 
-        chapters_desc = "\n".join(
-            f"{i}: {chapters[i]['title']} - {chapters[i].get('writing_desc', '')}"
-            for i in relevant_indices
-        )
-
-        # 单组图片超过 batch_size 则分批
-        for start in range(0, len(group_images), batch_size):
-            batch = group_images[start:start + batch_size]
-            tasks.append(_match_batch(batch, chapters_desc))
-
-    if tasks:
-        await asyncio.gather(*tasks)
-    return outline
+    best: dict[str, dict] = {}
+    path_to_desc = {im["path"]: im.get("description", "") for im in images}
+    for item in scored:
+        path = item["path"]
+        if path not in best or item["score"] > best[path]["score"]:
+            best[path] = item
+    result = sorted(best.values(), key=lambda x: x["score"], reverse=True)[:30]
+    for item in result:
+        item["description"] = path_to_desc.get(item["path"], "")
+    return result
 
 
-async def place_images_from_files(outline_path: str, images_path: str,
-                                   enable_vlm: bool = True) -> dict:
-    """自包含入口:读 outline_new.json + images.json -> 匹配图->章节 -> 回写 outline_new.json。
+async def score_images_from_files(outline_path: str, images_path: str,
+                                   output_path: str,
+                                   enable_vlm: bool = True) -> list[dict]:
+    """自包含入口:读 outline_new.json + images.json -> 全局打分 -> 写 doc_images.json。
 
     Args:
-        outline_path: outline_new.json 路径。
+        outline_path: outline_new.json 路径(读取 topic 用)。
         images_path: images.json 路径。
-        enable_vlm: 若为 False,直接返回原 outline 不做图片匹配(与 preprocess 的 enable_vlm 开关一致)。
-            默认 True 保持向后兼容;调用方应根据 preprocess 返回的 vlm_enabled 传值。
+        output_path: doc_images.json 输出路径。
+        enable_vlm: 若为 False,直接返回空列表(与 preprocess 的 enable_vlm 开关一致)。
 
-    无图或 enable_vlm=False 时直接返回原 outline。
+    无图或 enable_vlm=False 时直接返回空列表。
     """
     if not enable_vlm:
-        return load_json(outline_path) or {}
-    outline = load_json(outline_path)
-    if not outline:
-        return {}
+        return []
     images = load_json(images_path) if os.path.isfile(images_path) else []
     if not images:
-        return outline
-    outline = await place_images(outline, images)
-    save_json(outline_path, outline)
-    return outline
-
-
-# ── structured.md 组装(步骤 9) ──────────────────────────
-
-def assemble_structured_md(outline_path: str, chapters_dir: str, output_path: str, topic: str = "") -> str:
-    """读 outline_new.json + 章节文件,机械组装 structured.md。
-
-    章节文件从 chapters_dir 读取(按 index 排序),图片按 outline.chapters[i].images 嵌入。
-    断点: structured.md 已存在则跳过。
-    """
-    if os.path.isfile(output_path):
-        return output_path
-    outline = load_json(outline_path)
-    if not outline:
-        return ""
-    real_topic = outline.get("topic", topic)
-    chapters = outline.get("chapters", [])
-    chapter_files = sorted(
-        [f for f in os.listdir(chapters_dir) if f.startswith("chapter_") and f.endswith(".md")],
-        key=lambda f: int(f[len("chapter_"):-3])
-    )
-    md_parts = [f"# {real_topic}", ""]
-    for fname in chapter_files:
-        idx = int(fname[len("chapter_"):-3])
-        body = load_text(os.path.join(chapters_dir, fname))
-        md_parts.append(body.rstrip())
-        if idx < len(chapters):
-            for img in chapters[idx].get("images", []):
-                md_parts.append("")
-                md_parts.append(f"![相关图]({img})")
-        md_parts.append("")
-    save_text(output_path, "\n".join(md_parts).strip() + "\n")
-    return output_path
+        return []
+    outline = load_json(outline_path) or {}
+    topic = outline.get("topic", "")
+    # 构造全局内容描述: topic + 各章节标题+摘要
+    chapters_desc = ""
+    for ch in outline.get("chapters", []):
+        chapters_desc += f"- {ch.get('title', '')}: {ch.get('writing_desc', '')}\n"
+    full_topic = f"{topic}\n\n文档章节概要:\n{chapters_desc}" if chapters_desc else topic
+    result = await score_images(full_topic, images)
+    if result:
+        save_json(output_path, result)
+    return result
