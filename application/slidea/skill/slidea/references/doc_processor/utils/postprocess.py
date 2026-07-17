@@ -1,56 +1,13 @@
-"""后处理工具: 图片嵌图 + structured.md 组装 + 文件 I/O 工具函数。
-
-供 agent 在 preprocess() 完成后执行步骤 8(嵌图)和步骤 9(组装)。
-"""
-
 import asyncio
-import hashlib
 import json
+import logging
 import os
-from typing import Any
 
 from langchain_core.messages import HumanMessage
 
 from core.utils.llm import llm_invoke, ModelRoute, InvokeOptions
 
-
-# ── 文件 I/O 工具 ────────────────────────────────────────
-
-def get_file_hash(file_path: str) -> str:
-    if os.path.isfile(file_path):
-        h = hashlib.md5()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                h.update(chunk)
-        return h.hexdigest()
-    return hashlib.md5(file_path.encode("utf-8")).hexdigest()
-
-
-def save_json(path: str, data: Any) -> None:
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def load_json(path: str) -> Any:
-    if not os.path.isfile(path):
-        return {}
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_text(path: str, content: str) -> None:
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
-
-
-def load_text(path: str) -> str:
-    if not os.path.isfile(path):
-        return ""
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
-
+logger = logging.getLogger(__name__)
 
 
 async def score_images(topic: str, images: list, batch_size: int = 20,
@@ -105,7 +62,8 @@ async def score_images(topic: str, images: list, batch_size: int = 20,
                         "required": ["scores"],
                     }, work_node="place_images"),
                 )
-            except Exception:
+            except Exception as ex:
+                logger.warning("llm_invoke failed during image scoring: %s", ex)
                 return
             try:
                 for item in res.get("scores", []):
@@ -114,7 +72,8 @@ async def score_images(topic: str, images: list, batch_size: int = 20,
                     if path is None:
                         continue
                     scored.append({"path": path, "score": float(score)})
-            except Exception:
+            except Exception as ex:
+                logger.warning("failed to parse image scoring results: %s", ex)
                 return
 
     for start_i in range(0, len(images), batch_size):
@@ -148,10 +107,16 @@ async def score_images_from_files(outline_path: str, images_path: str,
     """
     if not enable_vlm:
         return []
-    images = load_json(images_path) if os.path.isfile(images_path) else []
+    images: list = []
+    if os.path.isfile(images_path):
+        with open(images_path, "r", encoding="utf-8") as f:
+            images = json.load(f) or []
     if not images:
         return []
-    outline = load_json(outline_path) or {}
+    outline: dict = {}
+    if os.path.isfile(outline_path):
+        with open(outline_path, "r", encoding="utf-8") as f:
+            outline = json.load(f) or {}
     topic = outline.get("topic", "")
     # 构造全局内容描述: topic + 各章节标题+摘要
     chapters_desc = ""
@@ -160,5 +125,7 @@ async def score_images_from_files(outline_path: str, images_path: str,
     full_topic = f"{topic}\n\n文档章节概要:\n{chapters_desc}" if chapters_desc else topic
     result = await score_images(full_topic, images)
     if result:
-        save_json(output_path, result)
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
     return result

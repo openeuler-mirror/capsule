@@ -382,7 +382,9 @@ async def get_final_images_node(state: ContentWorkerState):
                 logger.info("doc_image_pool: page {} claimed doc image id={} description={}",
                             page_idx, img_path, doc_desc)
             else:
-                logger.info("doc_image_pool: page {} skipped doc image {} (already claimed by another page)", page_idx, img_path)
+                logger.info(
+                    "doc_image_pool: page {} skipped doc image {} (already claimed by another page)",
+                    page_idx, img_path)
         else:
             final_img_list.append(img_path)
 

@@ -552,7 +552,11 @@ async def assemble_chapters_node(state: OutlineState, writer: StreamWriter):
                 },
                 {
                     "title": "目录",
-                    "abstract": "\n".join(metadata.toc_intro) if isinstance(metadata.toc_intro, list) else metadata.toc_intro,
+                    "abstract": (
+                        "\n".join(metadata.toc_intro)
+                        if isinstance(metadata.toc_intro, list)
+                        else metadata.toc_intro
+                    ),
                     "type": 2,
                     "source": -1,
                 },

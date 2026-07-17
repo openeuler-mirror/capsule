@@ -1,19 +1,11 @@
-"""文档预处理流水线: 收集解析 -> chunk 拆分 -> 图片过滤 -> 摘要生成。
-
-对外仅暴露 `preprocess()` 接口。所有中间产物落到
-`output_files_dir/documents/<task_id>/` 下,供 agent 后续生成 outline 及章节。
-
-agent 职责:
-  - 若文档零散,先拷贝到 `output_files_dir/documents/<task_id>/files/`,再传入该目录路径。
-  - 若文档已在同一目录,直接传入该目录路径。
-  - 调用 `preprocess()` 获取路径信息,再基于 `summaries.json` 生成 outline。
-"""
-
 import asyncio
 import base64
+import hashlib
+import json
 import os
 import re
 import shutil
+from typing import Any
 
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
@@ -28,11 +20,38 @@ from core.utils.llm import (
     InvokeOptions,
 )
 from core.utils.logger import logger
-from . import postprocess
+
+
+def get_file_hash(file_path: str) -> str:
+    if os.path.isfile(file_path):
+        h = hashlib.md5()
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    return hashlib.md5(file_path.encode("utf-8")).hexdigest()
+
+
+def save_json(path: str, data: Any) -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def load_json(path: str) -> Any:
+    if not os.path.isfile(path):
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_text(path: str, content: str) -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
 
 
 # ── 文件收集 ──────────────────────────────────────────────
-
 _SUPPORTED_EXTENSIONS = {
     ".txt", ".md", ".markdown",
     ".pdf",
@@ -185,7 +204,7 @@ def _chunk_and_save(parsed_dir: str, chunks_dir: str) -> dict:
     """
     index_path = os.path.join(chunks_dir, "_chunk_index.json")
     if os.path.isfile(index_path):
-        existing = postprocess.load_json(index_path)
+        existing = load_json(index_path)
         if isinstance(existing, list) and existing:
             return {"chunks_total": len(existing), "chunk_ids": [e["chunk_id"] for e in existing]}
 
@@ -196,7 +215,7 @@ def _chunk_and_save(parsed_dir: str, chunks_dir: str) -> dict:
         os.path.join(parsed_dir, f) for f in os.listdir(parsed_dir) if f.endswith(".json")
     )
     for pf in parsed_files:
-        pdoc = postprocess.load_json(pf)
+        pdoc = load_json(pf)
         if not pdoc or not pdoc.get("hash"):
             continue
         doc_hash = pdoc["hash"]
@@ -204,7 +223,7 @@ def _chunk_and_save(parsed_dir: str, chunks_dir: str) -> dict:
         chunks = chunker.chunk(pdoc)
         for ch in chunks:
             chunk_file = os.path.join(chunks_dir, f"{ch['id']}.json")
-            postprocess.save_json(chunk_file, {
+            save_json(chunk_file, {
                 "id": ch["id"],
                 "text": ch["text"],
                 "source_anchor": ch["source_anchor"],
@@ -221,7 +240,7 @@ def _chunk_and_save(parsed_dir: str, chunks_dir: str) -> dict:
                 "source_path": source_path,
                 "char_range": ch.get("char_range", [0, 0]),
             })
-    postprocess.save_json(index_path, index)
+    save_json(index_path, index)
     return {"chunks_total": len(index), "chunk_ids": [e["chunk_id"] for e in index]}
 
 
@@ -282,7 +301,8 @@ def _build_batch_prompt(images: list[dict], topic: str) -> str:
         "判断规则(按优先级从高到低,命中任一即照此判定):\n"
         "1. 图片质量/有效性: 若图片是纯黑/纯白/空白页/加载失败/渲染异常,或完全无法辨识任何文字、图表、场景或元素,relevant 一律置为 false(这类图片无任何信息价值,不应保留)。\n"
         "2. 无实际意义: 若图片仅为纯色块、单一像素、极低分辨率模糊不清、或无可读信息的装饰性内容,relevant 置为 false。\n"
-        "3. 主题相关性(仅当 1、2 均未命中、图片内容有效时才考虑): 除非可以肯定图片与 PPT 主题完全无关,否则 relevant 置为 true(即内容有效但主题相关性相关或无法确定时,一律置为 true,宁可保留有效图表)。\n"
+        "3. 主题相关性(仅当 1、2 均未命中、图片内容有效时才考虑): "
+        "除非可以肯定图片与 PPT 主题完全无关,否则 relevant 置为 true (即内容有效但主题相关性相关或无法确定时,一律置为 true)。\n"
         "reason 需说明命中的规则编号及依据。\n"
         "严格输出 JSON 数组,长度必须为 " + str(n) + ",按序号对应:\n"
         '[{"relevant": boolean, "description": "详细描述", "reason": "判断理由"}, ...]'
@@ -358,7 +378,8 @@ async def _judge_single(img: dict, topic: str) -> dict | None:
         "判断规则(按优先级从高到低,命中任一即照此判定):\n"
         "1. 图片质量/有效性: 若图片是纯黑/纯白/空白页/加载失败/渲染异常,或完全无法辨识任何文字、图表、场景或元素,relevant 一律置为 false(这类图片无任何信息价值,不应保留)。\n"
         "2. 无实际意义: 若图片仅为纯色块、单一像素、极低分辨率模糊不清、或无可读信息的装饰性内容,relevant 置为 false。\n"
-        "3. 主题相关性(仅当 1、2 均未命中、图片内容有效时才考虑): 除非可以肯定图片与 PPT 主题完全无关,否则 relevant 置为 true(即内容有效但主题相关性相关或无法确定时,一律置为 true,宁可保留有效图表)。\n"
+        "3. 主题相关性(仅当 1、2 均未命中、图片内容有效时才考虑): "
+        "除非可以肯定图片与 PPT 主题完全无关,否则 relevant 置为 true (即内容有效但主题相关性相关或无法确定时,一律置为 true)。\n"
         "reason 需说明命中的规则编号及依据。\n"
         "严格输出 JSON: {\"relevant\": boolean, \"description\": \"详细描述\", \"reason\": \"判断理由\"}"
     )
@@ -446,7 +467,9 @@ async def _filter_images_by_topic(all_images: list, topic: str, output_dir: str,
                     continue
 
                 source_hash = img.get("source_hash") or ""
-                dest = os.path.join(output_dir, f"{source_hash}_{os.path.basename(path)}" if source_hash else os.path.basename(path))
+                basename = os.path.basename(path)
+                name = f"{source_hash}_{basename}" if source_hash else basename
+                dest = os.path.join(output_dir, name)
                 try:
                     shutil_copy(path, dest)
                     logger.debug("[{}] 已保存相关图片到: {}", batch_label, dest)
@@ -484,7 +507,7 @@ def _dedup_images_cross_doc(images: list) -> list:
         path = img.get("path", "")
         if not path or not os.path.isfile(path):
             continue
-        file_hash = postprocess.get_file_hash(path)
+        file_hash = get_file_hash(path)
         if file_hash in seen_hashes:
             removed += 1
             logger.debug(
@@ -505,6 +528,7 @@ def _dedup_images_cross_doc(images: list) -> list:
         )
     return deduped
 
+
 async def _filter_and_save(parsed_dir: str, images_dir: str, topic: str) -> list:
     """从 parsed_docs/ 收集图片 -> 跨文档去重 -> 尺寸闸门 + VLM 过滤 -> 保存 images.json + 复制幸存图。
 
@@ -512,12 +536,12 @@ async def _filter_and_save(parsed_dir: str, images_dir: str, topic: str) -> list
     """
     images_json_path = os.path.join(images_dir, "images.json")
     if os.path.isfile(images_json_path):
-        return postprocess.load_json(images_json_path)
+        return load_json(images_json_path)
 
     parsed_files = [os.path.join(parsed_dir, f) for f in os.listdir(parsed_dir) if f.endswith(".json")]
     all_images = []
     for pf in parsed_files:
-        pdoc = postprocess.load_json(pf)
+        pdoc = load_json(pf)
         source_path = pdoc.get("source_path", "")
         for img in pdoc.get("images", []):
             img2 = dict(img)
@@ -530,7 +554,7 @@ async def _filter_and_save(parsed_dir: str, images_dir: str, topic: str) -> list
     all_images = _dedup_images_cross_doc(all_images)
 
     survivors = await _filter_images_by_topic(all_images, topic, images_dir)
-    postprocess.save_json(images_json_path, survivors)
+    save_json(images_json_path, survivors)
     return survivors
 
 
@@ -596,14 +620,14 @@ async def _summarize_all(chunks_dir: str, topic: str,
     failed = []
     processed_chunk_ids = set()
 
-    chunk_index = postprocess.load_json(os.path.join(chunks_dir, "_chunk_index.json"))
+    chunk_index = load_json(os.path.join(chunks_dir, "_chunk_index.json"))
     if not isinstance(chunk_index, list):
         chunk_index = []
 
     # 读取已有的summaries.json，跳过已处理的chunk
     summaries_json_path = os.path.join(chunks_dir, "summaries.json")
     if os.path.isfile(summaries_json_path):
-        existing_results = postprocess.load_json(summaries_json_path)
+        existing_results = load_json(summaries_json_path)
         if isinstance(existing_results, list):
             results = existing_results
             processed_chunk_ids = {r["chunk_id"] for r in results}
@@ -614,7 +638,7 @@ async def _summarize_all(chunks_dir: str, topic: str,
             if not chunk_id or chunk_id in processed_chunk_ids:
                 return
             try:
-                chunk = postprocess.load_json(os.path.join(chunks_dir, f"{chunk_id}.json"))
+                chunk = load_json(os.path.join(chunks_dir, f"{chunk_id}.json"))
                 if not chunk:
                     failed.append(chunk_id)
                     return
@@ -639,7 +663,7 @@ async def _summarize_all(chunks_dir: str, topic: str,
 
     await asyncio.gather(*[_one(e) for e in chunk_index if e.get("chunk_id") not in processed_chunk_ids])
     results.sort(key=lambda e: (e["doc_hash"], e["chunk_seq"]))
-    postprocess.save_json(summaries_json_path, results)
+    save_json(summaries_json_path, results)
     return {"summaries_total": len(results), "failed_chunks": failed}
 
 
@@ -745,7 +769,7 @@ async def preprocess(
 
     async def _parse_one(fp: str):
         async with parse_sem:
-            doc_hash = postprocess.get_file_hash(fp)
+            doc_hash = get_file_hash(fp)
             parsed_path = os.path.join(parsed_dir, f"{doc_hash}.json")
             if os.path.isfile(parsed_path):
                 logger.info("跳过已解析文档: {}", fp)
@@ -758,7 +782,7 @@ async def preprocess(
                 "source_path": fp,
                 "markdown_file": result.get("markdown_file", []),
             }
-            postprocess.save_json(parsed_path, pdoc)
+            save_json(parsed_path, pdoc)
             logger.info(
                 "解析文档完成: {} (hash={}, text_len={}, images={})",
                 fp, doc_hash, len(result["text"]), len(result["images"]),
@@ -766,7 +790,7 @@ async def preprocess(
 
     await asyncio.gather(*[_parse_one(fp) for fp in all_files])
     meta["stages_completed"].append("collect")
-    postprocess.save_json(meta_path, meta)
+    save_json(meta_path, meta)
 
     # ── 短文本分流: 解析后若合并文本 < 阈值且无需图片处理 ──
     # 直接将合并裸文档写成 structured.md,跳过 chunk/summary/outline/章节写作/review,
@@ -783,7 +807,7 @@ async def preprocess(
     for _pf in sorted(os.listdir(parsed_dir)):
         if not _pf.endswith(".json"):
             continue
-        _pdoc = postprocess.load_json(os.path.join(parsed_dir, _pf))
+        _pdoc = load_json(os.path.join(parsed_dir, _pf))
         if not _pdoc:
             continue
         if _pdoc.get("text"):
@@ -795,20 +819,21 @@ async def preprocess(
         for _pf in sorted(os.listdir(parsed_dir)):
             if not _pf.endswith(".json"):
                 continue
-            _pdoc = postprocess.load_json(os.path.join(parsed_dir, _pf))
+            _pdoc = load_json(os.path.join(parsed_dir, _pf))
             if _pdoc and _pdoc.get("text"):
                 merged_text += _pdoc["text"] + "\n\n"
-        postprocess.save_text(
+        save_text(
             structured_md_path,
             f"# {topic}\n\n{merged_text.strip()}\n",
         )
         meta["stages_completed"].extend(["short_circuit"])
         meta["chunks_total"] = 1
-        postprocess.save_json(meta_path, meta)
+        save_json(meta_path, meta)
         try:
             if os.path.isdir(parsed_dir):
                 shutil.rmtree(parsed_dir)
-        except Exception:
+        except Exception as ex:
+            logger.warning("删除 parsed_dir 失败: {}", ex)
             pass
         logger.info(
             "短文本分流: 合并文本 {} 字符 < {}, 图片 {} 张, 直接产出 structured.md, 跳过后续步骤",
@@ -837,7 +862,7 @@ async def preprocess(
     meta["chunks_total"] = chunk_result["chunks_total"]
     meta["stages_completed"].append("chunk")
     logger.info("Chunk 拆分完成: 共 {} 个 chunk", chunk_result["chunks_total"])
-    postprocess.save_json(meta_path, meta)
+    save_json(meta_path, meta)
 
     # ── 步骤 3+4 · 图片过滤 + 摘要生成(并发) ──
     async def _do_filter():
@@ -846,7 +871,7 @@ async def preprocess(
             logger.info("图片过滤完成: 幸存 {} 张", len(survivors))
             return survivors
         else:
-            postprocess.save_json(os.path.join(images_dir, "images.json"), [])
+            save_json(os.path.join(images_dir, "images.json"), [])
             logger.info("VLM 未启用,跳过图片过滤")
             return []
 
@@ -864,7 +889,7 @@ async def preprocess(
     meta["summaries_total"] = summary_result["summaries_total"]
     meta["failed_chunks"] = summary_result["failed_chunks"]
     meta["stages_completed"].extend(["filter", "summarize"])
-    postprocess.save_json(meta_path, meta)
+    save_json(meta_path, meta)
 
     # ── 清理 parsed_docs ──
     # parsed_docs 是 collect→chunk、collect→filter 之间的中间桥梁:
@@ -899,8 +924,3 @@ async def preprocess(
     }
     logger.info("预处理完成: task_dir={}", task_dir)
     return result
-
-
-
-
-
