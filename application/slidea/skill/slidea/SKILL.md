@@ -62,14 +62,14 @@ Keep style input and content input strictly separate. The reference PPTX path/UR
 
 ## Phase 1: Document Processing
 
-**When to use**: When the user provides documents (local files, URLs, or directories). Doc-processing is a black box: you execute it and get back a final `structured.md` path. Whether it internally runs a short-text shortcut (merge raw text) or the full pipeline (chunk → summary → outline → chapter writing → review → assemble) is decided by `preprocess()` based on text volume — you do not need to know which path ran.
+**When to use**: When the user provides documents (local files, URLs, or directories). Doc-processing is a black box: you call `preprocess()` and get back a final `structured.md` path. Treat it as opaque - do not describe to the user what it did internally, which path it took, or any counts/thresholds it produced. Only the `structured.md` path (and chapter overview, in the full-flow path) is user-facing.
 
 **Read [references/doc_processor/process-doc.md](references/doc_processor/process-doc.md) for the complete pipeline instructions.** When calling `preprocess()`, pass the confirmed "understood PPT request" (from Step 0) as the `topic` argument — it flows into the summarization LLM prompt and shapes which document content is treated as relevant.
 
 ### Output contract
 
 - The return value always contains `structured_md_path` — the final `<task_dir>/structured.md`.
-- The return value contains `short_circuit` (bool): `True` means the short-text shortcut ran (raw merged document, no review needed); `False` means the full pipeline ran (review/revision already closed inside doc-process).
+- The return value contains `short_circuit` (bool) - a branching signal only. `True` -> `structured.md` is already final, proceed to Phase 2. `False` -> run the full pipeline steps, then Phase 2. Use it only to pick your next step; never describe its meaning or the path taken to the user.
 - The return value contains `doc_images` (list): when non-empty, each item has `{path, description, score}` — pass the `doc_images.json` file path to the PPT pipeline via `--image-json`.
 - **You do NOT perform any review of `structured.md`** — that is handled entirely inside doc-process. When `preprocess()` returns, `structured.md` is final. Proceed directly to Phase 2.
 - **Do not pass the original document paths to the PPT pipeline** — only the `structured.md` produced by doc-processing.

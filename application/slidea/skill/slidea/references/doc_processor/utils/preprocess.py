@@ -768,12 +768,29 @@ async def preprocess(
     meta["stages_completed"].append("collect")
     postprocess.save_json(meta_path, meta)
 
-    # ── 短文本分流: 解析后若合并文本 < 单 chunk 上限且不需要图片 ──
+    # ── 短文本分流: 解析后若合并文本 < 阈值且无需图片处理 ──
     # 直接将合并裸文档写成 structured.md,跳过 chunk/summary/outline/章节写作/review,
     # 对上层(doc-process / SKILL.md)表现为黑盒: 同样产出 structured.md 并返回路径,
     # 仅通过 short_circuit=True 告知 process-doc.md 后续步骤(step 5-9)无需执行。
+    # 触发条件: 合并文本 < 阈值, 且无需图片处理 ──
+    #   (a) enable_vlm=False: 图片过滤本就跳过;
+    #   (b) enable_vlm=True 但未解析出任何图片: 图片过滤/打分无意义, 短文本直接产出。
     structured_md_path = os.path.join(task_dir, "structured.md")
-    if not enable_vlm:
+    _threshold = _StructuredChunker().max_chunk_chars * 2
+    # 仅累加长度与图片数, 不拼接全文, 避免大文档时的内存占用; 触发时再读取拼接。
+    merged_len = 0
+    total_images = 0
+    for _pf in sorted(os.listdir(parsed_dir)):
+        if not _pf.endswith(".json"):
+            continue
+        _pdoc = postprocess.load_json(os.path.join(parsed_dir, _pf))
+        if not _pdoc:
+            continue
+        if _pdoc.get("text"):
+            merged_len += len(_pdoc["text"]) + 2
+        if _pdoc.get("images"):
+            total_images += len(_pdoc["images"])
+    if merged_len < _threshold and (not enable_vlm or total_images == 0):
         merged_text = ""
         for _pf in sorted(os.listdir(parsed_dir)):
             if not _pf.endswith(".json"):
@@ -781,41 +798,39 @@ async def preprocess(
             _pdoc = postprocess.load_json(os.path.join(parsed_dir, _pf))
             if _pdoc and _pdoc.get("text"):
                 merged_text += _pdoc["text"] + "\n\n"
-        _threshold = _StructuredChunker().max_chunk_chars * 3
-        if len(merged_text) < _threshold:
-            postprocess.save_text(
-                structured_md_path,
-                f"# {topic}\n\n{merged_text.strip()}\n",
-            )
-            meta["stages_completed"].extend(["short_circuit"])
-            meta["chunks_total"] = 1
-            postprocess.save_json(meta_path, meta)
-            try:
-                if os.path.isdir(parsed_dir):
-                    shutil.rmtree(parsed_dir)
-            except Exception:
-                pass
-            logger.info(
-                "短文本分流: 合并文本 {} 字符 < {}, 直接产出 structured.md, 跳过后续步骤",
-                len(merged_text), _threshold,
-            )
-            return {
-                "task_dir": task_dir,
-                "structured_md_path": structured_md_path,
-                "chunks_dir": chunks_dir,
-                "chunk_index_path": os.path.join(chunks_dir, "_chunk_index.json"),
-                "summaries_json_path": os.path.join(chunks_dir, "summaries.json"),
-                "images_json_path": os.path.join(images_dir, "images.json"),
-                "images_dir": images_dir,
-                "meta_json_path": meta_path,
-                "chunks_total": 1,
-                "summaries_total": 0,
-                "images_relevant": 0,
-                "failed_chunks": [],
-                "vlm_enabled": False,
-                "short_circuit": True,
-                "doc_images": [],
-            }
+        postprocess.save_text(
+            structured_md_path,
+            f"# {topic}\n\n{merged_text.strip()}\n",
+        )
+        meta["stages_completed"].extend(["short_circuit"])
+        meta["chunks_total"] = 1
+        postprocess.save_json(meta_path, meta)
+        try:
+            if os.path.isdir(parsed_dir):
+                shutil.rmtree(parsed_dir)
+        except Exception:
+            pass
+        logger.info(
+            "短文本分流: 合并文本 {} 字符 < {}, 图片 {} 张, 直接产出 structured.md, 跳过后续步骤",
+            merged_len, _threshold, total_images,
+        )
+        return {
+            "task_dir": task_dir,
+            "structured_md_path": structured_md_path,
+            "chunks_dir": chunks_dir,
+            "chunk_index_path": os.path.join(chunks_dir, "_chunk_index.json"),
+            "summaries_json_path": os.path.join(chunks_dir, "summaries.json"),
+            "images_json_path": os.path.join(images_dir, "images.json"),
+            "images_dir": images_dir,
+            "meta_json_path": meta_path,
+            "chunks_total": 1,
+            "summaries_total": 0,
+            "images_relevant": 0,
+            "failed_chunks": [],
+            "vlm_enabled": enable_vlm,
+            "short_circuit": True,
+            "doc_images": [],
+        }
 
     # ── 步骤 2 · chunk 拆分 ──
     chunk_result = _chunk_and_save(parsed_dir, chunks_dir)

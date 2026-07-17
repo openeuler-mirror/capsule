@@ -34,7 +34,7 @@ output_files_dir/documents/<task_id>/
 
 | Step | Type | Tool/Method | Description |
 |---|---|---|---|
-| 1-4 | Utility | `preprocess.preprocess(docs, topic, task_id)` | One-pass: collect & parse → chunk → image filter → summary |
+| 1-4 | Utility | `preprocess.preprocess(docs, topic, task_id, force, enable_vlm)` | One-pass: collect & parse → chunk → image filter → summary |
 | 5 | agent | reads `summaries.json` → generates `outline_new.json` | See Step 5 |
 | 6 | agent | reads outline+chunks+summaries → writes `structured.md` incrementally | See Step 6 |
 | 7 | agent | reads `structured.md` → 1 global review call (diff) → writes back `structured.md` | **Serial** (cross-chapter dedup/ordering) |
@@ -75,22 +75,13 @@ result = asyncio.run(preprocess(
 ))
 ```
 
-`preprocess()` runs internally in sequence (each sub-step skips existing output files):
+`preprocess()` runs internally as collect & parse -> chunk split -> image filter -> summary generation. Each sub-step skips existing output artifacts (file-exists -> skip), so re-running with the same `task_id` resumes from where it left off. It writes artifacts under `<task_dir>/` (see [Directory Structure](#directory-structure) and [Artifact Formats](#artifact-formats)); the result dict returns their paths.
 
-1. **Collect & parse**: Parse each file via `get_contents`, save to `parsed_docs/<hash>.json` keyed by md5. Concurrency 3. Skip if `<hash>.json` already exists.
-2. **Chunk split**: `StructuredChunker` (max 65536 chars, 0.05 overlap). Detection: ≥2 `#{1,3}` headings → split by H2/H3 headings; otherwise character-based with overlap. Each chunk is self-contained (full `text`/`images`/`source_path`). Skip if `_chunk_index.json` already exists.
-3. **Image filter** (concurrent with step 4): collect images from `parsed_docs/` → size gate (drop if width<200 or height<100) → VLM topic relevance judgment → copy survivors to `images/` + write `images.json`. Auto-disabled when VLM unconfigured (`images.json=[]`). Skip if `images.json` already exists.
-4. **Summary generation** (concurrent with step 3): concurrency 5, per-chunk `llm_invoke` → merge into `chunks/summaries.json` (single aggregated file, the only summary artifact). Chunks **clearly unrelated** to the topic are marked `relevant=false` and excluded; related/uncertain chunks are summarized normally. If `summaries.json` already exists, load it and skip already-processed `chunk_id`s, summarizing only new ones. Single chunk failure → `failed_chunks[]`, others unaffected.
+Two contracts worth knowing for the downstream steps:
+- **`summaries.json`** is a single aggregated file (no per-chunk summary files). It **omits chunks clearly unrelated to the topic**; related/uncertain chunks are summarized normally - so do not expect every chunk to appear in it.
+- **Branching signal**: the result dict carries a `short_circuit` bool that tells you what to do next, **nothing more**. `short_circuit=True` -> `structured.md` is already final, jump to Step 9 (skip Steps 5-8). `short_circuit=False` -> run Steps 5-8. Use the field **only** to pick the next step; do not echo its meaning, the path taken, or any internal state to the user - to the user, doc-processing is a black box that returns a `structured.md` path.
 
-Steps 3 and 4 **run concurrently** (`asyncio.gather`).
-
-**`preprocess()` returns** a dict: `task_dir`, `structured_md_path`, `short_circuit`, `doc_images`, `chunks_dir`, `chunk_index_path`, `summaries_json_path`, `images_json_path`, `images_dir`, `meta_json_path`, `chunks_total`, `summaries_total`, `images_relevant`, `failed_chunks`, `vlm_enabled`.
-
-### Step 1.5: Short-text shortcut [auto, inside preprocess()]
-
-After parsing, `preprocess()` checks the merged text length against the chunker threshold (65536 chars). **If total text < 65536 AND `enable_vlm=False`**, it writes the merged raw text directly to `structured.md` (as `# {topic}` + the concatenated document text) and returns immediately with `short_circuit=True` and `structured_md_path` set. **Steps 2-9 are skipped entirely** — no chunking, no summary, no outline, no chapter writing, no review. The PPT pipeline's own outline stage will digest the raw document.
-
-In both paths the final artifact is `<task_dir>/structured.md`; only `short_circuit` in the return value tells you which path was taken. `doc_images` is always empty for the short-text path (no image extraction was performed).
+**`preprocess()` returns** a dict. The fields you actually act on: `structured_md_path`, `short_circuit`, `doc_images`, `chunks_dir`, `summaries_json_path`, `images_json_path`, `meta_json_path`. (Other fields are internal bookkeeping - read them only if a step needs them; never report them to the user.)
 
 ### Step 5: Outline Generation [agent]
 
@@ -174,7 +165,7 @@ Return `structured_md_path` + `outline_new.json` path + `meta.json` summary.
 
 ## Review & Revision (full-flow path only)
 
-The review/revision loop applies **only when `short_circuit=False`** (full flow). When `short_circuit=True`, `structured.md` is the raw merged document — no review, no revision; proceed directly to Phase 2.
+The review/revision loop applies **only when `short_circuit=False`** (full flow). When `short_circuit=True`, `structured.md` is already final — no review, no revision; proceed directly to Phase 2.
 
 After the user reviews `structured.md`, they may request changes to specific chapters. The revision workflow edits chapter content in place and regenerates `structured.md` — **without re-running preprocessing**.
 
