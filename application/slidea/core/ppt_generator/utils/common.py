@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import json
 import hashlib
 import mimetypes
@@ -24,7 +23,7 @@ from PIL import Image
 from core.utils.logger import logger
 from core.utils.config import app_base_dir
 from core.ppt_generator.utils.pptx_postprocess import remove_full_slide_solid_backdrops
-from core.utils.image_payload import build_image_url
+from core.utils.image_payload import build_image_url, is_valid_vlm_image_file
 from core.utils.libreoffice import get_available_libreoffice_executable
 
 
@@ -885,23 +884,11 @@ async def _execute_download_images(image_list, images_dir):
     return nested_results
 
 
-def _ensure_placeholder_image(image_dir: str) -> str:
-    os.makedirs(image_dir, exist_ok=True)
-    placeholder_path = os.path.join(image_dir, "placeholder.png")
-    if os.path.exists(placeholder_path):
-        return placeholder_path
-
-    # 1x1 transparent PNG
-    placeholder_b64 = (
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
-    )
-    with open(placeholder_path, "wb") as f:
-        f.write(base64.b64decode(placeholder_b64))
-    return placeholder_path
-
-
 async def download_image(img_url, image_dir):
-    """download image and return img used in html"""
+    """Download a decodable raster image, returning None for unusable data."""
+
+    if not isinstance(img_url, str) or not img_url.strip():
+        return None
 
     if img_url.startswith("//"):
         img_url = "https:" + img_url
@@ -934,32 +921,40 @@ async def download_image(img_url, image_dir):
             response.raise_for_status()
 
             # 2. 从响应头中获取内容类型 (Content-Type)
-            content_type = response.headers.get("Content-Type")
-            if not content_type or not content_type.startswith("image/"):
+            content_type = (
+                response.headers.get("Content-Type") or ""
+            ).split(";", 1)[0].strip().lower()
+            url_suffix = Path(urlparse(img_url).path).suffix.lower()
+            supported_url_suffixes = {
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".webp",
+                ".gif",
+                ".bmp",
+                ".avif",
+            }
+            if not content_type.startswith("image/"):
                 # Some hosts return application/octet-stream for images
-                if not img_url.lower().endswith((
-                    ".png",
-                    ".jpg",
-                    ".jpeg",
-                    ".webp",
-                    ".gif",
-                    ".bmp",
-                    ".svg",
-                )):
+                if url_suffix not in supported_url_suffixes:
                     logger.debug(
                         f"下载失败: {img_url}, Content-Type非图片格式: {content_type}"
                     )
-                    return _ensure_placeholder_image(image_dir)
+                    return None
 
             # 3. 使用mimetypes库将 'image/jpeg' 转换为 '.jpg' 等扩展名
-            file_ext = mimetypes.guess_extension(content_type.split(";")[0])
+            file_ext = (
+                mimetypes.guess_extension(content_type)
+                if content_type.startswith("image/")
+                else url_suffix
+            )
             if not file_ext:
-                # 如果 mimetypes 无法识别，提供一个简单的备用方案
-                subtype = content_type.split("/")[-1].split(";")[0]
-                file_ext = f".{subtype}"
-                logger.debug(
-                    f"无法从 '{content_type}' 自动推断扩展名, 回退使用: '{file_ext}'"
-                )
+                logger.debug(f"无法确定下载图片格式: {img_url}, Content-Type: {content_type}")
+                return None
+
+            if content_type == "image/svg+xml" or file_ext == ".svg":
+                logger.debug(f"跳过不支持的 VLM 矢量图片: {img_url}")
+                return None
 
             # 常见修正: .jpe -> .jpg
             if file_ext == ".jpe":
@@ -967,24 +962,40 @@ async def download_image(img_url, image_dir):
 
             # 4. 生成文件名和路径
             filename = f"{hashlib.md5(img_url.encode()).hexdigest()}{file_ext}"
+            os.makedirs(image_dir, exist_ok=True)
             local_path = os.path.join(image_dir, filename)
 
             # 5. 保存到本地
             with open(local_path, "wb") as file:
                 file.write(response.content)
 
-            # 6. 转换不支持的格式（avif/webp -> jpg）
-            if file_ext in (".avif", ".webp"):
+            # 6. 转换兼容性较差的格式为 jpg
+            if file_ext in (".avif", ".webp", ".bmp"):
                 try:
                     jpg_path = os.path.splitext(local_path)[0] + ".jpg"
                     with Image.open(local_path) as im:
-                        im = im.convert("RGB")
-                        im.save(jpg_path, "JPEG", quality=90)
+                        converted = im.convert("RGB")
+                        converted.save(jpg_path, "JPEG", quality=90)
+                    os.remove(local_path)
+                    if not is_valid_vlm_image_file(jpg_path):
+                        os.remove(jpg_path)
+                        logger.debug(f"转换后的图片无法解码: {img_url}")
+                        return None
                     return jpg_path
                 except Exception as e:
                     logger.warning(f"转换图片格式失败: {local_path} - {e}")
+                    for candidate in (local_path, os.path.splitext(local_path)[0] + ".jpg"):
+                        try:
+                            os.remove(candidate)
+                        except FileNotFoundError:
+                            pass
+                    return None
 
+            if not is_valid_vlm_image_file(local_path):
+                os.remove(local_path)
+                logger.debug(f"下载内容不是可解码图片，已跳过: {img_url}")
+                return None
             return local_path
     except Exception as e:
         logger.debug(f"下载时发生未知错误: {img_url} - {str(e)}")
-        return _ensure_placeholder_image(image_dir)
+        return None

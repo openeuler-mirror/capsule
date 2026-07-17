@@ -4,6 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from PIL import Image
+
 from core.ppt_generator.thought_to_ppt.state import PPTPage, PageType
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator import node
 from core.ppt_generator.utils.style_pack import apply_style_reference_shell
@@ -14,6 +16,10 @@ def _dynamic_svg(text: str, *, include_header: bool = False) -> str:
     return f'''<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
       {header}<g id="body"><text x="100" y="240" font-family="Arial">{text}</text></g>
     </svg>'''
+
+
+def _write_test_png(path: Path) -> None:
+    Image.new("RGB", (2, 2), "white").save(path, "PNG")
 
 
 class SVGStylePackVLMTests(unittest.IsolatedAsyncioTestCase):
@@ -29,7 +35,7 @@ class SVGStylePackVLMTests(unittest.IsolatedAsyncioTestCase):
             reference = root / "reference.svg"
             screenshot = root / "review.png"
             reference.write_text(reference_svg, encoding="utf-8")
-            screenshot.write_bytes(b"png")
+            _write_test_png(screenshot)
             page = PPTPage(
                 title="new title",
                 abstract="摘要",
@@ -64,7 +70,7 @@ class SVGStylePackVLMTests(unittest.IsolatedAsyncioTestCase):
     async def test_no_style_pack_vlm_still_receives_original_full_svg(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             screenshot = Path(tmp_dir) / "review.png"
-            screenshot.write_bytes(b"png")
+            _write_test_png(screenshot)
             page = PPTPage(
                 title="plain",
                 abstract="摘要",
