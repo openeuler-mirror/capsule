@@ -38,6 +38,7 @@ Only after the user confirms, proceed to the entry-point decision below.
 Decide the entry point by what the user provided:
 
 - **User provided documents** (local files, URLs, or directories): Execute Phase 1 **Document Processing** first. Pass the confirmed "understood PPT request" as `topic` to `preprocess()` — it flows into the summarization LLM prompt and shapes which content is treated as relevant. After the user reviews and accepts the resulting `structured.md`, proceed to Phase 2.
+  - **Phase 1 only - hard boundary**: `topic` carries intent only (audience/goal/topic/style) - never document summaries, outlines, or digested points. While building this string, do not open or read any document content; pass paths to `preprocess()` and let doc-process parse and digest it.
 - **User only gave a topic** (no documents): Skip Phase 1 and directly execute Phase 2: **PPT Generation**.
 
 If the user supplied a reference PPTX and explicitly wants the new deck to follow its style, execute **Phase 0: Reference Style Material Preparation** before Phase 1/2. If no reference PPTX was supplied, or the user did not request style imitation, skip Phase 0 and keep the existing workflow unchanged.

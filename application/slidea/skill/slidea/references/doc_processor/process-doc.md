@@ -54,6 +54,8 @@ Each step only reads/writes on-disk artifacts; existing output files are skipped
 
 ### Step 0: Pre-check [agent]
 
+**Do not read document content before `preprocess()` returns.** Pass paths only via `docs=`; never open or read file bodies. Listing directories and copying files is allowed; reading body text is not. Parsing, summarizing, and chaptering are doc-process responsibilities - the agent must not digest documents itself.
+
 1. Validate input: `topic` empty → ask user; `docs` empty → abort with error.
    - **`topic` must carry audience + goal**, not just a bare subject. It flows into the summarization LLM prompt (`_build_summary_prompt`) and the chunk relevance judgment, so richer context here → better-targeted summaries and outline. Use the "understood PPT request" confirmed in SKILL.md Step 0 (e.g. "面向技术团队，深入讲解 Agent 架构原理与实现细节").
 2. **File collection** [agent]: If all documents are in one directory → pass that path as `docs`. If scattered → copy all files to `output_files_dir/documents/<task_id>/files/`, then pass that `files/` path as `docs`. (This is agent-side because it may involve user interaction.)
