@@ -76,16 +76,19 @@ All paths are **absolute**, so reading them is robust regardless of where you in
 
 ## Cache Reuse and Resume
 
-Two distinct mechanisms, both keyed on `run_id`:
+The Agent-facing key is `session_id`; code resolves it to the internal `run_id` before touching cached files. Three distinct mechanisms are available:
 
 - **Cache reuse** (`USE_CACHE=true`, default): if `output/<run_id>/` already exists with prior stage outputs, those outputs are loaded instead of regenerated. Used when the same `run_id` is invoked again or when staged execution resumes.
-- **Resume** (`--resume "<user reply>"`): continues an interrupted LangGraph run inside the existing sqlite checkpoint. Always reuse the same `--session-id` and (implicitly) the same `run_id` when resuming.
+- **Checkpoint continuation** (`--continue --session-id <id>`): resumes unfinished work after timeout, process termination, or a lost shell connection by invoking the graph with no new input. It preserves completed checkpoint tasks and the original run configuration.
+- **Interrupt reply** (`--resume "<user reply>" --session-id <id>`): supplies an answer to a deliberate LangGraph `input_required` interrupt. It is not the timeout-recovery command.
 
-To force a fresh run ignoring cache: delete `output/<run_id>/` before invoking with the same `--session-id`. The pipeline will not find a prior `run.json` and will generate a new `run_id` (new timestamp + new semantic suffix).
+Never retry an interrupted full run by submitting `--text` again with the same session id. The CLI rejects this because it would create a duplicate run. If no checkpoint remains but the outline exists, use `patch_render_missing.py --session-id <id>` instead.
+
+To force a fresh full-pipeline run ignoring cache, keep the prior run intact and invoke `--text` with the default `--stages all` and a brand-new unique `--session-id`. Non-default staged execution is different: it deliberately reuses the same session id and `--text` so selected stages can read cached outputs. Do not delete an earlier run merely to recycle its session id.
 
 ## Session-id Collision Detection
 
-The pipeline recovers `run_id` from `--session-id` by scanning `output/*/run.json` for the original (non-resume) record matching the session-id. If **multiple** original runs share the same session-id (typical when users accidentally reuse a value across unrelated tasks), the recovery **refuses to guess** — it logs a WARNING listing the matching run_ids and falls through to a fresh `run_id`. Disambiguate by passing `--run-id <one_of_the_listed>` explicitly, or use a unique `--session-id` per task.
+The pipeline recovers `run_id` from `--session-id` by scanning `output/*/run.json` for the original (non-resume) record matching the session-id. For a fresh full-pipeline `--text` request using the default stages, one existing match is already a collision: choose a different new session id and run the new request, without inspecting or returning the matched run's artifacts. For non-default `--stages`, one existing match is intentionally reused. If **multiple** original runs share the same session-id, recovery refuses to guess and returns `invalid_request`; it never silently creates another run. `--run-id` is retained only as an advanced manual disambiguation escape hatch for intentionally operating on a legacy run, not for starting a fresh generation.
 
 If you omit `--session-id` entirely, the pipeline auto-generates a unique value (`auto_<pid>_<ts>`), so unrelated runs can never collide. The trade-off: auto-generated ids cannot be reused for `--resume` or `--stages` recovery — pass an explicit `--session-id` whenever you intend to continue a prior run.
 
@@ -101,9 +104,9 @@ Logs are written to `<SLIDEA_DIR>/logs/app_{time:YYYY-MM-DD}.log`. Use these for
 
 ## Cleaning Up
 
-Each run's LangGraph checkpointer lives at `<run_id>/checkpointer.sqlite` (plus its `-shm`/`-wal` companions during a run). Successful runs auto-clean these files; failed runs leave them so `--resume --session-id <same_id>` can pick up where it stopped.
+Each run's LangGraph checkpointer lives at `<run_id>/checkpointer.sqlite` (plus its `-shm`/`-wal` companions during a run). Successful runs auto-clean these files; timed-out or failed runs leave them so `--continue --session-id <same_id>` can pick up unfinished work. Use `--resume` only when the prior result was `input_required` and the user supplied an answer.
 
-- To force a fresh start on the same run_id, delete `<run_id>/checkpointer.sqlite*` — this drops the checkpointer but keeps all other artifacts (outline, research, slides) so cache reuse still kicks in.
-- To wipe a run entirely, delete the whole `<run_id>/` directory. The pipeline regenerates everything on the next invocation with the same session-id (which produces a new run_id anyway because of the timestamp prefix).
+- Delete `<run_id>/checkpointer.sqlite*` only when deliberately resetting continuation state for that exact prior run; this is not a fresh-generation workflow.
+- To start a genuinely fresh generation, preserve the old directory and choose a new unique session id.
 - Do NOT delete `<run_id>/` directories unless the user explicitly asks — they hold the cache that enables resume and patch-render.
 

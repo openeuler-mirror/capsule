@@ -27,7 +27,7 @@ Slidea renders slides as SVG and exports native editable PPTX. The SVG route is 
 
 If the user supplied a reference PPTX and explicitly wants the new deck to follow its style, execute **Phase 0: Reference Style Material Preparation** before Phase 1/2. If no reference PPTX was supplied, or the user did not request style imitation, skip Phase 0 and keep the existing workflow unchanged.
 
-For style mode, choose one new unique `<SESSION_ID>` before Phase 0. Use that exact id for both the temporary style-pack directory and the Phase 2 `--session-id`; do not generate or substitute a different id between phases.
+For style mode, choose one new unique `<SESSION_ID>` before Phase 0. Prefer a timestamp plus a short random suffix so it cannot collide with an earlier run. Use that exact id for both the temporary style-pack directory and the Phase 2 `--session-id`; do not generate or substitute a different id between phases unless a collision is detected. If it is occupied, choose another new id and prepare the style pack under the matching new temporary directory before starting Phase 2.
 
 ---
 
@@ -35,11 +35,11 @@ For style mode, choose one new unique `<SESSION_ID>` before Phase 0. Use that ex
 
 Read [references/style-pack.md](references/style-pack.md) and follow it completely.
 
-Phase 0 converts the user's reference PPTX into editable SVG material and an advisory `asset-inventory.json`. The converter must not generate `style-pack.json` or PNG previews. The Agent reads SVG code, chooses a small set of structurally distinct pages, authors their page type/density/structure descriptions, and explicitly authorizes only reusable template decorations in `style-pack.json`. Candidate flags in the inventory are hints, never permission. Run the validator after authoring. Do not rewrite converted SVG geometry.
+Phase 0 converts the user's reference PPTX into editable SVG material and an advisory `asset-inventory.json`. The converter must not generate `style-pack.json` or PNG previews. The Agent reads SVG code, chooses a small set of structurally distinct pages, and authors the cross-page design grammar plus each page's type/density/structure/layout rules. The global grammar must describe `text_container_usage` separately from corner geometry: whether text is normally unboxed, placed on filled backgrounds, or enclosed by border-only/filled boxes, and which roles use title bands, labels, callouts, cards, or summary strips. The Agent explicitly authorizes only reusable template decorations in `style-pack.json`. Candidate flags in the inventory are hints, never permission. When the source contains real cover, TOC, separator or thanks pages, include one representative for each available special role even if the general representative-page budget has already been reached; never substitute one special role for another. Run the validator after authoring. Do not rewrite converted SVG geometry.
 
 The Phase 0 working directory is fixed at `/tmp/slidea/style-packs/<SESSION_ID>`. Do not place converted style material in the repository, the user's source directory, another temporary directory, or a prior PPT run.
 
-The resulting `<STYLE_PACK_DIR>` is passed to Phase 2 with `--style-pack` before outline generation. In style mode, outline generation uses an additional prompt and output field to choose `style_reference_id` by page type, density and structure; long decks follow the existing chapter split and bounded batches. The choices are saved in `outline/outline.json` before parallel page generation. Before fan-out, code copies inherited shell images plus Agent-authorized reusable decorations into `slides/images/style-pack`; all other source-slide body images remain unavailable. After each page generation/repair, code restores the reference background, master/layout, title, header/footer, fixed logos, authorized back/front decorations and page-number format. Any missing/invalid pack, assignment or fixed-asset preflight error falls back to the existing built-in template workflow for the whole run.
+The resulting `<STYLE_PACK_DIR>` is passed to Phase 2 with `--style-pack` before outline generation. In style mode, outline generation uses an additional prompt and output field to choose `style_reference_id` by page type, density and structure; page type is an exact-match constraint and long decks follow the existing chapter split and bounded batches. The choices are saved in `outline/outline.json` before parallel page generation. If the pack has no reference for one target page type, only that page keeps an empty `style_reference_id` and uses the existing built-in template route; other pages continue with the pack. Before fan-out, code copies inherited shell images plus Agent-authorized reusable decorations into `slides/images/style-pack`; all other source-slide body images remain unavailable. After each styled page generation/repair, code restores the reference background, master/layout, title, header/footer, fixed logos, authorized back/front decorations and page-number format. A missing/invalid pack or fixed-asset preflight error still falls back to the existing built-in template workflow for the whole run.
 
 Keep style input and content input strictly separate. The reference PPTX path/URL is used only in Phase 0 and must not appear in Phase 2 `--text`. `--text` is parsed for content documents and URLs; putting the style source there causes its original business text to become writing material. Carry style into Phase 2 only through `--style-pack`. Read the isolation and explicit dual-use rules in [references/style-pack.md](references/style-pack.md).
 
@@ -60,7 +60,18 @@ The output of Phase 1 is a saved markdown file at `<SPEECH_SCRIPT_MD_PATH>`.
 
 Run the PPT pipeline to generate the final presentation.
 
-Each run is identified by `--session-id` and writes everything (run metadata, research, outline, SVG source, PPTX, LangGraph checkpointer) under `<output_root>/<run_id>/`, where `<run_id>` is auto-generated as `<timestamp>_<semantic-summary>`. Use a **new** session-id for a fresh start; reuse the **same** session-id to resume an interrupted run.
+Each logical task is identified by `--session-id` and writes everything (run metadata, research, outline, SVG source, PPTX, LangGraph checkpointer) under an internal `<output_root>/<run_id>/`, where `<run_id>` is auto-generated as `<timestamp>_<semantic-summary>`. Agents use the session id for normal follow-up operations; do not discover or pass `--run-id` unless the CLI reports a legacy session collision. Use a **new** session-id for a fresh full-pipeline run and the **same** session-id for continuation, interrupt replies, staged execution, or patch rendering. With the default `--stages all`, re-submitting `--text` with an existing session is rejected because it would create a duplicate run; non-default staged execution intentionally uses `--text`, `--stages`, and the same session id to reuse earlier stage outputs.
+
+### CLI operation and fresh-run session rules (mandatory)
+
+- The CLI requires exactly one operation: `--text`, `--resume "<user reply>"`, or `--continue`. Never combine them.
+- A normal fresh full-pipeline invocation uses `--text` with the default `--stages all`; it must use a session id that has never been used by an earlier run. Prefer `<topic>_<YYYYMMDD_HHMMSS>_<random>` instead of a stable conversational name.
+- `--resume` supplies the user's answer to an `input_required` interrupt. It takes the reply as its own argument, uses the same session id, and must not be combined with `--text`.
+- `--continue` is a real flag that resumes unfinished LangGraph checkpoint work after timeout or process termination. It uses the same session id and must not be combined with `--text`, `--resume`, or non-default `--stages`.
+- A non-default staged invocation uses `--text ... --stages ...`; it may intentionally reuse the same session id so the selected stage can read earlier cached outputs.
+- If a fresh full-pipeline invocation reports that the chosen session already belongs to an existing run, treat the id as occupied even when that run completed successfully. Immediately choose a different new id and rerun the requested fresh generation.
+- Do not inspect, open, summarize, return, resume, continue, patch, or reuse the old run merely because its session id collided with the new request. Existing output is relevant only when the user explicitly asks to continue, repair, inspect, edit, or retrieve that prior run.
+- Reuse an existing session id only for `--continue`, `--resume`, non-default staged execution, patch rendering, or Phase 3 editing when the user intends to operate on that exact prior run.
 
 ### Pre-run user reminder (mandatory)
 
@@ -108,6 +119,17 @@ If Phase 1 was run previously, set `--research-mode "skip"`, and `<PPT request>`
   --resume "<user reply>" \
   --session-id <same_session_id>
 ```
+
+**Continue after timeout, process termination, or lost shell connection**:
+```bash
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --continue \
+  --session-id <same_session_id>
+```
+
+`--continue` reopens the existing checkpoint and completes unfinished graph tasks. Do not pass `--text`, `--style-pack`, `--image-search`, or other replacement settings when continuing; the original run configuration and immutable style-pack snapshot are reused. `--resume` is only for supplying a user's answer to an explicit LangGraph `input_required` interrupt. It is not timeout recovery.
+
+If `--continue` returns `resume_unavailable`, do not start a second full run with the same session and do not delete either run directory. Read [references/patch-render.md](references/patch-render.md) and use `patch_render_missing.py --session-id <same_session_id>` to regenerate only missing pages when an outline exists.
 
 If the pipeline returns `input_required` or `missing_required_info`, you must stop autonomous execution immediately and ask the user instead of continuing on your own. Your only allowed behavior is:
 1. show the question, missing information request, or options to the user;
@@ -157,6 +179,7 @@ The key invariant: Phase 3 edits SVG source **in place** under `output/<run_id>/
 - `missing_required_info`
 - `missing_outline`
 - `input_required`
+- `resume_unavailable`
 
 Always inspect the top-level `stage` field first before deciding whether to continue, retry, or stop for user input.
 

@@ -38,11 +38,11 @@ python3 scripts/run_ppt_pipeline.py \
 Patch render missing or selected pages:
 
 ```bash
-python3 scripts/patch_render_missing.py --run-id <run_id>
-python3 scripts/patch_render_missing.py --run-id <run_id> --indices 0,3,5
+python3 scripts/patch_render_missing.py --session-id <session_id>
+python3 scripts/patch_render_missing.py --session-id <session_id> --indices 0,3,5
 ```
 
-`patch_render_missing.py` reads `ppt.json` and uses the recorded `render_mode` to pick the matching patch path automatically.
+`patch_render_missing.py` resolves the internal run from `session-id`, restores the original request and render mode from `run.json`, and reuses the immutable style-pack snapshot when present.
 
 ## Quality Gates
 
@@ -72,7 +72,7 @@ Use this checklist before treating a new SVG-route change as production-ready:
 5. Confirm text boxes and basic shapes are editable, not flattened screenshots.
 6. Confirm images display and keep reasonable aspect ratios.
 7. Compare several PPTX pages against matching `slides/*.svg` files.
-8. Run `patch_render_missing.py --run-id <run_id> --indices <page>` and confirm the PPTX is rebuilt.
+8. Run `patch_render_missing.py --session-id <session_id> --indices <page>` and confirm the PPTX is rebuilt.
 
 Fast regression suite used during implementation:
 

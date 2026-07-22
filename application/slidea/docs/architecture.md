@@ -31,7 +31,7 @@ At the highest level, the system does this:
 Responsibilities:
 
 - parse CLI arguments
-- accept either a fresh request (`--text`) or a resume payload (`--resume`) for an interrupted full-graph run
+- accept exactly one operation: fresh request (`--text`), user interrupt reply (`--resume`), or checkpoint continuation after process failure (`--continue`)
 - run environment preflight
 - create `run_id` and output directories
 - persist run metadata
@@ -59,7 +59,7 @@ Current behavior note:
 
 `core/utils/interrupt.py` defines the enum used across the project for interrupt semantics.
 
-Resume payloads are accepted in a tolerant order: `selection`, `answer`, `text`, then `message`. The adapter converts the resolved value into `Command(resume=...)` input for LangGraph continuation.
+User-interrupt reply payloads are accepted in a tolerant order: `selection`, `answer`, `text`, then `message`. The adapter converts the resolved value into `Command(resume=...)`. Process/checkpoint continuation is separate: `--continue` invokes the saved graph with `None`, so completed pending writes are retained and unfinished tasks resume without a new request.
 
 ### 3. Application Graph Layer
 

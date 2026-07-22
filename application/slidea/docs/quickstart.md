@@ -144,6 +144,18 @@ Resume payload mapping:
 
 For simple CLI usage, passing the user response as `--resume "<text>"` is sufficient for question and edit-text flows.
 
+## Continue After Timeout or Process Termination
+
+If the process stopped without returning `input_required`, do not submit `--text` again. Continue the existing checkpoint with:
+
+```bash
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --continue \
+  --session-id local-demo
+```
+
+This reuses the original request, runtime settings, completed page tasks, and style-pack snapshot. If the CLI returns `resume_unavailable`, use `scripts/patch_render_missing.py --session-id local-demo` to regenerate missing pages from the cached outline.
+
 ## Run by Stage
 
 When iterating on a cached run, staged execution is faster:
