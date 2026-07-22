@@ -81,6 +81,35 @@ class SVGToPPTXTextGeometryTests(unittest.TestCase):
         self.assertIn(' sz="100"', convert_text(tiny, ConvertContext()).xml)
         self.assertIn(' sz="400000"', convert_text(huge, ConvertContext()).xml)
 
+    def test_text_tail_after_non_visual_metadata_is_preserved(self):
+        elem = ET.fromstring(
+            '<text xmlns="http://www.w3.org/2000/svg" x="205" y="346" '
+            'font-family="Microsoft YaHei" font-size="27">'
+            '<title>Accessible summary</title>'
+            '时间｜连续离家10—14小时 → 憋尿、无聊与分离焦虑'
+            '</text>'
+        )
+
+        result = convert_text(elem, ConvertContext())
+
+        self.assertIsNotNone(result)
+        self.assertIn('时间｜连续离家10—14小时 → 憋尿、无聊与分离焦虑', result.xml)
+        self.assertNotIn('Accessible summary', result.xml)
+
+    def test_nested_tspan_preserves_tail_after_metadata_child(self):
+        elem = ET.fromstring(
+            '<text xmlns="http://www.w3.org/2000/svg" x="20" y="40" font-size="20">'
+            '<tspan font-weight="700"><title>metadata</title>visible bold tail</tspan>'
+            '</text>'
+        )
+
+        result = convert_text(elem, ConvertContext())
+
+        self.assertIsNotNone(result)
+        self.assertIn('visible bold tail', result.xml)
+        self.assertIn(' b="1"', result.xml)
+        self.assertNotIn('metadata', result.xml)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -759,10 +759,14 @@ def _collect_tspan_runs(
         child_tag = child.tag.replace(f'{{{SVG_NS}}}', '')
         if child_tag == 'tspan':
             runs.extend(_collect_tspan_runs(child, own_attrs))
-            if child.tail:
-                t = _normalize_text(child.tail)
-                if t:
-                    runs.append({**own_attrs, 'text': t})
+        # ``tail`` belongs to the parent's rendered text flow even when the
+        # child itself is non-visual metadata such as <title> or <desc>.
+        # Browsers render that tail; dropping it makes editable PPTX text
+        # disappear while the SVG preview still looks correct.
+        if child.tail:
+            t = _normalize_text(child.tail)
+            if t:
+                runs.append({**own_attrs, 'text': t})
 
     return runs
 
@@ -788,10 +792,13 @@ def _build_text_runs(
         child_tag = child.tag.replace(f'{{{SVG_NS}}}', '')
         if child_tag == 'tspan':
             runs.extend(_collect_tspan_runs(child, parent_attrs))
-            if child.tail:
-                t = _normalize_text(child.tail)
-                if t:
-                    runs.append({**parent_attrs, 'text': t})
+        # Preserve text following any child node, including accessibility
+        # metadata (<title>/<desc>).  The child content is intentionally not
+        # emitted, but its tail is visible SVG character data.
+        if child.tail:
+            t = _normalize_text(child.tail)
+            if t:
+                runs.append({**parent_attrs, 'text': t})
 
     return runs
 

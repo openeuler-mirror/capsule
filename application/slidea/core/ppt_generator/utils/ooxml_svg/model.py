@@ -107,6 +107,7 @@ class Paragraph:
     space_after_pt: float = 0.0
     line_spacing: float | None = None
     bullet: str | None = None
+    bullet_font_family: str | None = None
 
 
 @dataclass

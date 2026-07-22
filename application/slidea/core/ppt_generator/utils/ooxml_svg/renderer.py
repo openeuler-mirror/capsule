@@ -454,9 +454,14 @@ class SvgRenderer:
                 # the SVG is opened on a host that lacks the source font. It
                 # also gives the downstream DrawingML converter an exact width
                 # contract to consume instead of re-estimating it.
-                attrs["textLength"] = fmt(run.width)
-                attrs["lengthAdjust"] = "spacingAndGlyphs"
                 attrs["data-measured-width"] = fmt(run.width)
+                # A one-character OOXML bullet has no inter-glyph spacing to
+                # adjust. spacingAndGlyphs would scale the glyph outline to
+                # the measured advance and can turn a round dot into an oval
+                # when the preview host resolves a metrically different font.
+                if not (run.is_bullet and len(run.text) == 1):
+                    attrs["textLength"] = fmt(run.width)
+                    attrs["lengthAdjust"] = "spacingAndGlyphs"
             if run.font_substituted:
                 attrs["data-font-substituted"] = "true"
             decorations = []

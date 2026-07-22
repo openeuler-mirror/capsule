@@ -5,7 +5,7 @@ import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -181,6 +181,26 @@ class TextParser:
                 return "•"
         return None
 
+    @staticmethod
+    def _bullet_font(ppr_nodes: list[etree._Element | None]) -> str | None:
+        """Return the bullet's own typeface instead of inheriting body text.
+
+        DrawingML stores ``buFont`` beside ``buChar``. Ignoring it makes a
+        source Arial bullet inherit the first body run's CJK font, whose U+2022
+        glyph can have a very different advance and outline.
+        """
+        for ppr in ppr_nodes:
+            if ppr is None:
+                continue
+            if ppr.find("a:buNone", NS) is not None:
+                return None
+            font = ppr.find("a:buFont", NS)
+            if font is not None:
+                return font.get("typeface") or None
+            if ppr.find("a:buFontTx", NS) is not None:
+                return None
+        return None
+
     def parse(
         self,
         tx_body: etree._Element | None,
@@ -223,6 +243,7 @@ class TextParser:
             align = {"l": "left", "ctr": "center", "r": "right", "just": "justify", "dist": "justify"}.get(
                 align, "left"
             )
+            bullet_font = self._bullet_font(ppr_nodes)
             paragraph = Paragraph(
                 align=align,
                 level=level,
@@ -232,6 +253,7 @@ class TextParser:
                 space_after_pt=self._spacing_pt(ppr_nodes, "spcAft"),
                 line_spacing=self._line_spacing(ppr_nodes),
                 bullet=self._bullet(ppr_nodes),
+                bullet_font_family=self.theme.resolve_typeface(bullet_font) if bullet_font else None,
             )
             for child in p:
                 local = etree.QName(child).localname
@@ -522,6 +544,7 @@ class PositionedRun:
     descent: float
     resolved_font_family: str
     font_substituted: bool = False
+    is_bullet: bool = False
 
 
 class TextLayouter:
@@ -582,6 +605,8 @@ class TextLayouter:
         for paragraph in body.paragraphs:
             tokens = self._tokens(paragraph.runs, body.font_scale)
             bullet_style = next((t[1] for t in tokens if not t[3]), RunStyle())
+            if paragraph.bullet_font_family:
+                bullet_style = replace(bullet_style, font_family=paragraph.bullet_font_family)
             bullet_px = bullet_style.font_size_pt * 96 / 72 * body.font_scale
             available = max(
                 0.0,
@@ -660,6 +685,7 @@ class TextLayouter:
                             descent=bullet_descent,
                             resolved_font_family=bullet_font.family,
                             font_substituted=bullet_font.substituted,
+                            is_bullet=True,
                         )
                     )
                 merged: list[tuple[str, RunStyle, float, float]] = []
