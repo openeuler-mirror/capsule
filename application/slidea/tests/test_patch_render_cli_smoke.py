@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import io
 import json
 import sys
@@ -14,6 +15,10 @@ SCRIPT_PATH = ROOT / "scripts" / "patch_render_missing.py"
 
 
 class PatchRenderCliSmokeTests(unittest.TestCase):
+    def setUp(self):
+        self.last_quality_state = None
+        self.last_content_query = ""
+
     def _load_script_module(self):
         module = types.ModuleType("patch_render_missing_test_module")
         module.__file__ = str(SCRIPT_PATH)
@@ -46,6 +51,7 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
 
         async def prepare_generation_context_node(state, _writer):
             return {
+                "outline": state["outline"],
                 "save_dir": state["save_dir"],
                 "ppt_prompt": "prompt",
                 "language": "中文",
@@ -61,7 +67,11 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         module = types.ModuleType("core.ppt_generator.thought_to_ppt.svg_page_generators.node")
 
         async def prepare_generation_context_node(state, _writer):
+            prepared_outline = copy.deepcopy(state["outline"])
+            for page in prepared_outline:
+                page.style_reference_svg = "/runtime/bound-reference.svg"
             return {
+                "outline": prepared_outline,
                 "save_dir": state["save_dir"],
                 "ppt_prompt": "prompt",
                 "language": "中文",
@@ -70,7 +80,8 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
                 "template": "<svg></svg>",
             }
 
-        async def quality_check_node(_state, _writer):
+        async def quality_check_node(state, _writer):
+            self.last_quality_state = state
             return {}
 
         module.prepare_generation_context_node = prepare_generation_context_node
@@ -112,6 +123,12 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
 
         return cover_module, content_module, sep_module, toc_module
 
+    def _make_cover_thanks_node_module(self, module_name):
+        module = types.ModuleType(module_name)
+        module.generate_cover_node = self._noop_async
+        module.generate_thanks_node = self._noop_async
+        return module
+
     def _make_svg_subgraph_modules(self):
         cover_module = types.ModuleType(
             "core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph"
@@ -121,7 +138,14 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         content_module = types.ModuleType(
             "core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.graph"
         )
-        content_module.content_page_worker_app = types.SimpleNamespace(ainvoke=self._noop_async)
+
+        async def generate_content_page(state):
+            if getattr(state["content_page"], "style_reference_svg", "") != "/runtime/bound-reference.svg":
+                raise AssertionError("patch render used the persisted outline instead of the prepared outline")
+            self.last_content_query = state["query"]
+            return {}
+
+        content_module.content_page_worker_app = types.SimpleNamespace(ainvoke=generate_content_page)
 
         sep_module = types.ModuleType(
             "core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.node"
@@ -170,17 +194,21 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
         return module
 
     def _run_main(self, argv, cwd, render_mode="html"):
+        html_cover_node = "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.node"
+        svg_cover_node = "core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.node"
         cover_h, content_h, sep_h, toc_h = self._make_html_subgraph_modules()
         cover_s, content_s, sep_s, toc_s = self._make_svg_subgraph_modules()
         fake_modules = {
             "core.ppt_generator.thought_to_ppt.state": self._make_state_module(),
             "core.ppt_generator.thought_to_ppt.page_generators.node": self._make_html_page_generators_node(),
             "core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph": cover_h,
+            html_cover_node: self._make_cover_thanks_node_module(html_cover_node),
             "core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.node": sep_h,
             "core.ppt_generator.thought_to_ppt.page_generators.toc_page_generator.node": toc_h,
             "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.graph": content_h,
             "core.ppt_generator.thought_to_ppt.svg_page_generators.node": self._make_svg_page_generators_node(),
             "core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph": cover_s,
+            svg_cover_node: self._make_cover_thanks_node_module(svg_cover_node),
             "core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.node": sep_s,
             "core.ppt_generator.thought_to_ppt.svg_page_generators.toc_page_generator.node": toc_s,
             "core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.graph": content_s,
@@ -199,6 +227,9 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
             module = self._load_script_module()
             stack.enter_context(patch.object(sys, "argv", ["patch_render_missing.py", *argv]))
             stack.enter_context(patch.object(module, "run_dir", side_effect=local_run_dir))
+            stack.enter_context(
+                patch.object(module, "output_files_dir", str(Path(cwd) / "output"))
+            )
             stack.enter_context(contextlib.redirect_stdout(stdout))
             module.asyncio.run(module.main())
 
@@ -211,6 +242,80 @@ class PatchRenderCliSmokeTests(unittest.TestCase):
 
         self.assertEqual(payload["stage"], "missing_outline")
         self.assertIn("outline", payload["output"]["message"].lower())
+
+    def test_style_pack_snapshot_is_reused_for_patch_render(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir) / "run"
+            style_pack = out_dir / "style_pack"
+            style_pack.mkdir(parents=True)
+            (style_pack / "style-pack.json").write_text("{}", encoding="utf-8")
+            module = self._load_script_module()
+
+            resolved = module._resolve_style_pack_dir(str(out_dir))  # pylint: disable=protected-access
+
+        self.assertEqual(resolved, str(style_pack))
+
+    def test_session_patch_inherits_original_request_and_style_quality_context(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "styled-incomplete"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            outline_dir = out_dir / "outline"
+            slides_dir = out_dir / "slides"
+            style_pack = out_dir / "style_pack"
+            outline_dir.mkdir(parents=True)
+            slides_dir.mkdir()
+            style_pack.mkdir()
+            (style_pack / "style-pack.json").write_text("{}", encoding="utf-8")
+            (out_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "session_id": "styled-session",
+                        "text": "original styled request",
+                        "render_mode": "svg",
+                        "style_pack_dir": str(style_pack),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (outline_dir / "outline.json").write_text(
+                json.dumps(
+                    {
+                        "topic": "Styled Demo",
+                        "outline": [
+                            {
+                                "title": "Content",
+                                "abstract": "Intro",
+                                "type": 1,
+                                "index": 0,
+                                "reference_doc": "",
+                                "reference_images": [],
+                                "style_reference_id": "slide-1",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (slides_dir / "01_Content.svg").write_text(
+                '<svg width="1280" height="720" viewBox="0 0 1280 720" '
+                'xmlns="http://www.w3.org/2000/svg"></svg>',
+                encoding="utf-8",
+            )
+
+            payload = self._run_main(
+                ["--session-id", "styled-session", "--indices", "0"],
+                cwd=tmp_dir,
+                render_mode="svg",
+            )
+            ppt_payload = json.loads((out_dir / "ppt.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["stage"], "completed")
+        self.assertEqual(payload["run_id"], run_id)
+        self.assertEqual(self.last_content_query, "original styled request")
+        self.assertEqual(self.last_quality_state["outline"][0].style_reference_svg, "/runtime/bound-reference.svg")
+        self.assertEqual(self.last_quality_state["style_pack_dir"], str(style_pack))
+        self.assertEqual(ppt_payload["style_pack_dir"], str(style_pack))
 
     def test_empty_outline_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -45,7 +45,7 @@ If you skip a stage's prerequisite, the pipeline reads whatever cached output ex
 
 ## Cache Reuse Between Stages
 
-Cache is keyed on `run_id`, and for staged runs the `run_id` is automatically recovered from `--session-id` (same mechanism as `--resume`). As long as you reuse the same `--session-id`, each stage reads prior stage outputs from `output/<run_id>/` and writes its own outputs there. This is what makes staged execution work — see [caching-and-paths.md](caching-and-paths.md) for the on-disk layout.
+Cache is keyed internally on `run_id`, and staged runs resolve that directory automatically from `--session-id` using the shared collision-safe resolver. As long as you reuse the same `--session-id`, each stage reads prior stage outputs from `output/<run_id>/` and writes its own outputs there. This is what makes staged execution work — see [caching-and-paths.md](caching-and-paths.md) for the on-disk layout.
 
 ## Same Timeout Rules Apply
 

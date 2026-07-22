@@ -23,6 +23,10 @@ from scripts.utils.cli_output import emit_stage_payload
 from core.utils.config import output_files_dir, settings
 from core.utils.logger import logger
 from scripts.utils.preflight import print_preflight_report, run_preflight
+from scripts.utils.run_identity import (
+    resolve_run_by_session,
+    session_resolution_message,
+)
 
 
 async def new_semantic_run_id(text: str, fallback_prefix: str = "ppt") -> str:
@@ -80,67 +84,6 @@ async def _load_cached_text(base_dir: str, rel_path: str) -> str:
         return p.read_text(encoding='utf-8')
     return ""
 
-
-def _find_run_id_by_session(output_root: str, session_id: str) -> str:
-    """Locate the ORIGINAL run_id whose run.json recorded the given session_id.
-
-    Used when resuming or running staged execution: the original run_id
-    (potentially carrying a semantic suffix) is recovered instead of generating
-    a fresh fallback id. Returns an empty string when no match is found.
-
-    A session_id can legitimately appear in multiple run.json files — every
-    resume attempt writes a new run.json. We filter out those `resume: true`
-    records to find the original run that started the session.
-
-    Collision detection: if multiple ORIGINAL runs share the same session_id
-    (typical when users reuse the default "local" across unrelated tasks), we
-    refuse to guess — return empty so the caller falls through to a fresh
-    run_id, and warn loudly. Disambiguate by passing --run-id explicitly.
-    """
-    if not session_id:
-        return ""
-    output_path = Path(output_root)
-    if not output_path.is_dir():
-        return ""
-
-    matches: list[tuple[str, str, str]] = []  # (run_id, run_json_path, original_text_preview)
-    for run_json in output_path.glob("*/run.json"):
-        try:
-            data = load_json(str(run_json))
-        except Exception as error:
-            logger.warning(f"failed to load {run_json}: {error}")
-            continue
-        if not isinstance(data, dict):
-            continue
-        if data.get("session_id") != session_id:
-            continue
-        if data.get("resume"):
-            # This is a resume-attempt record, not the original. Skip.
-            continue
-        rid = data.get("run_id")
-        if not (isinstance(rid, str) and rid):
-            continue
-        text_preview = (data.get("text") or "")[:80]
-        matches.append((rid, str(run_json), text_preview))
-
-    if not matches:
-        return ""
-    if len(matches) == 1:
-        rid, _, text_preview = matches[0]
-        logger.info(
-            f"Recovered run_id={rid!r} for session_id={session_id!r} "
-            f"(original request: {text_preview!r})"
-        )
-        return rid
-    # Multiple original runs share this session_id — collision. Refuse to guess.
-    run_ids = [m[0] for m in matches]
-    logger.warning(
-        f"session_id {session_id!r} matches {len(matches)} original runs: {run_ids}. "
-        f"Refusing to recover — could write into the wrong run directory. "
-        f"Disambiguate by passing --run-id <one_of_above> explicitly, or use a "
-        f"unique --session-id for each unrelated task."
-    )
-    return ""
 
 async def _maybe_require_missing(parsed):
     missing = getattr(parsed, 'missing_info', '') if parsed else ''
@@ -273,6 +216,7 @@ def _build_run_metadata(args, run_id: str):
         "session_id": args.session_id,
         "text": args.text,
         "resume": bool(args.resume),
+        "continue": bool(args.continue_run),
         "stages": args.stages,
         "render_mode": args.render_mode,
         "research_mode": args.research_mode,
@@ -281,6 +225,28 @@ def _build_run_metadata(args, run_id: str):
         "style_pack_dir": args.style_pack,
         "allow_style_source_content": bool(args.allow_style_source_content),
     }
+
+
+def _inherit_cached_runtime_options(args, cached_run: dict) -> None:
+    """Keep a resumed graph on the immutable configuration of its first run."""
+    for name in ("research_mode", "use_cache", "image_search"):
+        cached_value = cached_run.get(name)
+        if cached_value is not None:
+            setattr(args, name, cached_value)
+
+
+def _emit_session_resolution_error(resolution, session_id: str, *, action: str) -> None:
+    emit_stage_payload(
+        "invalid_request",
+        {
+            "stage": "invalid_request",
+            "message": session_resolution_message(
+                resolution,
+                session_id,
+                action=action,
+            ),
+        },
+    )
 
 
 def _cached_run_metadata(out_dir: str) -> dict:
@@ -349,7 +315,12 @@ async def _run_all_stages(args, run_id: str, out_dir: str):
     from core.ppt_generator.graph import ppt_workflow
     from scripts.utils.pipeline import extract_resume_input, run_thinkflow_app
 
-    if args.text:
+    if args.continue_run:
+        # LangGraph distinguishes process/checkpoint continuation from a
+        # human-in-the-loop reply. None resumes unfinished checkpoint tasks;
+        # Command(resume=...) below supplies a user's answer to interrupt().
+        graph_input = None
+    elif args.text:
         graph_input = {
             "request": args.text,
             "render_mode": args.render_mode,
@@ -531,6 +502,16 @@ async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--text", type=str, default="")
     parser.add_argument("--resume", type=str, default="")
+    parser.add_argument(
+        "--continue",
+        dest="continue_run",
+        action="store_true",
+        help=(
+            "Continue unfinished work from an existing LangGraph checkpoint. "
+            "Use this after timeout/process termination; unlike --resume it "
+            "does not supply a human-in-the-loop answer."
+        ),
+    )
     parser.add_argument("--session-id", type=str, default=None,
                         help="LangGraph thread/session identifier. If omitted, a "
                              "unique id (auto_<pid>_<ts>) is generated so unrelated "
@@ -567,7 +548,7 @@ async def main():
     # Auto-generate a unique session-id when none was provided. This prevents
     # the historical "local" default from colliding across unrelated runs
     # (which would let staged execution silently write into the wrong run dir).
-    if not args.session_id:
+    if not args.session_id and not (args.resume or args.continue_run):
         from datetime import datetime, timezone
         ts = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
         args.session_id = f"auto_{os.getpid()}_{ts}"
@@ -603,8 +584,33 @@ async def main():
         )
         return
 
-    if not args.text and not args.resume:
-        emit_stage_payload("invalid_request", {"stage": "invalid_request", "message": "missing --text or --resume"})
+    operation_count = sum((bool(args.text), bool(args.resume), bool(args.continue_run)))
+    if operation_count != 1:
+        emit_stage_payload(
+            "invalid_request",
+            {
+                "stage": "invalid_request",
+                "message": "choose exactly one of --text, --resume, or --continue",
+            },
+        )
+        return
+    if args.continue_run and stages != ["all"]:
+        emit_stage_payload(
+            "invalid_request",
+            {
+                "stage": "invalid_request",
+                "message": "--continue resumes the saved full workflow and cannot be combined with --stages",
+            },
+        )
+        return
+    if (args.resume or args.continue_run) and not (args.session_id or args.run_id):
+        emit_stage_payload(
+            "invalid_request",
+            {
+                "stage": "invalid_request",
+                "message": "--resume/--continue requires --session-id; --run-id is an advanced fallback",
+            },
+        )
         return
 
     style_source = _style_source_in_request(args.text, args.style_pack)
@@ -624,40 +630,111 @@ async def main():
         )
         return
 
-    _apply_runtime_overrides(args)
-
     if args.run_id:
         run_id = args.run_id
-    elif args.resume:
-        # Resume must reuse the original run_id so cache and artifacts stay
-        # in a single directory. Recover it from any prior run.json matching
-        # the session_id; fail loudly if none exists (cannot resume a run
-        # that was never started).
-        recovered = _find_run_id_by_session(output_files_dir, args.session_id)
-        if not recovered:
+    elif args.resume or args.continue_run:
+        resolution = resolve_run_by_session(output_files_dir, args.session_id)
+        if resolution.status != "found":
+            _emit_session_resolution_error(
+                resolution,
+                args.session_id,
+                action="resume the interrupted run" if args.continue_run else "submit the requested reply",
+            )
+            return
+        run_id = resolution.run_id
+    elif stages != ["all"]:
+        resolution = resolve_run_by_session(output_files_dir, args.session_id)
+        if resolution.status == "ambiguous":
+            _emit_session_resolution_error(
+                resolution,
+                args.session_id,
+                action="continue staged execution",
+            )
+            return
+        run_id = resolution.run_id or await new_semantic_run_id(args.text or "")
+    else:
+        # A public session id identifies one logical task. Re-submitting --text
+        # with the same id used to create a second directory and lose the
+        # checkpoint. Refuse that ambiguity and tell callers which operation
+        # they intended instead.
+        resolution = resolve_run_by_session(output_files_dir, args.session_id)
+        if resolution.status != "not_found":
+            if resolution.status == "ambiguous":
+                _emit_session_resolution_error(
+                    resolution,
+                    args.session_id,
+                    action="start a new run",
+                )
+                return
+            existing_dir = Path(output_files_dir) / resolution.run_id
+            can_continue = (existing_dir / "checkpointer.sqlite").is_file()
+            next_step = (
+                f"use --continue --session-id {args.session_id!r}"
+                if can_continue
+                else "use a new unique --session-id"
+            )
             emit_stage_payload(
                 "invalid_request",
                 {
                     "stage": "invalid_request",
                     "message": (
-                        f"resume requested but no prior run.json matches "
-                        f"session_id={args.session_id!r}. Start a new run "
-                        f"with --text instead."
+                        f"session_id={args.session_id!r} already belongs to an existing run; "
+                        f"re-submitting --text would create a duplicate. {next_step}."
                     ),
                 },
+                run_id=resolution.run_id,
+                output_dir=str(existing_dir),
             )
             return
-        run_id = recovered
-    elif stages != ["all"]:
-        # Staged execution: prefer the original run_id for the same session so all
-        # stage outputs land in one directory. If no prior run exists (first-time
-        # staged start), fall through to generate a fresh run_id.
-        recovered = _find_run_id_by_session(output_files_dir, args.session_id)
-        run_id = recovered or await new_semantic_run_id(args.text or "")
-    else:
         run_id = await new_semantic_run_id(args.text or "")
+
     out_dir = run_dir(run_id)
     cached_run = _cached_run_metadata(out_dir)
+    if args.resume or args.continue_run:
+        cached_session_id = cached_run.get("session_id") or ""
+        if args.session_id and cached_session_id and args.session_id != cached_session_id:
+            emit_stage_payload(
+                "invalid_request",
+                {
+                    "stage": "invalid_request",
+                    "message": (
+                        f"run_id={run_id!r} belongs to session_id={cached_session_id!r}, "
+                        f"not {args.session_id!r}"
+                    ),
+                },
+                run_id=run_id,
+                output_dir=out_dir,
+            )
+            return
+        args.session_id = args.session_id or cached_session_id
+        if not args.session_id:
+            emit_stage_payload(
+                "invalid_request",
+                {
+                    "stage": "invalid_request",
+                    "message": "the selected run has no persisted session_id and cannot resume safely",
+                },
+                run_id=run_id,
+                output_dir=out_dir,
+            )
+            return
+        if not (Path(out_dir) / "checkpointer.sqlite").is_file():
+            emit_stage_payload(
+                "resume_unavailable",
+                {
+                    "stage": "resume_unavailable",
+                    "message": (
+                        "no checkpoint is available for this run. Use patch_render_missing.py "
+                        "with --session-id to regenerate missing pages, or start a new session."
+                    ),
+                },
+                run_id=run_id,
+                output_dir=out_dir,
+            )
+            return
+        _inherit_cached_runtime_options(args, cached_run)
+
+    _apply_runtime_overrides(args)
     args.render_mode = _resolve_render_mode(args, cached_run)
     args.style_pack = _resolve_style_pack(args, cached_run, out_dir)
     # run.json is the snapshot of the INITIAL run that started this session.
