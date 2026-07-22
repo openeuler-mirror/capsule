@@ -78,6 +78,8 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(catalog[1]["structure"], "标题栏下方三列并列卡片")
             self.assertTrue(Path(outline[0].style_reference_svg).is_file())
             self.assertEqual(outline[0].style_reference_page_type, "content")
+            self.assertIn("深蓝背景", outline[0].style_reference_guidance)
+            self.assertIn("三列并列卡片", outline[0].style_reference_guidance)
 
     def test_validator_requires_agent_descriptions(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -87,6 +89,46 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
             del manifest["pages"][0]["description"]
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "description"):
+                validate_style_pack(pack)
+
+    def test_text_container_usage_contract_validates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = self._pack(Path(tmp))
+            manifest_path = pack / "style-pack.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["global_style"] = {
+                "summary": "Corporate",
+                "text_container_usage": {
+                    "preference": "selective",
+                    "rules": [
+                        "Body text is unboxed",
+                        "Summary text uses a filled full-width band",
+                    ],
+                },
+            }
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            validated = validate_style_pack(pack)
+
+            self.assertEqual(
+                validated["global_style"]["text_container_usage"]["preference"],
+                "selective",
+            )
+
+    def test_text_container_usage_rejects_unknown_preference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = self._pack(Path(tmp))
+            manifest_path = pack / "style-pack.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["global_style"] = {
+                "text_container_usage": {
+                    "preference": "sometimes",
+                    "rules": ["Body text is unboxed"],
+                },
+            }
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "preference"):
                 validate_style_pack(pack)
 
     def test_saved_outline_schema_differs_by_style_mode(self):
@@ -104,9 +146,71 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("style_reference_id", plain)
         self.assertNotIn("style_reference_svg", plain)
         self.assertNotIn("style_reference_page_type", plain)
+        self.assertNotIn("style_reference_guidance", plain)
+        self.assertNotIn("style_reference_rules", plain)
         self.assertEqual(styled["style_reference_id"], "content")
         self.assertNotIn("style_reference_svg", styled)
         self.assertNotIn("style_reference_page_type", styled)
+        self.assertNotIn("style_reference_guidance", styled)
+        self.assertNotIn("style_reference_rules", styled)
+
+    def test_agent_style_contract_validates_and_clamps_dynamic_corner_radius(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720" rx="18" fill="#fff"/></g>
+          <g id="master-content"/><g id="layout-content"/>
+          <g id="main-content"><g data-role="header"><text x="40" y="70" font-size="32">old</text></g></g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="body">
+            <rect id="large" x="80" y="180" width="400" height="200" rx="24" ry="12" fill="#eee"/>
+            <rect id="small" x="80" y="400" width="100" height="40" rx="12" fill="#eee"/>
+          </g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pack = self._pack(root)
+            (pack / "reference" / "content.svg").write_text(reference_svg, encoding="utf-8")
+            manifest_path = pack / "style-pack.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["global_style"] = {
+                "summary": "Corporate square-corner system",
+                "geometry": {
+                    "max_corner_radius_px": 12,
+                    "max_rounded_rect_height_px": 60,
+                },
+            }
+            content = next(page for page in manifest["pages"] if page["id"] == "content")
+            content["layout_rules"] = ["Use square rectangular panels"]
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            page = PPTPage(
+                title="new",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=0,
+                style_reference_id="content",
+            )
+            bind_style_reference_paths([page], pack)
+            composed = apply_style_reference_shell(generated_svg, page)
+            root_svg = ET.fromstring(composed)
+            body = next(item for item in root_svg.iter() if item.get("id") == "body")
+            large_rect = next(item for item in body.iter() if item.get("id") == "large")
+            small_rect = next(item for item in body.iter() if item.get("id") == "small")
+            fixed_background = next(
+                item for item in root_svg if item.get("id") == "slidea-style-background"
+            )
+            fixed_rect = next(
+                item for item in fixed_background.iter() if item.tag.rsplit("}", 1)[-1] == "rect"
+            )
+
+        self.assertIn("square-corner", page.style_reference_guidance)
+        self.assertIn("Use square rectangular panels", page.style_reference_guidance)
+        self.assertEqual(page.style_reference_rules["max_corner_radius_px"], 12)
+        self.assertEqual(page.style_reference_rules["max_rounded_rect_height_px"], 60)
+        self.assertIsNone(large_rect.get("rx"))
+        self.assertIsNone(large_rect.get("ry"))
+        self.assertEqual(small_rect.get("rx"), "12")
+        self.assertEqual(fixed_rect.get("rx"), "18")
 
     async def test_outline_model_selects_references_by_batch(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -158,6 +262,176 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaisesRegex(ValueError, "failed to assign"):
                     await assign_style_references_for_outline(outline, pack)
             self.assertEqual(invoke.await_count, 3)
+
+    async def test_cross_type_assignment_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = self._pack(Path(tmp))
+            outline = [
+                PPTPage(title="封面", abstract="主题", type=PageType.COVER_THANKS, index=0),
+            ]
+            wrong_type = [{"page_index": 0, "style_reference_id": "content"}]
+            with patch(
+                "core.ppt_generator.utils.style_pack.llm_invoke",
+                new=AsyncMock(return_value=wrong_type),
+            ) as invoke:
+                with self.assertRaisesRegex(ValueError, "failed to assign"):
+                    await assign_style_references_for_outline(outline, pack)
+
+            self.assertEqual(invoke.await_count, 3)
+
+    async def test_missing_thanks_reference_uses_content_shell_only_for_that_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pack = self._pack(root)
+            (pack / "reference" / "content.svg").write_text(
+                """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+                  <defs><linearGradient id="body-gradient"><stop offset="0" stop-color="#f00"/></linearGradient></defs>
+                  <g id="background"><rect width="1280" height="720" fill="#fff"/></g>
+                  <g id="master-content"><text x="40" y="690">fixed footer</text></g>
+                  <g id="layout-content"><rect x="0" y="0" width="12" height="720"/></g>
+                  <g id="main-content">
+                    <g id="source-title" data-role="header"><text x="60" y="90">private title</text></g>
+                    <g id="source-body">
+                      <rect x="100" y="200" width="500" height="300" fill="url(#body-gradient)"/>
+                      <text x="120" y="260">private body</text>
+                    </g>
+                  </g>
+                </svg>""",
+                encoding="utf-8",
+            )
+            outline = [
+                PPTPage(
+                    title="项目封面", abstract="主题", type=PageType.COVER_THANKS,
+                    index=0, source=-1,
+                ),
+                PPTPage(
+                    title="方案说明", abstract="正文", type=PageType.CONTENT,
+                    index=1, source=0,
+                ),
+                PPTPage(
+                    title="致谢页", abstract="收束", type=PageType.COVER_THANKS,
+                    index=2, source=-1,
+                ),
+            ]
+            responses = [
+                [{"page_index": 0, "style_reference_id": "cover"}],
+                [{"page_index": 1, "style_reference_id": "content"}],
+            ]
+            with patch(
+                "core.ppt_generator.utils.style_pack.llm_invoke",
+                new=AsyncMock(side_effect=responses),
+            ) as invoke:
+                await assign_style_references_for_outline(outline, pack)
+
+            slides = root / "run" / "slides"
+            prepare_style_runtime_references(outline, pack, slides)
+
+            self.assertEqual(invoke.await_count, 2)
+            self.assertEqual(outline[0].style_reference_page_type, "cover")
+            self.assertEqual(outline[1].style_reference_page_type, "content")
+            self.assertEqual(outline[2].style_reference_id, "content")
+            self.assertEqual(outline[2].style_reference_page_type, "thanks")
+            self.assertTrue(Path(outline[2].style_reference_svg).is_file())
+            self.assertIn("特殊页只使用少量独立文字", outline[2].style_reference_guidance)
+            self.assertTrue(Path(outline[0].style_reference_svg).is_file())
+            self.assertTrue(Path(outline[1].style_reference_svg).is_file())
+
+            shell_root = ET.parse(outline[2].style_reference_svg).getroot()
+            shell_main = next(child for child in shell_root if child.get("id") == "main-content")
+            shell_defs = next(child for child in shell_root if child.tag.rsplit("}", 1)[-1] == "defs")
+            self.assertEqual(shell_root.get("data-slidea-style-shell-only"), "true")
+            self.assertEqual(len(shell_main), 0)
+            self.assertEqual(len(shell_defs), 0)
+            self.assertNotIn("private title", ET.tostring(shell_root, encoding="unicode"))
+            self.assertNotIn("private body", ET.tostring(shell_root, encoding="unicode"))
+
+            generated = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+              <g id="thanks-title" data-role="header"><text x="120" y="320" font-size="80">感谢聆听</text></g>
+              <g id="invented-cards"><rect x="100" y="400" width="300" height="100"/><text x="120" y="450">remove me</text></g>
+            </svg>"""
+            composed = ET.fromstring(apply_style_reference_shell(generated, outline[2]))
+            composed_texts = [
+                item.text for item in composed.iter()
+                if item.tag.rsplit("}", 1)[-1] == "text"
+            ]
+            composed_ids = {item.get("id") for item in composed.iter() if item.get("id")}
+            self.assertIn("感谢聆听", composed_texts)
+            self.assertNotIn("remove me", composed_texts)
+            self.assertIn("slidea-style-background", composed_ids)
+            self.assertNotIn("invented-cards", composed_ids)
+
+    async def test_missing_cover_and_thanks_share_one_persisted_random_content_shell(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pack = self._pack(root)
+            manifest_path = pack / "style-pack.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["pages"] = [
+                page for page in manifest["pages"] if page["page_type"] != "cover"
+            ]
+            second = dict(manifest["pages"][0])
+            second.update({"id": "content-2", "source_slide": 8})
+            manifest["pages"].append(second)
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            outline = [
+                PPTPage(title="封面", abstract="主题", type=PageType.COVER_THANKS, index=0),
+                PPTPage(title="正文", abstract="内容", type=PageType.CONTENT, index=1),
+                PPTPage(title="致谢", abstract="收束", type=PageType.COVER_THANKS, index=2),
+            ]
+            response = [{"page_index": 1, "style_reference_id": "content"}]
+            with patch(
+                "core.ppt_generator.utils.style_pack.random.choice",
+                return_value=next(page for page in manifest["pages"] if page["id"] == "content-2"),
+            ) as choose, patch(
+                "core.ppt_generator.utils.style_pack.llm_invoke",
+                new=AsyncMock(return_value=response),
+            ) as invoke:
+                await assign_style_references_for_outline(outline, pack)
+
+            self.assertEqual(choose.call_count, 1)
+            self.assertEqual(invoke.await_count, 1)
+            self.assertEqual(
+                [page.style_reference_id for page in outline],
+                ["content-2", "content", "content-2"],
+            )
+            self.assertEqual(outline[0].style_reference_page_type, "cover")
+            self.assertEqual(outline[2].style_reference_page_type, "thanks")
+
+    def test_bind_rejects_persisted_cross_type_reference_per_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pack = self._pack(root)
+            reference = pack / "reference"
+            (reference / "toc.svg").write_text(SVG, encoding="utf-8")
+            manifest_path = pack / "style-pack.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["pages"].append({
+                "id": "toc",
+                "source_slide": 2,
+                "svg": "reference/toc.svg",
+                "page_type": "toc",
+                "density": "sparse",
+                "structure": "目录标题与列表",
+                "description": "用于目录页",
+            })
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            outline = [
+                PPTPage(
+                    title="项目封面", abstract="主题", type=PageType.COVER_THANKS,
+                    index=0, style_reference_id="cover",
+                ),
+                PPTPage(
+                    title="致谢页", abstract="收束", type=PageType.COVER_THANKS,
+                    index=1, style_reference_id="toc",
+                ),
+            ]
+
+            bind_style_reference_paths(outline, pack)
+
+            self.assertEqual(outline[0].style_reference_page_type, "cover")
+            self.assertEqual(outline[1].style_reference_id, "")
+            self.assertEqual(outline[1].style_reference_svg, "")
+            self.assertEqual(outline[1].style_reference_page_type, "")
 
     async def test_large_chapter_is_split_into_bounded_outline_batches(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -384,7 +658,7 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
           </g>
           <g id="layout-content"><line x1="20" y1="90" x2="1260" y2="90"/></g>
           <g id="main-content">
-            <g id="source-title" data-role="content"><rect x="27" y="32" width="1225" height="49"/><text x="37" y="66" font-size="32" textLength="100">原始业务标题</text></g>
+            <g id="source-title" data-role="content"><rect x="27" y="32" width="1225" height="49" fill-opacity="0" stroke-opacity="0"/><text x="37" y="66" font-size="32" textLength="1150">原始业务标题</text></g>
             <g id="source-body"><text x="100" y="200">不得复制</text></g>
           </g>
         </svg>"""
@@ -427,6 +701,48 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
                 if item.tag.rsplit("}", 1)[-1] == "text"
             )
             self.assertNotIn("textLength", title_text.attrib)
+            self.assertEqual(title_text.get("x"), "37")
+            self.assertIsNone(title_text.get("text-anchor"))
+
+    def test_composer_keeps_body_when_model_wraps_title_and_content_together(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720" fill="#fff"/></g>
+          <g id="master-content"/><g id="layout-content"/>
+          <g id="main-content">
+            <g id="source-title" data-role="header"><text x="40" y="70" font-size="32">old</text></g>
+          </g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="main-content">
+            <g id="header"><text x="40" y="70" font-size="32">duplicate</text></g>
+            <g id="body"><rect x="60" y="170" width="1160" height="420"/><text x="90" y="220">keep me</text></g>
+          </g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "reference.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="new title",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=0,
+                style_reference_svg=str(reference),
+                style_reference_page_type="content",
+            )
+            composed = apply_style_reference_shell(generated_svg, page)
+            root = ET.fromstring(composed)
+            ids = {item.get("id") for item in root.iter() if item.get("id")}
+            texts = [
+                item.text
+                for item in root.iter()
+                if item.tag.rsplit("}", 1)[-1] == "text"
+            ]
+
+        self.assertIn("main-content", ids)
+        self.assertIn("body", ids)
+        self.assertNotIn("header", ids)
+        self.assertIn("keep me", texts)
+        self.assertNotIn("duplicate", texts)
 
     def test_composer_selects_page_title_when_reference_has_multiple_headers(self):
         reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
@@ -574,9 +890,129 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("slidea-style-title-shell-1", groups)
         self.assertIn("agenda", groups)
         self.assertNotIn("main-title", groups)
-        self.assertIn("新目录标题", all_text)
-        self.assertNotIn("Table of contents.", all_text)
+        self.assertIn("Table of contents.", all_text)
+        self.assertNotIn("新目录标题", all_text)
         self.assertNotIn("Original item", all_text)
+
+    def test_cover_composer_removes_geometry_duplicate_fixed_title(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720" fill="#fff"/></g>
+          <g id="master-content"/><g id="layout-content"/>
+          <g id="main-content">
+            <g id="source-cover-title" data-role="header"><text x="295" y="335" font-size="88">Original title</text></g>
+          </g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="main-message"><text x="640" y="335" text-anchor="middle" font-size="88">New title</text></g>
+          <g id="subtitle"><text x="640" y="437" text-anchor="middle" font-size="24">Keep subtitle</text></g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "cover.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="New title",
+                abstract="摘要",
+                type=PageType.COVER_THANKS,
+                index=0,
+                style_reference_svg=str(reference),
+                style_reference_page_type="cover",
+            )
+            root = ET.fromstring(apply_style_reference_shell(generated_svg, page))
+            all_text = [
+                text.text for text in root.iter()
+                if text.tag.rsplit("}", 1)[-1] == "text"
+            ]
+
+        self.assertEqual(all_text.count("New title"), 1)
+        self.assertIn("Keep subtitle", all_text)
+
+    def test_toc_composer_restores_vertical_marker_and_keeps_wrapped_entries(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720"/></g>
+          <g id="master-content"/><g id="layout-content"/>
+          <g id="main-content">
+            <g id="vertical-title" data-role="content"><rect x="160" y="228" width="112" height="291" fill="none"/><text x="174" y="283" font-size="53">目录</text></g>
+            <g id="vertical-latin" data-role="content"><rect x="235" y="227" width="78" height="291" fill="none"/><text x="248" y="262" font-size="32">CONTENTS</text></g>
+            <g id="source-row"><rect x="339" y="220" width="680" height="52"/><text x="500" y="252" font-size="24">private source row</text></g>
+          </g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="page-wrapper">
+            <g id="toc-title"><text x="174" y="283" font-size="53">模型重画目录</text></g>
+            <g id="row-1"><rect x="339" y="220" width="680" height="52"/><text x="500" y="252" font-size="24">01 新目录项</text></g>
+          </g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "vertical-toc.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="目录页",
+                abstract="章节",
+                type=PageType.TOC,
+                index=1,
+                style_reference_svg=str(reference),
+                style_reference_page_type="toc",
+            )
+            root = ET.fromstring(apply_style_reference_shell(generated_svg, page))
+            all_text = [
+                text.text for text in root.iter()
+                if text.tag.rsplit("}", 1)[-1] == "text"
+            ]
+
+        self.assertIn("目录", all_text)
+        self.assertIn("CONTENTS", all_text)
+        self.assertIn("01 新目录项", all_text)
+        self.assertNotIn("模型重画目录", all_text)
+        self.assertNotIn("private source row", all_text)
+
+    def test_content_composer_removes_full_canvas_backdrop_and_rejects_empty_body(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720"/></g>
+          <g id="master-content"/><g id="layout-content"/>
+          <g id="main-content"><g data-role="header"><text x="40" y="70" font-size="32">old</text></g></g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <rect x="0" y="0" width="1280" height="720" fill="#fff"/>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "content.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="new",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=2,
+                style_reference_svg=str(reference),
+                style_reference_page_type="content",
+            )
+            with self.assertRaisesRegex(ValueError, "no meaningful dynamic body"):
+                apply_style_reference_shell(generated_svg, page)
+
+    def test_content_composer_removes_full_canvas_backdrop_but_keeps_body(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720"/></g>
+          <g id="master-content"/><g id="layout-content"/>
+          <g id="main-content"><g data-role="header"><text x="40" y="70" font-size="32">old</text></g></g>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <rect id="bad-backdrop" x="0" y="0" width="1280" height="720" fill="#fff"/>
+          <g id="body"><text x="100" y="260" font-size="28">Visible body</text></g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "content.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="new",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=2,
+                style_reference_svg=str(reference),
+                style_reference_page_type="content",
+            )
+            composed = apply_style_reference_shell(generated_svg, page)
+
+        self.assertIn("Visible body", composed)
+        self.assertNotIn("bad-backdrop", composed)
 
     def test_thanks_composer_keeps_reference_title_and_simple_closing_copy(self):
         reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
@@ -616,6 +1052,39 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("谢谢观看", all_text)
         self.assertNotIn("private@example.com", all_text)
         self.assertNotIn("致谢页", all_text)
+
+    def test_thanks_composer_removes_dynamic_text_over_fixed_shell_text(self):
+        reference_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="background"><rect width="1280" height="720"/></g>
+          <g id="master-content"/>
+          <g id="layout-content">
+            <g transform="translate(20 0)"><text x="250" y="300" font-size="80" text-anchor="middle" textLength="340">Thank you.</text></g>
+          </g>
+          <g id="main-content"/>
+        </svg>"""
+        generated_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+          <g id="dynamic-wrapper" transform="translate(20 0)">
+            <g id="closing-message"><text x="80" y="300" font-size="80">感谢聆听</text></g>
+            <g id="closing-subcopy"><text x="80" y="500" font-size="24">期待再次交流</text></g>
+          </g>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            reference = Path(tmp) / "thanks.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="致谢页",
+                abstract="收束",
+                type=PageType.COVER_THANKS,
+                index=10,
+                style_reference_svg=str(reference),
+                style_reference_page_type="thanks",
+            )
+            root = ET.fromstring(apply_style_reference_shell(generated_svg, page))
+            all_text = [text.text for text in root.iter() if text.tag.rsplit("}", 1)[-1] == "text"]
+
+        self.assertIn("Thank you.", all_text)
+        self.assertNotIn("感谢聆听", all_text)
+        self.assertIn("期待再次交流", all_text)
 
 
 if __name__ == "__main__":

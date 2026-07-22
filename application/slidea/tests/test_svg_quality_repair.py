@@ -113,6 +113,57 @@ class SVGQualityRepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("missing.png", final_content)
         self.assertTrue(any("动态内容质量检查" in payload.get("step", "") for payload in writer.payloads))
 
+    async def test_partial_style_pack_checks_builtin_fallback_page_normally(self):
+        reference_svg = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+          <g id="background"><rect width="1280" height="720" fill="#FFFFFF"/></g>
+          <g id="master-content"/><g id="layout-content"/><g id="main-content"/>
+        </svg>"""
+        dynamic_svg = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+          <g id="body"><text x="100" y="200" font-family="Arial">styled body</text></g>
+        </svg>"""
+        fallback_svg = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>
+          <text x="100" y="200" font-family="Arial" font-size="36">built-in thanks</text>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            reference = root / "reference.svg"
+            styled_path = root / "01_style.svg"
+            fallback_path = root / "02_fallback.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            styled_page = PPTPage(
+                title="content", abstract="摘要", type=PageType.CONTENT, index=0,
+                style_reference_svg=str(reference), style_reference_page_type="content",
+            )
+            fallback_page = PPTPage(
+                title="thanks", abstract="摘要", type=PageType.COVER_THANKS, index=1,
+            )
+            styled_path.write_text(
+                apply_style_reference_shell(dynamic_svg, styled_page), encoding="utf-8"
+            )
+            fallback_path.write_text(fallback_svg, encoding="utf-8")
+            writer = DummyWriter()
+            repair_mock = AsyncMock(return_value=VALID_SVG)
+
+            with patch(
+                "core.ppt_generator.thought_to_ppt.svg_page_generators.node.llm_invoke",
+                new=repair_mock,
+            ):
+                result = await svg_node.quality_check_node(
+                    {
+                        "page_files": [str(styled_path), str(fallback_path)],
+                        "outline": [styled_page, fallback_page],
+                    },
+                    writer,
+                )
+
+        repair_mock.assert_not_awaited()
+        self.assertEqual(
+            [item["scope"] for item in result["svg_quality_report"]],
+            ["dynamic-main-content", "full-svg-built-in-fallback"],
+        )
+        self.assertTrue(all(item["passed"] for item in result["svg_quality_report"]))
+
     async def test_style_pack_quality_removes_redundant_rect_clip_without_llm(self):
         reference_svg = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
           <g id="background"><rect width="1280" height="720" fill="#FFFFFF"/></g>

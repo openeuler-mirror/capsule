@@ -23,6 +23,75 @@ def _write_test_png(path: Path) -> None:
 
 
 class SVGStylePackVLMTests(unittest.IsolatedAsyncioTestCase):
+    async def test_style_pack_generation_retries_bodyless_composition_once(self):
+        reference_svg = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+          <g id="background"><rect width="1280" height="720" fill="#FFFFFF"/></g>
+          <g id="master-content"/><g id="layout-content"/>
+          <g id="main-content"><g data-role="header"><text x="40" y="80" font-size="40" font-family="Arial">old title</text></g></g>
+        </svg>"""
+        invalid = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>
+        </svg>"""
+        valid = _dynamic_svg("retried body")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            reference = root / "reference.svg"
+            reference.write_text(reference_svg, encoding="utf-8")
+            page = PPTPage(
+                title="new title",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=0,
+                style_reference_svg=str(reference),
+                style_reference_page_type="content",
+            )
+            invoke = AsyncMock(side_effect=[invalid, valid])
+            state = {
+                "index": 0,
+                "save_dir": str(root),
+                "generate_ppt_prompt": "original generation prompt",
+                "ppt_prompt": "",
+                "page": page,
+            }
+
+            with patch.object(node, "llm_invoke", new=invoke):
+                update = await node.generate_ppt_page_node(state)
+
+            rejected = list((root / "style_generation_candidates").glob("*.svg"))
+
+        self.assertEqual(invoke.await_count, 2)
+        retry_prompt = invoke.await_args_list[1].args[1][0].content
+        self.assertIn("Style-pack 合成门禁", retry_prompt)
+        self.assertIn("retried body", update["content"])
+        self.assertNotIn('<rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>', update["content"])
+        self.assertEqual(len(rejected), 1)
+
+    async def test_no_style_pack_generation_keeps_original_single_attempt_route(self):
+        original = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>
+        </svg>"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            page = PPTPage(
+                title="plain",
+                abstract="摘要",
+                type=PageType.CONTENT,
+                index=0,
+            )
+            invoke = AsyncMock(return_value=original)
+            state = {
+                "index": 0,
+                "save_dir": tmp_dir,
+                "generate_ppt_prompt": "original generation prompt",
+                "ppt_prompt": "",
+                "page": page,
+            }
+
+            with patch.object(node, "llm_invoke", new=invoke):
+                update = await node.generate_ppt_page_node(state)
+
+        self.assertEqual(invoke.await_count, 1)
+        self.assertEqual(update["content"], original)
+
     async def test_style_pack_vlm_receives_dynamic_content_and_restores_shell(self):
         reference_svg = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
           <g id="background"><rect width="1280" height="720" fill="#FFFFFF"/></g>
@@ -43,6 +112,7 @@ class SVGStylePackVLMTests(unittest.IsolatedAsyncioTestCase):
                 index=0,
                 style_reference_svg=str(reference),
                 style_reference_page_type="content",
+                style_reference_guidance='{"geometry":"square corners"}',
             )
             composed = apply_style_reference_shell(_dynamic_svg("old body"), page)
             invoke = AsyncMock(return_value=SimpleNamespace(content=_dynamic_svg("new body")))
@@ -63,6 +133,7 @@ class SVGStylePackVLMTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("old body", prompt_text)
         self.assertNotIn("fixed footer", prompt_text)
         self.assertNotIn("data-slidea-style-shell", prompt_text)
+        self.assertIn("square corners", prompt_text)
         self.assertIn("new body", update["content"])
         self.assertIn("fixed footer", update["content"])
         self.assertIn("slidea-style-background", update["content"])

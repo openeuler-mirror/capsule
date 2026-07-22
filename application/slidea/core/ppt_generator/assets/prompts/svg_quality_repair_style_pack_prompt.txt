@@ -10,6 +10,11 @@
 - 不得引用 `style-reference-only/` 或 `images/style-pack/`。
 - 返回结果会经过结构契约与静态质量检查，任何内容或组结构变化都会被拒绝。
 
+# Agent 编写的样式与版式契约
+{style_guidance}
+
+- 修复不得改变上述契约规定的几何语言、图文比例、版式区域和线条风格。
+
 # 兼容性要求
 - 只输出一个完整 standalone SVG，使用 ```svg 包裹，不要解释。
 - 使用 width="1280" height="720" viewBox="0 0 1280 720"。

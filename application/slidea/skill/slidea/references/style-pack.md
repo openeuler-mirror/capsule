@@ -32,7 +32,9 @@ Expected material:
 
 Do not use screenshots or require visual capability. Read SVG source code to understand coordinates, text hierarchy, element groups, shapes, colors, image frames and layout relationships. Read `asset-inventory.json` first to find likely recurring template images. Its `candidate` and `signals` fields only reduce inspection work; they never authorize reuse and must not be copied mechanically into the manifest. Assets with `needs_explicit_authorization: false` already belong to inherited background/master/layout layers and must not be repeated in `reusable_assets`.
 
-Do not describe every converted slide. For a large deck, inspect SVGs in manageable batches and choose only a small, visually distinct set that covers the useful page roles and structures. Normally 4-10 representative pages are enough; use fewer when the source deck has little variation. Unselected SVGs may remain under `reference/` but must not appear in `pages`.
+Do not describe every converted slide. For a large deck, inspect SVGs in manageable batches and choose only a small, visually distinct set that covers the useful page roles, structures and recurring layout behaviors. Normally 4-10 representative pages are enough; use fewer when the source deck has little variation. Do not stop after covering only coarse labels such as “left/right columns”: also cover materially different behaviors such as introduction/summary bands, image-plus-text balance, comparisons, full-width diagrams and sparse/dense body layouts. Unselected SVGs may remain under `reference/` but must not appear in `pages`.
+
+Special-role completeness overrides the normal representative-page budget. If the converted source contains a genuine cover, TOC, separator or thanks/closing page, include one valid representative for each available role. In particular, inspect the final source slides for a real closing page before finishing the manifest. Never omit an available thanks page merely because cover, TOC and several content layouts have already been selected. If the source truly lacks one of these roles, leave that role absent; Slidea will use the built-in template only for target pages of the missing type.
 
 Before assigning `page_type`, verify the selected SVG's actual `<text>` content and `main-content` structure. A cover, TOC or thanks reference must visibly contain that role's real title/content slots. Exclude template license, credits, FAQ, usage instructions, brand-resource and legal notice pages even when their layout looks decorative; never label one of those pages as `cover`, `toc`, `separator` or `thanks`.
 
@@ -42,7 +44,29 @@ Create `<STYLE_PACK_DIR>/style-pack.json` yourself. Use this schema:
 {
   "version": 1,
   "source": "reference.pptx",
-  "global_style": "Agent description of palette, typography, spacing and recurring motifs",
+  "global_style": {
+    "summary": "Agent description of the overall visual identity",
+    "palette_and_type": ["Concrete cross-page color and typography rules"],
+    "geometry": {
+      "max_corner_radius_px": 0,
+      "rules": ["Describe corner, border, line, shadow and connector language"]
+    },
+    "text_container_usage": {
+      "preference": "selective",
+      "rules": [
+        "Body paragraphs are normally unboxed on the slide background",
+        "Opening context and closing takeaways use full-width filled bands",
+        "Small labels use solid fills; border-only text boxes are not used"
+      ]
+    },
+    "composition": [
+      "Describe recurring introduction/summary regions and whitespace rhythm",
+      "Describe the expected balance between diagrams/images and explanatory text"
+    ],
+    "image_usage": [
+      "State where full-bleed imagery is allowed and how content-page images share space with text"
+    ]
+  },
   "reusable_assets": [
     {
       "id": "bottom-red-brush",
@@ -60,6 +84,13 @@ Create `<STYLE_PACK_DIR>/style-pack.json` yourself. Use this schema:
       "density": "medium",
       "structure": "Title band above three equal cards with aligned headings and short body copy",
       "description": "Use for three parallel viewpoints, options or comparisons",
+      "layout_rules": [
+        "Preserve the three equal-width columns and aligned card edges",
+        "Keep any concluding sentence in the reference page's dedicated summary region"
+      ],
+      "style_rules": {
+        "max_corner_radius_px": 0
+      },
       "fixed_image_elements": [
         {"element_id": "shape-42", "layer": "back"}
       ]
@@ -80,6 +111,17 @@ Required page fields:
 - `structure`: concrete spatial and component layout description derived from SVG code;
 - `description`: what content shape this layout supports.
 
+Recommended design-contract fields:
+
+- `global_style`: prefer an object that records cross-page invariants instead of a loose aesthetic paragraph. Describe palette/type, geometry, text-container usage, composition, image usage and recurring explanation/summary regions. Values must be derived from multiple SVG pages, not from one visually unusual element;
+- `global_style.text_container_usage`: an optional object for backward compatibility but required when the Agent authors a new pack. Set `preference` to `minimal`, `selective`, or `frequent`, then write concrete `rules` describing whether body text is normally unboxed, placed on a solid/translucent fill, or enclosed by border-only/filled rectangles. Distinguish roles such as title bands, small labels, callouts, body cards, introduction strips and conclusion/summary strips. Record padding, fill/stroke behavior and shape treatment when consistently observable. Do not infer “all text uses cards” merely because one exceptional page does;
+- `global_style.geometry.max_corner_radius_px`: optional non-negative number. When present, Slidea deterministically clamps only model-generated `<rect>` corner radii to this value; inherited template geometry is untouched. Omit it when the template intentionally mixes corner systems and use page overrides instead;
+- `global_style.geometry.max_rounded_rect_height_px`: optional non-negative number. Rectangles taller than this threshold are forced square while smaller nodes, labels or pills may retain their declared radius. Use it when the template distinguishes small rounded components from square structural containers;
+- page-level `layout_rules`: optional array of concise, testable rules for this reference layout. State fixed region relationships, image/text sharing, band placement, column counts and alignment; do not repeat source business content;
+- page-level `style_rules.max_corner_radius_px` and `style_rules.max_rounded_rect_height_px`: optional per-layout overrides of the global limits.
+
+Do not hard-code the current template's values from memory. Inspect the selected SVGs. For example, a square corporate template may legitimately use `0`, while a soft consumer template may use `12` or omit the rule. If one exceptional reference page uses rounded nodes inside an otherwise square system, set a page override only for that reference.
+
 Optional reusable template image fields:
 
 - top-level `reusable_assets`: the Agent's explicit allow-list. Each object requires a unique `id`, a safe local `path`, a concise `role`, and a concrete `reason` based on inspected SVG structure;
@@ -89,7 +131,7 @@ Optional reusable template image fields:
 
 Only authorize visual identity assets such as repeated transparent ornaments, branded strips, flags, silhouettes, corner marks or fixed photographic cut-outs that are genuinely part of the template. Do not authorize charts, screenshots, portraits, product photos or other source-slide business content. Every image referenced by a fixed element must be present in `reusable_assets`, and every declared reusable asset must be used by at least one fixed element. When uncertain, leave it unlisted.
 
-Describe layout effects, not the source slide's topic. Do not use embeddings, text-overlap scores, generated density formulas, automatic structure classification or skeleton SVGs. Do not modify selected SVG geometry.
+Describe layout effects, not the source slide's topic. Explicitly distinguish a repeated cross-page rule from a one-page exception: do not promote one rounded node, one full-width photo or one colored band into a global motif unless it recurs. Do not use embeddings, text-overlap scores, generated density formulas, automatic structure classification or skeleton SVGs. Do not modify selected SVG geometry.
 
 ## 3. Validate the Agent-authored JSON
 
@@ -145,12 +187,12 @@ Pass the prepared pack when starting the full pipeline or the outline stage:
   --style-pack <STYLE_PACK_DIR>
 ```
 
-Slidea validates and copies the pack to `output/<run_id>/style_pack/`. During outline generation, a dedicated style-mode prompt selects `style_reference_id` using only page type, density and structure. Long decks are grouped by the existing chapter `source` and oversized chapters are processed in bounded batches. The selected id is saved directly in `outline/outline.json`; there is no separate `style-plan.json`.
+Slidea validates and copies the pack to `output/<run_id>/style_pack/`. During outline generation, a dedicated style-mode prompt selects `style_reference_id` using only page type, density and structure. Page type is an exact-match constraint: a `thanks` target can only select a `thanks` reference, a `toc` target can only select a `toc` reference, and the same rule applies to every other role. Long decks are grouped by the existing chapter `source` and oversized chapters are processed in bounded batches. The selected id is saved directly in `outline/outline.json`; there is no separate `style-plan.json`. When the pack has no exact-type candidate for one page, that page stores an empty id and uses the built-in template while the remaining pages still use the pack.
 
 Before parallel page generation, Slidea prepares runtime reference copies under `output/<run_id>/slides/style_references/`. Images inside inherited background/master/layout/title shell layers and images inside validated `fixed_image_elements` are copied to `output/<run_id>/slides/images/style-pack/` with rewritten runtime paths. Authorized `back` elements are injected behind generated content and authorized `front` elements above it. Every other image inside `main-content` is treated as source-deck business content and remains unavailable for reuse.
 
-In style mode, each page Agent generates only dynamic main content. After generation and again after any VLM/quality repair, code deterministically restores the assigned reference page's background, master/layout layers, title geometry, header/footer, fixed logos, authorized reusable decorations and page-number format. Cover, TOC, separator and thanks prompts prohibit creative redesign when a matching reference exists. Do not ask the Agent to redraw or manually reference these fixed elements. This composition path is inactive when `--style-pack` is absent, so the existing built-in template workflow remains unchanged.
+In style mode, each page Agent generates only dynamic main content. The generation prompt and style-mode repair prompts receive the Agent-authored `global_style`, selected page `structure`, `description` and `layout_rules`. Safe machine rules such as an explicitly declared maximum rectangle corner radius are reapplied after generation/repair. Code then deterministically restores the assigned reference page's background, master/layout layers, title geometry, header/footer, fixed logos, authorized reusable decorations and page-number format. Cover, TOC, separator and thanks prompts prohibit creative redesign when a matching reference exists. Do not ask the Agent to redraw or manually reference these fixed elements. This composition path is inactive when `--style-pack` is absent, so the existing built-in template workflow remains unchanged.
 
 Treat `/tmp/slidea/style-packs/<SESSION_ID>` only as Phase 0 working material. After the pipeline returns `completed`, confirm `output/<run_id>/style_pack/` exists before removing the temporary directory. Keep the temporary directory when conversion, validation, preflight or generation has not reached a confirmed run snapshot.
 
-Do not first create an unstyled outline and add `--style-pack` only during a later render-only stage. Reference selection belongs to outline generation. If no pack is supplied, or pack/assignment/fixed-asset preflight fails, Slidea clears every style reference before fan-out and uses the existing built-in template flow for the whole run.
+Do not first create an unstyled outline and add `--style-pack` only during a later render-only stage. Reference selection belongs to outline generation. If no pack is supplied, or pack validation/fixed-asset preflight fails, Slidea clears every style reference before fan-out and uses the existing built-in template flow for the whole run. A missing exact page role is not a pack failure: only the affected page uses the built-in route. Invalid model output for pages that do have exact-type candidates still retries and then falls back according to the normal assignment-error behavior.
