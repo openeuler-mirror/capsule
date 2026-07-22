@@ -22,7 +22,10 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generat
     ImageScoreResult,
 )
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.graph import generate_ppt_page_app
-from core.ppt_generator.utils.style_pack import reference_svg_for_page
+from core.ppt_generator.utils.style_pack import (
+    reference_svg_for_page,
+    style_guidance_for_page,
+)
 
 
 def _svg_prompt_header() -> str:
@@ -42,6 +45,17 @@ def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
     )
     template, is_style_reference = reference_svg_for_page(page, template)
     if is_style_reference:
+        style_guidance = style_guidance_for_page(page)
+        guidance_section = f"""# Agent 编写的样式与版式契约（优先级高于从 SVG 自行猜测）
+{style_guidance}
+
+# 契约执行要求
+- `global_style` 是跨页不变量；不得因为当前内容不同而改成另一套几何、图文比例或装饰语言。
+- `global_style.text_container_usage` 是独立的文字承载方式硬约束：必须遵守模板对“裸排文字、实色背景文字块、仅边框文字框、标签、提示横条和卡片”的偏好及适用角色。模板正文通常不加框时，不得把每段文字卡片化；模板习惯用标题带、提示色块或总结框时，也不得把相应文字直接裸放在背景上。
+- `selected_layout.structure` 描述参考页的空间骨架，`layout_rules` 是本页必须满足的硬约束。
+- 如果契约与参考 SVG 中的个别局部特例不同，以契约为准；例如全局要求直角时，不得把个别圆角节点扩散为整页圆角卡片。
+- 若使用图片，必须遵守契约中的图文比例和配文要求；不得让单张图片或单一图形吞没正文区域。
+"""
         template_heading = "# 用户示例 PPT 中为本页预分配的参考页 SVG"
         template_rules = """# Style pack 参考页使用规范
 - 代码会在生成后精确注入参考页的 background、master-content、layout-content、标题区、页眉、页脚、Logo、页码，以及 style pack 显式授权的前后层可复用装饰。你只生成当前页的动态主体内容，不得输出、重画、移动或覆盖这些固定元素。
@@ -50,6 +64,7 @@ def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
 - 禁止复制参考页中的原始正文、数字、业务图片和可能的用户敏感信息。`style-reference-only/` 下的图片是明确不可用的原示例业务图片。
 - `images/style-pack/` 下的图片属于代码管理的继承外壳或已授权可复用装饰；不要在输出中手工引用或复制。当前页新增图片只能使用上方“相关图片素材”明确列出的路径。"""
     else:
+        guidance_section = ""
         template_heading = "# 模板 SVG"
         template_rules = """# 模板使用规范（严格遵守，不是“仅供参考”）
 - 严格保留模板的标题栏、装饰元素、页眉页脚、页码格式、配色、字体与卡片骨架（如果有的话）。
@@ -86,6 +101,8 @@ def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
 - 当资料里给出了图片时，可适度使用 <image> 提升表达，但宁可不用，也不要拼凑。
 
 {template_rules}
+
+{guidance_section}
 
 # 语言
 生成页面文字必须使用：{language}

@@ -60,6 +60,8 @@ def _outline_page_dump(page: PPTPage, *, include_style_reference: bool) -> dict:
     data = page.model_dump()
     data.pop("style_reference_svg", None)
     data.pop("style_reference_page_type", None)
+    data.pop("style_reference_guidance", None)
+    data.pop("style_reference_rules", None)
     if not include_style_reference:
         data.pop("style_reference_id", None)
     return data
@@ -93,6 +95,8 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
                     page.style_reference_id = ""
                     page.style_reference_svg = ""
                     page.style_reference_page_type = ""
+                    page.style_reference_guidance = ""
+                    page.style_reference_rules = {}
                 return {"outline": outline, "topic": topic, "style_pack_dir": ""}
 
     task_payload = {
@@ -163,6 +167,8 @@ async def generate_outline_node(state: PPTState, config: RunnableConfig | None =
                 page.style_reference_id = ""
                 page.style_reference_svg = ""
                 page.style_reference_page_type = ""
+                page.style_reference_guidance = ""
+                page.style_reference_rules = {}
 
     result = {
         "outline": outline,

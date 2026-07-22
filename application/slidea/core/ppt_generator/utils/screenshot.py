@@ -171,8 +171,22 @@ def _prepend_cjk_font_stack(font_family: str) -> str:
     if _has_available_cjk_font(normalized, _prefers_serif(normalized)):
         return font_family
 
-    cjk_stack = _get_cjk_font_stack(_prefers_serif(normalized))
-    return f"{cjk_stack}, {font_family}"
+    serif = _prefers_serif(normalized)
+    preferred_names = _get_cjk_font_names(serif)
+    preferred_normalized = {name.lower() for name in preferred_names}
+    # A real CJK font later in the CSS list is not sufficient for Cairo/Pango:
+    # fontconfig may resolve an unavailable first family (for example Microsoft
+    # YaHei on Linux) to a Latin-only alias and never reach the later Noto face.
+    # Move all known CJK fallbacks to the front of the in-memory screenshot copy
+    # and remove duplicates from the original tail. The SVG on disk is untouched.
+    original_tail = [
+        family.strip()
+        for family in font_family.split(",")
+        if family.strip().strip("\"'").lower() not in preferred_normalized
+    ]
+    return ", ".join(
+        [*(_quote_font_family(name) for name in preferred_names), *original_tail]
+    )
 
 
 def _prefers_serif(normalized_font_family: str) -> bool:
@@ -180,16 +194,16 @@ def _prefers_serif(normalized_font_family: str) -> bool:
 
 
 def _has_available_cjk_font(normalized_font_family: str, serif: bool) -> bool:
+    first_family = normalized_font_family.split(",", 1)[0].strip().strip("\"'")
     # The bundled face is made visible by _bundled_fonts_context even when
-    # other system CJK fonts exist.
+    # other system CJK fonts exist. Only the first CSS family is decisive:
+    # finding Noto later in the list does not make an unavailable first family
+    # safe for Cairo/Pango.
     bundled_names = CJK_SERIF_FONT_FALLBACKS if serif else CJK_SANS_FONT_FALLBACKS
-    if any(name.lower() in normalized_font_family for name in bundled_names[:2]):
+    if first_family in {name.lower() for name in bundled_names[:2]}:
         return True
     detected = detect_system_cjk_fonts(serif)
-    if detected:
-        return any(name.lower() in normalized_font_family for name in detected)
-    fallbacks = CJK_SERIF_FONT_FALLBACKS if serif else CJK_SANS_FONT_FALLBACKS
-    return any(name.lower() in normalized_font_family for name in fallbacks)
+    return first_family in {name.lower() for name in detected}
 
 
 @lru_cache(maxsize=2)

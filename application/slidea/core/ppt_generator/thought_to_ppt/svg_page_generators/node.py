@@ -51,6 +51,7 @@ from core.ppt_generator.utils.style_pack import (
     apply_style_reference_shell,
     apply_style_reference_shell_file,
     bind_style_reference_paths,
+    style_guidance_for_page,
     extract_style_dynamic_content,
     prepare_style_runtime_references,
 )
@@ -123,11 +124,16 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
         try:
             bind_style_reference_paths(outline, style_pack_dir)
             prepare_style_runtime_references(outline, style_pack_dir, save_dir)
-            style_pack_active = True
+            styled_page_count = sum(
+                bool(getattr(page, "style_reference_svg", "")) for page in outline
+            )
+            fallback_page_count = len(outline) - styled_page_count
+            style_pack_active = styled_page_count > 0
             logger.info(
                 "using style references stored in outline.json; "
                 "inherited shell and authorized reusable assets prepared under "
-                "slides/images/style-pack"
+                f"slides/images/style-pack ({styled_page_count} styled page(s), "
+                f"{fallback_page_count} built-in fallback page(s))"
             )
         except Exception as error:
             logger.warning(
@@ -141,6 +147,8 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
                 page.style_reference_id = ""
                 page.style_reference_svg = ""
                 page.style_reference_page_type = ""
+                page.style_reference_guidance = ""
+                page.style_reference_rules = {}
 
     writer(
         {
@@ -492,7 +500,7 @@ async def quality_check_node(state: PPTState, writer: StreamWriter):
 
 
 def _active_style_pack_pages(state: PPTState, files: list[str]) -> list[Any] | None:
-    """Return ordered style pages, or ``None`` for the legacy built-in route."""
+    """Return ordered pages when at least one uses style-pack composition."""
     pages = sorted(state.get("outline") or [], key=lambda page: int(page.index))
     references = [str(getattr(page, "style_reference_svg", "") or "") for page in pages]
     if not any(references):
@@ -501,8 +509,6 @@ def _active_style_pack_pages(state: PPTState, files: list[str]) -> list[Any] | N
         raise ValueError(
             f"cannot check style dynamic content: {len(pages)} outline pages != {len(files)} SVG files"
         )
-    if not all(references):
-        raise ValueError("cannot check a partially bound style pack: some pages have no style reference")
     return pages
 
 
@@ -669,6 +675,7 @@ async def _check_one_style_dynamic_svg(
         ).read_text(encoding="utf-8")
         prompt = repair_prompt_template.format(
             issues=format_quality_issues([initial_result]),
+            style_guidance=style_guidance_for_page(page),
             content=deterministic_dynamic,
         )
         response = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)])
@@ -715,12 +722,16 @@ async def _quality_check_style_dynamic_content(
     pages: list[Any],
     writer: StreamWriter,
 ) -> dict[str, Any]:
-    """Style-pack quality gate: never send the composed page to an LLM."""
+    """Check styled pages dynamically and per-page built-in fallbacks normally."""
     _restore_style_shells(state, files)
     results: list[dict[str, Any]] = []
     updates: list[tuple[Path, str]] = []
     for page, svg_path in zip(pages, files):
-        result, recomposed = await _check_one_style_dynamic_svg(svg_path, page)
+        if getattr(page, "style_reference_svg", ""):
+            result, recomposed = await _check_one_style_dynamic_svg(svg_path, page)
+        else:
+            result = await _check_one_builtin_fallback_svg(svg_path)
+            recomposed = None
         results.append(result)
         if recomposed is not None:
             updates.append((Path(svg_path), recomposed))
@@ -761,12 +772,23 @@ async def _quality_check_style_dynamic_content(
         {
             "step": "SVG 动态内容质量检查",
             "text": (
-                f"已完成 {len(results)} 个文件的动态内容检查，"
-                f"发现 {warning_count} 个警告；固定 style pack 外壳未参与模型修复。"
+                f"已完成 {len(results)} 个文件的质量检查，"
+                f"发现 {warning_count} 个警告；style pack 页面仅检查动态内容，"
+                "无同类型参考的页面沿用内置模板检查流程。"
             ),
         }
     )
     return {"svg_quality_report": results}
+
+
+async def _check_one_builtin_fallback_svg(svg_path: str) -> dict[str, Any]:
+    """Run the existing full-SVG repair behavior for one fallback page."""
+    result = check_svg_files([svg_path])[0]
+    if not result.get("passed"):
+        await _repair_failed_svg_files([result])
+        result = check_svg_files([svg_path])[0]
+    result["scope"] = "full-svg-built-in-fallback"
+    return result
 
 
 def _restore_style_shells(state: PPTState, files: list[str]) -> None:

@@ -9,7 +9,10 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.s
     SEPWorkerState,
 )
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.graph import generate_ppt_page_app
-from core.ppt_generator.utils.style_pack import reference_svg_for_page
+from core.ppt_generator.utils.style_pack import (
+    reference_svg_for_page,
+    style_guidance_for_page,
+)
 
 
 def _svg_prompt_header() -> str:
@@ -23,12 +26,17 @@ def _svg_prompt_header() -> str:
 def _build_sep_template_prompt(*, ppt_prompt, template, language, outline, page) -> str:
     template, is_style_reference = reference_svg_for_page(page, template)
     if is_style_reference:
+        guidance_section = (
+            "# Agent 编写的样式与版式契约\n"
+            + style_guidance_for_page(page)
+        )
         design_requirements = """- 这是用户示例 PPT 中预分配的章节页参考。代码会精确注入背景、母版、版式、章节标题位置、Logo、页眉页脚和固定装饰。
 - 不要输出或重画章节标题、背景、Logo、页眉页脚、页码和固定装饰；只在参考页确有对应文字槽时生成最少必要的章节说明。
 - 禁止复制原示例正文和图片路径，禁止引用 `style-reference-only/` 或 `images/style-pack/`。
 - 不得新增卡片、流程、图标阵列或另一套装饰；章节页构图应与参考页基本一致。"""
         template_heading = "# 用户示例 PPT 章节页参考 SVG"
     else:
+        guidance_section = ""
         design_requirements = """- 这是内置模板示意。
 - 配色必须与下方模板示意 SVG 中的配色保持一致!
 - 分割页通常较空旷，留白充足，呼吸感强。
@@ -47,6 +55,8 @@ def _build_sep_template_prompt(*, ppt_prompt, template, language, outline, page)
 # 设计要求
 {design_requirements}
 
+{guidance_section}
+
 # 语言
 生成页面文字必须使用：{language}
 
@@ -61,6 +71,7 @@ def _build_sep_page_prompt(*, ppt_prompt, sep_template, language, outline, page)
         f"\n# 本页预分配的用户示例参考 SVG\n"
         "代码会精确注入其固定背景、母版、版式、标题、页眉页脚和 Logo。"
         "只生成可替换的最少正文，不得重画固定元素；禁止复制原文字和图片路径。\n"
+        f"# Agent 编写的样式与版式契约\n{style_guidance_for_page(page)}\n"
         f"{reference}\n"
         if has_reference else ""
     )

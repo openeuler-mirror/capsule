@@ -48,6 +48,8 @@ class PPTPage(BaseModel):
     style_reference_id: str = ""  # outline 阶段由模型选择的 style pack 参考页 id
     style_reference_svg: str = ""  # 已复制到当前 run 的参考 SVG 绝对路径
     style_reference_page_type: str = ""  # 由 manifest 解析的运行时参考页类型，不写入 outline.json
+    style_reference_guidance: str = ""  # Agent 编写的全局/逐页设计契约，仅在运行时注入 prompt
+    style_reference_rules: dict = {}  # 可确定性执行的逐页样式规则，不写入 outline.json
 
     def __str__(self) -> str:
         page_dict = self.model_dump(include={'index', 'title', 'abstract', 'type'})
