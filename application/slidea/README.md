@@ -84,6 +84,24 @@ In an environment like Claude Code that supports slash-style skill commands, you
 
 The exact syntax depends on the host agent, but the expected experience is the same: the agent loads the Slidea skill, gathers missing information when needed, and runs the slide generation pipeline to final artifacts.
 
+##### Advanced usage: Generate from the style of an existing PPTX
+
+Place the reference PPTX at a local path accessible to the agent, and state in your request that the file should only be used as a style reference. For example:
+
+```text
+Use the slidea skill and refer to /path/to/brand-template.pptx.
+Create a presentation explaining how AI Agents work, around 12 slides, for software architects.
+Use only the reference PPTX's style, not its original content.
+```
+
+In an environment that supports slash-style skill commands, you can also use:
+
+```text
+/slidea Refer to /path/to/brand-template.pptx and create a 12-slide presentation explaining how AI Agents work. Use only its style, not its original content.
+```
+
+The agent will read the reference PPTX from the given path, extract its style, and complete the generation process.
+
 ### Deep Research Skill
 
 Deep Research is a standalone skill that performs multi-source investigation on a given topic, automatically searching the web, extracting content from relevant pages, and synthesizing findings into a structured research report.

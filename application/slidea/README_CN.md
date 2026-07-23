@@ -80,6 +80,24 @@ Slidea 是 AI 驱动的 PPT 生成 skill。使用前需要配置 `DEFAULT_LLM`�
 
 具体语法取决于宿主 agent，但预期体验是一致的：agent 加载 Slidea skill，在必要时补充缺失信息，并将幻灯片生成流水线执行到最终产物。
 
+##### 高级用法：参考已有 PPTX 的样式生成
+
+将参考 PPTX 放在 Agent 可以访问的本地路径中，并在请求中说明该文件只用于参考视觉样式。例如：
+
+```text
+使用 slidea skill，参考 /path/to/brand-template.pptx，
+创建一份介绍 AI Agent 工作原理的 PPT，12 页左右，面向软件架构师。
+只参考样式，不使用参考 PPTX 中的原文内容。
+```
+
+在支持 slash 风格 skill 命令的环境中，也可以这样调用：
+
+```text
+/slidea 参考 /path/to/brand-template.pptx，创建一份 12 页左右的 AI Agent 工作原理介绍，只参考样式，不使用原文内容
+```
+
+Agent 会根据该路径读取参考 PPTX，完成样式提取和后续生成。
+
 ### Deep Research Skill
 
 Deep Research 是一个可独立安装和使用的深度研究 skill。它可以对给定主题进行多源调查，自动搜索网络、提取相关页面内容，并将发现综合为结构化的研究报告。
