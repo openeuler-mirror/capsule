@@ -80,7 +80,8 @@ class DocumentParser:
         if not images:
             return images
 
-        _min_dimension = 100
+        _min_width = 200
+        _min_height = 100
 
         seen_hashes = set()
         seen_paths = set()
@@ -100,7 +101,7 @@ class DocumentParser:
                 from PIL import Image as PILImage
                 with PILImage.open(img_path) as pil_img:
                     w, h = pil_img.size
-                if w < _min_dimension and h < _min_dimension:
+                if w < _min_width or h < _min_height:
                     logger.debug(
                         "过滤: 图片尺寸过小 ({}x{})，删除: {}",
                         w, h, img_path,
@@ -152,7 +153,6 @@ class DocumentParser:
 
         task_name = self._compute_task_name(file_path)
         task_output_dir = os.path.join(self.config.output_dir, task_name)
-        os.makedirs(task_output_dir, exist_ok=True)
         logger.debug("任务输出目录: {}", task_output_dir)
 
         if self._is_url(file_path):

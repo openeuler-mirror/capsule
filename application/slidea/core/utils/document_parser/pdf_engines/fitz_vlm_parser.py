@@ -217,6 +217,7 @@ class FitzVLMPDFParser(FitzPDFParser):
             crop_img = image.crop((left, top, right, bottom))
             crop_filename = f"page_{page_num}_vlm_img_{suffix}{i}.png"
             crop_path = os.path.join(self.output_dir, crop_filename)
+            os.makedirs(self.output_dir, exist_ok=True)
             crop_img.save(crop_path)
 
             if os.path.getsize(crop_path) < 10 * 1024:

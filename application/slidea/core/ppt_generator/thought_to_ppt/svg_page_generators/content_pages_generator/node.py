@@ -14,6 +14,12 @@ from core.utils.llm import InvokeOptions, ModelRoute, can_vlm_invoke_route, llm_
 from core.utils.search import async_search
 from core.ppt_generator.utils.image import generate_ai_image, get_ai_images_content
 from core.ppt_generator.thought_to_ppt.state import PageType
+from core.ppt_generator.utils.doc_image_pool import (
+    init_doc_image_pool,
+    doc_image_pool_snapshot,
+    doc_image_pool_size,
+    claim_doc_image,
+)
 from core.ppt_generator.thought_to_ppt.svg_page_generators.content_pages_generator.state import (
     ContentPagesState,
     ContentWorkerState,
@@ -113,7 +119,48 @@ def _build_content_prompt(*, query, outline, ppt_prompt, template, language,
 
 
 async def get_content_pages_node(state: ContentPagesState):
-    """get content pages from outline"""
+    """get content pages from outline and initialise the document image pool."""
+    # Load doc_images.json from the run directory (<save_dir>/../doc_images.json)
+    save_dir = state.get("save_dir", "")
+    if save_dir:
+        cache_dir = os.path.dirname(save_dir)
+        doc_images_path = os.path.join(cache_dir, "doc_images.json")
+        logger.info("doc_image_pool: looking for {} (save_dir={}, cache_dir={})",
+                     doc_images_path, save_dir, cache_dir)
+        if os.path.isfile(doc_images_path):
+            import json as _json
+            import shutil
+            with open(doc_images_path, "r", encoding="utf-8") as f:
+                doc_images = _json.load(f)
+            if doc_images:
+                # Copy doc images to <save_dir>/images/ so that downstream
+                # (LLM selection → SVG generation → PPTX export) can resolve
+                # them via the standard relative-path mechanism (images/<name>).
+                images_dest_dir = os.path.join(save_dir, "images")
+                os.makedirs(images_dest_dir, exist_ok=True)
+                relocated = 0
+                for item in doc_images:
+                    src = item.get("path", "")
+                    if not src or not os.path.isfile(src):
+                        continue
+                    dest = os.path.join(images_dest_dir, os.path.basename(src))
+                    if not os.path.exists(dest):
+                        shutil.copy2(src, dest)
+                    item["path"] = dest
+                    relocated += 1
+                if relocated:
+                    logger.info("doc_image_pool: copied {} doc images to {}",
+                                relocated, images_dest_dir)
+                init_doc_image_pool(doc_images)
+                logger.info("doc_image_pool: loaded {} images from {} (pool size={})",
+                            len(doc_images), doc_images_path, doc_image_pool_size())
+            else:
+                logger.info("doc_image_pool: {} exists but is empty, pool not initialised", doc_images_path)
+        else:
+            logger.info("doc_image_pool: {} not found, pool not initialised", doc_images_path)
+    else:
+        logger.info("doc_image_pool: save_dir not set, skipping pool init")
+
     pages = []
     for page in state["outline"]:
         if page.type == PageType.CONTENT:
@@ -281,7 +328,18 @@ async def get_web_ai_images_node(state: ContentWorkerState):
 
 
 async def get_final_images_node(state: ContentWorkerState):
-    """select images from all the images"""
+    """select images from web/AI results + document image pool."""
+    # Take a snapshot of the doc image pool (synchronous, atomic under asyncio).
+    doc_snapshot = doc_image_pool_snapshot()
+    page_idx = state["content_page"].index
+    logger.info("doc_image_pool: page {} snapshot has {} images available (pool size={})",
+                page_idx, len(doc_snapshot), doc_image_pool_size())
+    doc_images_desc = ""
+    if doc_snapshot:
+        doc_images_desc = "\n\n# Document images (from uploaded documents)\n" + "\n".join(
+            f"{item['path']}: {item.get('description', '')}" for item in doc_snapshot
+        )
+
     prompt = f"""
 请从以下图片中选择5张最适合放在该页PPT中的图片（不足5张则按需返回，可以为空[]）。
 # PPT的文字素材
@@ -289,10 +347,11 @@ async def get_final_images_node(state: ContentWorkerState):
 
 # 输出格式要求
 只返回一个json格式的列表，如：
-['图片1绝对路径'， '图片2绝对路径']
+['图片1绝对路径', '图片2绝对路径']
 
 # 图片绝对路径以及描述
 {state["img_content"]}
+{doc_images_desc}
 
 每个路径一定要以完整的绝对路径输出！！
 """
@@ -305,13 +364,43 @@ async def get_final_images_node(state: ContentWorkerState):
     if not img_list:
         img_list = []
     img_list.extend(state["content_page"].reference_images)
-    final_img_list = [img for img in img_list if os.path.exists(img)]
+
+    # Claim doc images that were selected by the LLM.
+    # In single-threaded asyncio this check+remove is atomic (no await between).
+    # If another worker already claimed the image, skip it.
+    final_img_list = []
     description_map = state.get("reference_image_descriptions") or {}
+    for img_path in img_list:
+        if not os.path.exists(img_path):
+            continue
+        # Check if this is a doc image that needs claiming
+        is_doc_img = any(item["path"] == img_path for item in doc_snapshot)
+        if is_doc_img:
+            if claim_doc_image(img_path):
+                final_img_list.append(img_path)
+                doc_desc = next((item.get("description", "") for item in doc_snapshot if item["path"] == img_path), "")
+                logger.info("doc_image_pool: page {} claimed doc image id={} description={}",
+                            page_idx, img_path, doc_desc)
+            else:
+                logger.info(
+                    "doc_image_pool: page {} skipped doc image {} (already claimed by another page)",
+                    page_idx, img_path)
+        else:
+            final_img_list.append(img_path)
+
+    # Also collect descriptions for claimed doc images
     final_description_map = {
         image_path: description_map[image_path]
         for image_path in final_img_list
         if image_path in description_map and description_map[image_path]
     }
+    # Add descriptions from doc snapshot for claimed doc images
+    for item in doc_snapshot:
+        if item["path"] in final_img_list and item.get("description"):
+            final_description_map.setdefault(item["path"], item["description"])
+
+    logger.info("doc_image_pool: page {} final selection: {} total images (pool remaining={})",
+                page_idx, len(final_img_list), doc_image_pool_size())
 
     return {
         "reference_images": final_img_list,

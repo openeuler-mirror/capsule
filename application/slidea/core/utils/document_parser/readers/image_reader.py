@@ -20,7 +20,6 @@ class ImageReader:
         self.config = config
         self.vlm_model: Optional[Any] = config.vlm_model
         self.output_dir = config.output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
 
     @staticmethod
     def is_image_file(file_path: str, ext: Optional[str] = None) -> bool:
@@ -54,6 +53,7 @@ class ImageReader:
 
         md_filename = name + ".md"
         md_path = os.path.join(self.output_dir, md_filename)
+        os.makedirs(self.output_dir, exist_ok=True)
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_text)
 

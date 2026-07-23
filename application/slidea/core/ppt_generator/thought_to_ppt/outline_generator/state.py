@@ -39,7 +39,7 @@ class ChapterItem(BaseModel):
 class CoverItem(BaseModel):
     cover_title: str = Field(..., description="封面标题")
     cover_abstract: str = Field(..., description="封面摘要")
-    toc_intro: str = Field(..., description="目录页描述")
+    toc_intro: list[str] = Field(..., description="目录页描述列表，每项为一条目录条目")
 
 
 class OutlineState(TypedDict):

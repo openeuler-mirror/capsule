@@ -1,6 +1,6 @@
 ---
 name: slidea
-description: "AI-Powered PPT generation and editing. Use for PPT creation where an agent needs full-run control over parse/research/outline/render flows. Also use for editing an existing slidea run — rewording text, swapping images, adjusting layout, or redrawing a page as an architecture / flowchart / sequence / structural diagram. Generates a native editable PPTX from a topic, files, or URLs, with optional research and speech-script phases. Trigger this skill whenever the user mentions slidea or a previously generated PPT, asks to modify / redraw / change a slide, or wants any diagram (architecture, flowchart, sequence, ER, org chart, etc.) drawn onto an existing slide."
+description: "AI-Powered PPT generation and editing. Use for PPT creation where an agent needs full-run control over parse/research/outline/render flows. Also use for editing an existing slidea run — rewording text, swapping images, adjusting layout, or redrawing a page as an architecture / flowchart / sequence / structural diagram. Generates a native editable PPTX from a topic, files, or URLs, with an optional document-processing phase that consolidates provided documents into a single structured markdown. Trigger this skill whenever the user mentions slidea or a previously generated PPT, asks to modify / redraw / change a slide, or wants any diagram (architecture, flowchart, sequence, ER, org chart, etc.) drawn onto an existing slide."
 ---
 
 # Slidea
@@ -20,10 +20,26 @@ Slidea renders slides as SVG and exports native editable PPTX. The SVG route is 
 
 ## Workflow Overview
 
-**Important**: Before starting, you **must ask user** whether they want to review and refine the PPT speech script first. Based on their answer:
+### Step 0: Clarify the PPT request (mandatory, before any pipeline)
 
-- **User wants to review**: Execute Phase 1 **Research & Speech Script**, then proceed to Phase 2: **PPT Generation**.
-- **User does not need to review** (Recommended): Skip Phase 1 and directly execute Phase 2: **PPT Generation**.
+Before entering Phase 1 or Phase 2, confirm the following with the user. These are not optional — they directly affect document-processing quality and PPT generation, and must be carried into `preprocess(topic=...)` and the `--text` parameter.
+
+1. **Audience** (e.g. technical team / academic / management / non-technical). Determines depth and terminology.
+2. **Goal** (e.g. deep technical explanation / project kickoff / industry trend briefing / general science popularization). Determines focus and framing.
+3. **Topic / scope** — the concrete subject and any required coverage areas.
+4. **Style / length** (optional) — page count, tone, visual style, if the user specified any.
+
+Assemble these into a single **"understood PPT request"** string — a coherent request consolidating the user's intent (audience + goal + topic + style), not a verbatim echo when the user's words are vague. This string is reused as the `topic` for `preprocess()` and as the `--text` body for the PPT pipeline, so the same confirmed context flows through both phases.
+
+Only after the user confirms, proceed to the entry-point decision below.
+
+### Entry point
+
+Decide the entry point by what the user provided:
+
+- **User provided documents** (local files, URLs, or directories): Execute Phase 1 **Document Processing** first. Pass the confirmed "understood PPT request" as `topic` to `preprocess()` — it flows into the summarization LLM prompt and shapes which content is treated as relevant. After the user reviews and accepts the resulting `structured.md`, proceed to Phase 2.
+  - **Phase 1 only - hard boundary**: `topic` carries intent only (audience/goal/topic/style) - never document summaries, outlines, or digested points. While building this string, do not open or read any document content; pass paths to `preprocess()` and let doc-process parse and digest it.
+- **User only gave a topic** (no documents): Skip Phase 1 and directly execute Phase 2: **PPT Generation**.
 
 If the user supplied a reference PPTX and explicitly wants the new deck to follow its style, execute **Phase 0: Reference Style Material Preparation** before Phase 1/2. If no reference PPTX was supplied, or the user did not request style imitation, skip Phase 0 and keep the existing workflow unchanged.
 
@@ -45,15 +61,19 @@ Keep style input and content input strictly separate. The reference PPTX path/UR
 
 ---
 
-## Phase 1: Research & Speech Script
+## Phase 1: Document Processing
 
-Before generating the PPT, produce a speech script markdown file.
-**Read [references/research_speech.md](references/research_speech.md) for the complete Phase 1 instructions.**
+**When to use**: When the user provides documents (local files, URLs, or directories). Doc-processing is a black box: you call `preprocess()` and get back a final `structured.md` path. Treat it as opaque - do not describe to the user what it did internally, which path it took, or any counts/thresholds it produced. Only the `structured.md` path (and chapter overview, in the full-flow path) is user-facing.
 
-Phase 1 provides built-in tools for extracting content from documents/web pages and searching online information — these tools are ready to use out of the box.
+**Read [references/doc_processor/process-doc.md](references/doc_processor/process-doc.md) for the complete pipeline instructions.** When calling `preprocess()`, pass the confirmed "understood PPT request" (from Step 0) as the `topic` argument — it flows into the summarization LLM prompt and shapes which document content is treated as relevant.
 
-The output of Phase 1 is a saved markdown file at `<SPEECH_SCRIPT_MD_PATH>`.
+### Output contract
 
+- The return value always contains `structured_md_path` — the final `<task_dir>/structured.md`.
+- The return value contains `short_circuit` (bool) - a branching signal only. `True` -> `structured.md` is already final, proceed to Phase 2. `False` -> run the full pipeline steps, then Phase 2. Use it only to pick your next step; never describe its meaning or the path taken to the user.
+- The return value contains `doc_images` (list): when non-empty, each item has `{path, description, score}` — pass the `doc_images.json` file path to the PPT pipeline via `--image-json`.
+- **You do NOT perform any review of `structured.md`** — that is handled entirely inside doc-process. When `preprocess()` returns, `structured.md` is final. Proceed directly to Phase 2.
+- **Do not pass the original document paths to the PPT pipeline** — only the `structured.md` produced by doc-processing.
 ---
 
 ## Phase 2: PPT Generation
@@ -72,6 +92,15 @@ Each logical task is identified by `--session-id` and writes everything (run met
 - If a fresh full-pipeline invocation reports that the chosen session already belongs to an existing run, treat the id as occupied even when that run completed successfully. Immediately choose a different new id and rerun the requested fresh generation.
 - Do not inspect, open, summarize, return, resume, continue, patch, or reuse the old run merely because its session id collided with the new request. Existing output is relevant only when the user explicitly asks to continue, repair, inspect, edit, or retrieve that prior run.
 - Reuse an existing session id only for `--continue`, `--resume`, non-default staged execution, patch rendering, or Phase 3 editing when the user intends to operate on that exact prior run.
+
+### Assemble `--text`
+
+`--text` is a single string. The pipeline extracts file paths from this string itself, so assemble it as:
+
+- **If Phase 1 (Document Processing) was run**: `--text` = the understood PPT request text, followed on a new line by `参考文档: <abs_path_to_structured.md>`. **Do not include the original document paths** — only the `structured.md` produced by doc-processing.
+- **If Phase 1 was skipped** (topic only, no documents): `--text` = the understood PPT request text.
+
+"Understood PPT request" = the confirmed context from Step 0 (audience + goal + topic + style), written as a coherent request — not a verbatim echo of the user's words when they are vague. **The audience and goal must appear explicitly in this string** so the PPT pipeline receives them; do not strip them down to a bare topic.
 
 ### Pre-run user reminder (mandatory)
 
@@ -99,7 +128,7 @@ This rule applies to **every** command in this section.
 **Full pipeline**:
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \
-  --text <PPT request> \
+  --text "<PPT request>" \
   --session-id <id>
 ```
 
@@ -107,17 +136,24 @@ When Phase 0 produced a style pack, append `--style-pack <STYLE_PACK_DIR>` as sh
 
 Before running a style-mode command, inspect the final `--text` value and remove the reference PPTX path/URL, `<STYLE_PACK_DIR>`, converted SVG paths, and `style-pack.json` path. Include only the requested topic, purpose, audience, content requirements, and content sources the user actually wants read for facts. Never add a style source to `--text` merely to remind the pipeline which visual style to follow.
 
-If Phase 1 was run previously, set `--research-mode "skip"`, and `<PPT request>` must contain:
-- PPT Original Request
-- PPT writer must reference `<SPEECH_SCRIPT_MD_PATH>` for writing approach
-- Purpose/Audience/Topic of PPT
-- files/urls provided by user
+`<PPT request>` is the single string assembled per "Assemble `--text`" above:
+- If Phase 1 ran: the understood PPT request, followed on a new line by `参考文档: <abs_path_to_structured.md>` (the doc-processing output — **not** the original document paths).
+- If Phase 1 was skipped: the understood PPT request text only.
+
+`--research-mode`:
+- **Phase 1 ran (documents provided)**: pass `--research-mode "skip"`. The material is already consolidated in `structured.md`, so the PPT must be generated directly from it — **no additional data searching / research**.
+- **Phase 1 skipped (topic only)**: omit the flag (or set it explicitly per `references/advanced-params.md`), so the pipeline may research the topic online as needed.
+
+`--image-json`:
+- **Phase 1 ran and `doc_images` is non-empty**: pass `--image-json <abs_path_to_doc_images.json>`. The pipeline copies this file into the run directory and uses it as a document image pool — each PPT page can select relevant images from it. If `doc_images` is empty, omit the flag.
+- **Phase 1 skipped**: omit the flag. No document images are available.
 
 **Resume after `input_required`**:
 ```bash
 .venv/bin/python scripts/run_ppt_pipeline.py \
   --resume "<user reply>" \
-  --session-id <same_session_id>
+  --session-id <same_session_id> \
+  --research-mode <same_value_as_initial_run>
 ```
 
 **Continue after timeout, process termination, or lost shell connection**:
@@ -131,10 +167,12 @@ If Phase 1 was run previously, set `--research-mode "skip"`, and `<PPT request>`
 
 If `--continue` returns `resume_unavailable`, do not start a second full run with the same session and do not delete either run directory. Read [references/patch-render.md](references/patch-render.md) and use `patch_render_missing.py --session-id <same_session_id>` to regenerate only missing pages when an outline exists.
 
+**`--research-mode` inheritance (required)**: If the initial run set `--research-mode` (e.g. `skip`, `simple`, or `deep`), the resume command **must pass the exact same value**. Do not drop the flag, do not change the value, and do not re-ask the user — the choice made at the start of the session carries through every `--resume` call for that `--session-id`. Dropping or altering it mid-session can cause the pipeline to switch research behavior halfway through and produce inconsistent results.
+
 If the pipeline returns `input_required` or `missing_required_info`, you must stop autonomous execution immediately and ask the user instead of continuing on your own. Your only allowed behavior is:
 1. show the question, missing information request, or options to the user;
 2. wait for the user's explicit answer or selection;
-3. resume using the same `--session-id` after the user responds.
+3. resume using the same `--session-id` (and the same `--research-mode` as the initial run) after the user responds.
 
 ### Output
 
