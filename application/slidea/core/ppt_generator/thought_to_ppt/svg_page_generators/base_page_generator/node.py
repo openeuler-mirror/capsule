@@ -21,6 +21,11 @@ from core.ppt_generator.utils.svg import (
     validate_svg_content,
 )
 from core.ppt_generator.utils.svg_pipeline.finalize_svg import embed_local_images_in_content
+from core.ppt_generator.utils.style_pack import (
+    apply_style_reference_shell,
+    extract_style_dynamic_content,
+    style_guidance_for_page,
+)
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.state import SVGWorkerState
 
 
@@ -31,8 +36,11 @@ VLM_SCREENSHOT_DIR_NAME = "vlm_screenshots"
 GENERATE_PROMPT_LOG_DIR_NAME = "prompts"
 SVG_JUDGE_PROMPT = "svg_vlm_judge_prompt.txt"
 SVG_FIX_PROMPT = "svg_vlm_fix_prompt.txt"
+SVG_STYLE_PACK_FIX_PROMPT = "svg_vlm_fix_style_pack_prompt.txt"
 SVG_QUALITY_REPAIR_PROMPT = "svg_quality_repair_prompt.txt"
 SVG_GENERATION_REPAIR_MAX_ATTEMPTS = 1
+STYLE_PACK_COMPOSITION_RETRY_MAX_ATTEMPTS = 1
+STYLE_GENERATION_CANDIDATE_DIR_NAME = "style_generation_candidates"
 _XLINK_NS = "http://www.w3.org/1999/xlink"
 
 
@@ -72,6 +80,43 @@ def _save_generate_prompt(state: SVGWorkerState) -> None:
         (prompt_dir / filename).write_text(prompt, encoding="utf-8")
     except OSError as error:
         logger.warning(f"save generate prompt failed: {error}")
+
+
+def _save_failed_style_candidate(state: SVGWorkerState, content: str, attempt: int) -> None:
+    """Persist a rejected pre-composition SVG for deterministic diagnosis."""
+    save_dir = state.get("save_dir")
+    page = state.get("page")
+    if not save_dir or page is None or not getattr(page, "style_reference_svg", ""):
+        return
+    candidate_dir = Path(save_dir) / STYLE_GENERATION_CANDIDATE_DIR_NAME
+    filename = Path(_svg_page_filename(page)).stem
+    try:
+        candidate_dir.mkdir(parents=True, exist_ok=True)
+        (candidate_dir / f"{filename}_rejected_{attempt + 1}.svg").write_text(
+            content,
+            encoding="utf-8",
+        )
+    except OSError as error:
+        logger.warning(f"save rejected style candidate failed: {error}")
+
+
+def _style_pack_retry_prompt(original_prompt: str, issue: str, page: Any) -> str:
+    page_type = str(getattr(page, "style_reference_page_type", "") or "content")
+    role_requirement = {
+        "toc": "目录页必须生成至少一个位于参考正文区域内的完整动态目录条目。",
+        "content": "内容页必须生成可见的动态正文文字或正文图片，不能只输出背景。",
+        "cover": "封面页不得重画固定主标题，只保留参考页允许的动态副标题等文字。",
+        "thanks": "致谢页不得重画固定致谢标题，只保留参考页允许的动态补充文字。",
+    }.get(page_type, "必须生成该页面角色所需的可见动态内容。")
+    return f"""{original_prompt}
+
+# Style-pack 合成门禁的自动重试反馈
+上一次 SVG 在固定外壳合成阶段被拒绝：{issue}
+请重新输出一份完整、合法的 SVG，并严格满足以下要求：
+- {role_requirement}
+- 不要生成覆盖 1280×720 画布的全屏不透明背景矩形；背景、母版、标题、页眉页脚由代码注入。
+- 动态正文不能为空，也不能放在会被固定外壳遮挡的位置。
+- 只输出 SVG，不要解释。"""
 
 
 async def _svg_process_llm_response(raw: str, *, page_index: int = 0) -> str:
@@ -147,13 +192,43 @@ async def _svg_screenshot_with_embedded_images(source_path: str, output_path: st
 async def generate_ppt_page_node(state: SVGWorkerState):
     """generate svg ppt page"""
     _save_generate_prompt(state)
-    response = await llm_invoke(
-        ModelRoute.PREMIUM,
-        [HumanMessage(content=state["generate_ppt_prompt"])],
+    page = state.get("page")
+    style_pack_active = bool(getattr(page, "style_reference_svg", ""))
+    max_attempts = 1 + (
+        STYLE_PACK_COMPOSITION_RETRY_MAX_ATTEMPTS if style_pack_active else 0
     )
-    svg_content = await _svg_process_llm_response(response, page_index=state.get("index", 0))
+    prompt = state["generate_ppt_prompt"]
+    last_error: Exception | None = None
 
-    return {"content": svg_content}
+    for attempt in range(max_attempts):
+        response = await llm_invoke(
+            ModelRoute.PREMIUM,
+            [HumanMessage(content=prompt)],
+        )
+        raw_svg = await _svg_process_llm_response(
+            response,
+            page_index=state.get("index", 0),
+        )
+        try:
+            svg_content = apply_style_reference_shell(raw_svg, page)
+            validate_svg_content(svg_content)
+            return {"content": svg_content}
+        except ValueError as error:
+            last_error = error
+            if not style_pack_active or attempt + 1 >= max_attempts:
+                raise
+            _save_failed_style_candidate(state, raw_svg, attempt)
+            logger.warning(
+                f"style-pack page {state.get('index', 0)} composition rejected "
+                f"attempt {attempt + 1}, retrying generation: {error}"
+            )
+            prompt = _style_pack_retry_prompt(
+                state["generate_ppt_prompt"],
+                str(error),
+                page,
+            )
+
+    raise ValueError(f"style-pack SVG generation failed: {last_error}")
 
 
 async def vlm_judge_node(state: SVGWorkerState):
@@ -265,14 +340,26 @@ async def vlm_modify_node(state: SVGWorkerState):
         logger.warning(f"vlm_modify missing screenshot for page {index}, skip")
         return {"vlm_iteration": vlm_iteration + 1}
 
-    fix_prompt_template = _load_prompt(SVG_FIX_PROMPT)
+    page = state.get("page")
+    style_pack_active = bool(getattr(page, "style_reference_svg", ""))
+    if style_pack_active:
+        # The judge still sees the fully composed screenshot, but the modifier
+        # receives only model-authored nodes.  This makes it impossible for a
+        # VLM rewrite to mutate or spend context on the deterministic shell.
+        prompt_svg_content = extract_style_dynamic_content(svg_content)
+        fix_prompt_template = _load_prompt(SVG_STYLE_PACK_FIX_PROMPT)
+    else:
+        # Preserve the original no-style-pack route and prompt byte-for-byte.
+        prompt_svg_content = svg_content
+        fix_prompt_template = _load_prompt(SVG_FIX_PROMPT)
     issues_block = _format_issues(issues)
     history_block = _format_judge_history(state.get("vlm_judge_history") or [])
     fix_prompt = fix_prompt_template.format(
         issues_block=issues_block,
         history_block=history_block,
         ppt_prompt=state.get("ppt_prompt", ""),
-        content=svg_content,
+        style_guidance=style_guidance_for_page(page) if style_pack_active else "",
+        content=prompt_svg_content,
     )
 
     try:
@@ -298,6 +385,15 @@ async def vlm_modify_node(state: SVGWorkerState):
         return {"vlm_iteration": vlm_iteration + 1}
     if not new_svg:
         logger.warning(f"page {index} vlm_modify returned empty content, keep current")
+        return {"vlm_iteration": vlm_iteration + 1}
+    try:
+        new_svg = apply_style_reference_shell(new_svg, state.get("page"))
+        validate_svg_content(new_svg)
+    except ValueError as error:
+        logger.warning(
+            f"page {index} vlm_modify result rejected by style composition gate: {error}; "
+            "keep current candidate"
+        )
         return {"vlm_iteration": vlm_iteration + 1}
 
     return {
@@ -412,14 +508,18 @@ def ppt_submitter_node(state: SVGWorkerState):
     best_file_path = state.get("best_file_path")
     best_svg_content = state.get("best_content")
     file_path = best_file_path or state["final_file_path"]
+    final_content = best_svg_content or state.get("content")
 
-    if best_file_path and best_svg_content and best_svg_content != state.get("content"):
+    if final_content:
         try:
-            with open(best_file_path, "w", encoding="utf-8") as f:
-                f.write(best_svg_content)
-            logger.info(f'page {state["index"]} restored best version to {best_file_path}')
+            final_content = apply_style_reference_shell(final_content, state.get("page"))
+            validate_svg_content(final_content)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(final_content)
+            if best_file_path and best_svg_content and best_svg_content != state.get("content"):
+                logger.info(f'page {state["index"]} restored best version to {best_file_path}')
         except Exception as error:
-            logger.warning(f"write best_svg_content failed: {error}")
+            logger.warning(f"write final svg content failed: {error}")
 
     _write_vlm_review_json(state, file_path)
 
@@ -825,6 +925,110 @@ def strip_unresolvable_images(svg_path: str) -> int:
                 continue
             parent.remove(child)
             removed += 1
+
+    if removed:
+        ET.register_namespace("", "http://www.w3.org/2000/svg")
+        ET.register_namespace("xlink", _XLINK_NS)
+        tree.write(path, encoding="unicode", xml_declaration=False)
+    return removed
+
+
+def repair_redundant_non_image_clip_paths(svg_path: str) -> int:
+    """Remove provably redundant ``clip-path`` attributes from dynamic rects.
+
+    Slidea's native DrawingML route supports clipping on images, not arbitrary
+    SVG shapes.  Models commonly reuse an image's rounded-rectangle clip on a
+    caption overlay that is already fully contained by the same rectangle.  In
+    that specific case the clip is redundant and can be removed without moving
+    content.  Rounded corners are copied to overlays touching the clip edge.
+
+    Complex, transformed or non-rectangular clips are deliberately left intact
+    so the quality gate can route them to the dynamic-only LLM fallback.
+    """
+    path = Path(svg_path)
+    try:
+        tree = ET.parse(path)
+    except (ET.ParseError, OSError):
+        return 0
+    root = tree.getroot()
+
+    def _local_name(tag: str) -> str:
+        return tag.rsplit("}", 1)[-1].lower()
+
+    def _float(element: ET.Element, name: str, default: float = 0.0) -> float:
+        try:
+            return float(element.get(name, default))
+        except (TypeError, ValueError):
+            return default
+
+    clip_rects: dict[str, ET.Element] = {}
+    for clip in root.iter():
+        if _local_name(clip.tag) != "clippath" or clip.get("transform"):
+            continue
+        children = [child for child in clip if isinstance(child.tag, str)]
+        if len(children) != 1 or _local_name(children[0].tag) != "rect":
+            continue
+        rect = children[0]
+        if rect.get("transform"):
+            continue
+        clip_id = clip.get("id")
+        if clip_id:
+            clip_rects[clip_id] = rect
+
+    removed = 0
+    reference_pattern = re.compile(r"^url\(#([^)]+)\)$")
+    tolerance = 0.05
+    for element in root.iter():
+        if _local_name(element.tag) != "rect" or element.get("transform"):
+            continue
+        clip_attr = next(
+            (name for name in element.attrib if _local_name(name) == "clip-path"),
+            None,
+        )
+        if clip_attr is None:
+            continue
+        match = reference_pattern.match((element.get(clip_attr) or "").strip())
+        clip_rect = clip_rects.get(match.group(1)) if match else None
+        if clip_rect is None:
+            continue
+
+        x, y = _float(element, "x"), _float(element, "y")
+        width, height = _float(element, "width"), _float(element, "height")
+        clip_x, clip_y = _float(clip_rect, "x"), _float(clip_rect, "y")
+        clip_width, clip_height = _float(clip_rect, "width"), _float(clip_rect, "height")
+        dimensions = (width, height, clip_width, clip_height)
+        if any(value < 0 for value in dimensions):
+            continue
+        contained = (
+            x >= clip_x - tolerance
+            and y >= clip_y - tolerance
+            and x + width <= clip_x + clip_width + tolerance
+            and y + height <= clip_y + clip_height + tolerance
+        )
+        if not contained:
+            continue
+
+        del element.attrib[clip_attr]
+        removed += 1
+
+        # A bottom/top photo caption often reaches the rounded clip boundary.
+        # Carrying the same radius to the overlay preserves the visible corner
+        # treatment after the now-redundant clip is removed.
+        shares_width = (
+            abs(x - clip_x) <= tolerance
+            and abs(width - clip_width) <= tolerance
+        )
+        touches_vertical_edge = (
+            abs(y - clip_y) <= tolerance
+            or abs((y + height) - (clip_y + clip_height)) <= tolerance
+        )
+        if shares_width and touches_vertical_edge:
+            clip_rx = clip_rect.get("rx")
+            clip_ry = clip_rect.get("ry") or clip_rx
+            if clip_rx and not element.get("rx"):
+                element.set("rx", clip_rx)
+            if clip_ry and not element.get("ry"):
+                element.set("ry", clip_ry)
 
     if removed:
         ET.register_namespace("", "http://www.w3.org/2000/svg")

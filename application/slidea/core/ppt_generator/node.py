@@ -20,6 +20,7 @@ async def generate_slides_node(state: GenPPTState):
         "is_markdown_doc": is_markdown_doc,
         "images": images,
         "render_mode": state.get("render_mode", "svg"),
+        "style_pack_dir": state.get("style_pack_dir", ""),
     }
 
     return await generate_slides_app.ainvoke(task_payload)

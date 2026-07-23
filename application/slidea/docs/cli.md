@@ -42,23 +42,28 @@ python3 scripts/run_ppt_pipeline.py --text "<request>"
 | Argument | Required | Description |
 | --- | --- | --- |
 | `--text` | No* | New slide-generation request text |
-| `--resume` | No* | Resume payload for an interrupted full-graph run |
-| `--session-id` | No | LangGraph thread/session identifier. If omitted, a unique id (`auto_<pid>_<ts>`) is generated so unrelated runs never collide. Pass an explicit value when you intend to resume or run `--stages` against an existing run. |
+| `--resume` | No* | User reply for a deliberate `input_required` interrupt |
+| `--continue` | No* | Continue unfinished checkpoint work after timeout/process termination |
+| `--session-id` | No | Public task identifier. If omitted for a new run, a unique id (`auto_<pid>_<ts>`) is generated. Reuse an explicit id for continuation, interrupt replies, patching, or staged execution. |
 | `--stages` | No | Comma-separated stage list, default `all` |
 | `--research-mode` | No | Runtime override for research routing: `skip`, `simple`, `deep` |
 | `--use-cache` | No | String boolean controlling cache-backed reuse |
 | `--image-search` | No | String boolean override for web image search |
-| `--run-id` | No | Explicit run id override. Rarely needed — staged execution and resume auto-recover `run_id` from `--session-id`. |
+| `--style-pack` | No | Prepared style-pack directory. The pack is validated and copied into the run. |
+| `--allow-style-source-content` | No | Explicitly allow the style pack's source PPTX to also be read as content. Use only for intentional dual use. |
+| `--run-id` | No | Advanced internal override for legacy collision disambiguation or debugging. Normal callers use `--session-id`. |
 | `--recursion-limit` | No | LangGraph recursion limit, default `500` |
 | `--dry-run` | No | Run preflight only and skip generation |
 
 Any additional render-backend flag is intentionally not advertised here. The default and only route exposed through this doc is SVG; alternative backends are opt-in and documented only in the repository README.
 
-At least one of `--text` or `--resume` is required.
+Exactly one of `--text`, `--resume`, or `--continue` is required for non-dry execution.
+
+`--text` is both the natural-language request and the content-source channel: document paths and URLs found there are parsed and added to the writing references. When `--style-pack` is used, do not include the reference PPTX path/URL in `--text`; style is already supplied by the pack. If the pack's `source` PPTX is found in `--text`, the CLI returns `invalid_request` before generation. The rare intentional dual-use case requires `--allow-style-source-content`.
 
 ### Request validity rules
 
-The command requires at least one of `--text` or `--resume`.
+The command requires exactly one of `--text`, `--resume`, or `--continue`. Re-submitting `--text` with an existing session id is rejected instead of creating a duplicate run.
 
 If both are missing, the CLI returns:
 
@@ -67,7 +72,7 @@ If both are missing, the CLI returns:
   "stage": "invalid_request",
   "output": {
     "stage": "invalid_request",
-    "message": "missing --text or --resume"
+    "message": "choose exactly one of --text, --resume, or --continue"
   }
 }
 ```
@@ -153,6 +158,7 @@ Known stage values produced by the current code path:
 - `missing_required_info`
 - `missing_outline`
 - `input_required`
+- `resume_unavailable`
 
 ### Input-required behavior
 
@@ -172,7 +178,7 @@ Current implementation detail:
 - those details are currently surfaced through runtime events / console output paths,
 - the final JSON emitted by `scripts/run_ppt_pipeline.py` does not currently include the full interaction payload.
 
-When `input_required` is returned, the caller should preserve the current `run_id` and resume the same run after the user responds.
+When `input_required` is returned, the caller should preserve the current `session-id` and resume the same run after the user responds. The internal `run_id` is recovered automatically.
 
 Resume input is normalized in a tolerant order:
 
@@ -239,13 +245,23 @@ Render from a cached outline:
 python3 scripts/run_ppt_pipeline.py --text "..." --stages render --session-id demo
 ```
 
-Resume an interrupted run:
+Reply after `stage: input_required`:
 
 ```bash
 python3 scripts/run_ppt_pipeline.py \
   --resume "..." \
   --session-id demo
 ```
+
+Continue after timeout or process termination:
+
+```bash
+python3 scripts/run_ppt_pipeline.py \
+  --continue \
+  --session-id demo
+```
+
+Continuation restores the original runtime configuration and style-pack snapshot. Do not pass `--text`, `--style-pack`, or a replacement image/research setting. If no checkpoint exists, use patch rendering for missing pages instead.
 
 Current limitation: `--resume` is consumed only by the `all` stage path that runs the compiled top-level graph. Staged execution does not currently resume LangGraph interrupts.
 
@@ -263,28 +279,32 @@ This CLI is for patch rendering after an outline already exists.
 ### Basic usage
 
 ```bash
-python3 scripts/patch_render_missing.py --run-id <run_id>
-python3 scripts/patch_render_missing.py --run-id <run_id> --indices "0,3,5"
+python3 scripts/patch_render_missing.py --session-id <session_id>
+python3 scripts/patch_render_missing.py --session-id <session_id> --indices "0,3,5"
 ```
 
 ### Arguments
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `--run-id` | Yes | Existing run id whose cached outline should be used |
-| `--text` | No | Optional original request text reused during render prompts |
+| `--session-id` | Yes* | Normal public task id; resolves the internal run automatically |
+| `--run-id` | Yes* | Advanced mutually exclusive fallback for legacy session collisions |
+| `--text` | No | Explicit request override; normally restored from `run.json` |
 | `--indices` | No | Comma-separated slide indices to regenerate |
+
+`*` Exactly one of `--session-id` or `--run-id` is required.
 
 ### Behavior
 
 The command:
 
-1. loads `<output_root>/<run_id>/outline/outline.json` (where `<output_root>` is `<slidea_install_dir>/output/` by default, or the directory configured via `OUTPUT_DIR`),
-2. resolves the render directory from `ppt.json` or derives one from the topic,
+1. resolves the original internal run from `--session-id` and restores request/render metadata from `run.json`,
+2. loads `<output_root>/<run_id>/outline/outline.json`, then resolves the render directory from `ppt.json` or `<run_id>/slides`,
 3. chooses target indices,
 4. regenerates only the needed page types,
-5. rebuilds the native PPTX from the regenerated SVG pages,
-6. updates `ppt.json`.
+5. reuses the immutable style pack and runs the same style-aware dynamic-content quality gate when applicable,
+6. refuses export if any outline page remains missing, otherwise rebuilds the native PPTX,
+7. updates `ppt.json`.
 
 If `--indices` is omitted, it computes missing pages by comparing outline indices against existing render outputs in the render directory.
 
@@ -294,6 +314,9 @@ Known top-level stage values:
 
 - `missing_outline`
 - `empty_outline`
+- `invalid_request`
+- `render_incomplete`
+- `svg_quality_failed`
 - `completed`
 
 `completed` may also mean "nothing to patch" when no target indices are missing.
@@ -449,3 +472,20 @@ This document covers:
 - the distinction between stable CLIs and internal executable helpers.
 
 If a new entrypoint is added later, update this file and keep the distinction between public and developer-only interfaces explicit.
+
+To follow a prepared reference-PPT style pack:
+
+```bash
+SESSION_ID=<new-unique-id>
+.venv/bin/python scripts/pptx_to_style_pack.py reference.pptx --session-id "$SESSION_ID"
+# Agent reads asset-inventory.json plus selected SVG files, then authors style-pack.json.
+.venv/bin/python scripts/validate_style_pack.py "/tmp/slidea/style-packs/$SESSION_ID"
+.venv/bin/python scripts/run_ppt_pipeline.py \
+  --text "<request>" \
+  --session-id "$SESSION_ID" \
+  --style-pack "/tmp/slidea/style-packs/$SESSION_ID"
+```
+
+The conversion command always writes to `/tmp/slidea/style-packs/<session-id>`. It creates editable reference SVGs, extracted image assets, `reference/conversion-report.json`, and an advisory `asset-inventory.json`; it does not create `style-pack.json` or PNG previews. The inventory reports deterministic candidate signals only. The Agent reads it together with selected SVG source, chooses a small representative subset, and explicitly records `global_style.text_container_usage` as a separate design dimension: whether text is normally unboxed, placed on filled backgrounds, or enclosed by border-only/filled boxes, including the roles that use title bands, labels, callouts, cards and summary strips. Reusable template decorations are authorized through top-level `reusable_assets` and page-level `fixed_image_elements` in `style-pack.json`. The subset must include one genuine cover, TOC, separator, or thanks reference for each such role that exists in the source; special-role completeness takes priority over the normal representative-page count.
+
+At pipeline startup, the validated pack is copied to `output/<run_id>/style_pack/`. Reference ids are selected during outline generation using page type, density, and structure, then saved in `outline/outline.json`. Page type is an exact-match constraint; cross-role assignments such as TOC-to-thanks are rejected. If a pack has no exact-type candidate for one target page, only that page uses the built-in template while the remaining pages retain style-pack references. Before parallel generation, Slidea prepares prompt-safe references under `slides/style_references/` and copies inherited shell images plus Agent-authorized reusable images into `slides/images/style-pack/`; every other `main-content` image remains reference-only. Generated style-mode pages receive the assigned background, master/layout layers, title geometry, header/footer, fixed logos, authorized `back`/`front` decorations, and page-number format through deterministic composition after generation, VLM review, and quality repair. Invalid packs, invalid model assignments after retry, or style-asset preflight errors still fall back to the built-in template workflow for the entire run. Runs without `--style-pack` retain the existing workflow unchanged.

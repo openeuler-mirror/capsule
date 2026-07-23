@@ -8,6 +8,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+# CLI guard helpers are exercised directly to keep these tests fast and isolated.
+# pylint: disable=protected-access
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "run_ppt_pipeline.py"
@@ -139,6 +142,9 @@ class CliStageSmokeTests(unittest.TestCase):
             stack.enter_context(patch.object(sys, "argv", ["run_ppt_pipeline.py", *argv]))
             stack.enter_context(patch.object(module, "run_preflight", return_value={"status": "ok", "checks": []}))
             stack.enter_context(patch.object(module, "run_dir", side_effect=local_run_dir))
+            stack.enter_context(
+                patch.object(module, "output_files_dir", str(Path(cwd or ROOT) / "output"))
+            )
             stack.enter_context(contextlib.redirect_stdout(stdout))
             module.asyncio.run(module.main())
 
@@ -167,6 +173,44 @@ class CliStageSmokeTests(unittest.TestCase):
         self.assertEqual(run_payload["render_mode"], "svg")
         self.assertEqual(run_payload["text"], "demo")
         self.assertFalse(run_payload["resume"])
+
+    def test_style_source_pptx_in_text_is_rejected_before_generation(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pack = Path(tmp_dir) / "style-pack"
+            pack.mkdir()
+            (pack / "style-pack.json").write_text(
+                json.dumps({"version": 1, "source": "demo.pptx", "pages": []}),
+                encoding="utf-8",
+            )
+            payload = self._run_main(
+                [
+                    "--text",
+                    "Create an AI Agent deck and follow file:///data/demo.pptx",
+                    "--style-pack",
+                    str(pack),
+                    "--session-id",
+                    "style-source-guard",
+                ],
+                cwd=tmp_dir,
+            )
+
+        self.assertEqual(payload["stage"], "invalid_request")
+        self.assertIn("style source PPTX", payload["output"]["message"])
+        self.assertIn("--allow-style-source-content", payload["output"]["message"])
+
+    def test_style_source_guard_does_not_crash_on_malformed_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pack = Path(tmp_dir) / "style-pack"
+            pack.mkdir()
+            (pack / "style-pack.json").write_text("{", encoding="utf-8")
+            module = self._load_script_module()
+
+            result = module._style_source_in_request(
+                "Create a deck from file:///data/demo.pptx",
+                str(pack),
+            )
+
+        self.assertEqual(result, "")
 
     def test_outline_stage_persists_svg_render_mode(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -364,6 +408,7 @@ class CliStageSmokeTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            (out_dir / "checkpointer.sqlite").touch()
 
             pipeline_module = types.ModuleType("scripts.utils.pipeline")
             pipeline_module.extract_resume_input = _extract_text_resume_input
@@ -423,6 +468,7 @@ class CliStageSmokeTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            (out_dir / "checkpointer.sqlite").touch()
 
             pipeline_module = types.ModuleType("scripts.utils.pipeline")
             pipeline_module.extract_resume_input = _extract_text_resume_input
@@ -482,6 +528,7 @@ class CliStageSmokeTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            (out_dir / "checkpointer.sqlite").touch()
 
             pipeline_module = types.ModuleType("scripts.utils.pipeline")
             pipeline_module.extract_resume_input = _extract_text_resume_input
@@ -524,6 +571,98 @@ class CliStageSmokeTests(unittest.TestCase):
 
         self.assertEqual(payload["stage"], "input_required")
         self.assertEqual(run_payload["render_mode"], "svg")
+
+    def test_continue_recovers_run_by_session_and_uses_none_graph_input(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "continue-svg"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            out_dir.mkdir(parents=True)
+            (out_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "session_id": "recover-me",
+                        "text": "original request",
+                        "stages": "all",
+                        "render_mode": "svg",
+                        "image_search": "off",
+                        "use_cache": "true",
+                        "research_mode": "skip",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "checkpointer.sqlite").touch()
+            seen_inputs = []
+
+            pipeline_module = types.ModuleType("scripts.utils.pipeline")
+            pipeline_module.extract_resume_input = _extract_text_resume_input
+
+            async def run_thinkflow_app(_app, graph_input, _config, *, emit_ctx):
+                seen_inputs.append(graph_input)
+                return {"stage": "completed", "output": {"stage": "completed"}}
+
+            pipeline_module.run_thinkflow_app = run_thinkflow_app
+            graph_module = types.ModuleType("core.ppt_generator.graph")
+            graph_module.ppt_workflow = types.SimpleNamespace(
+                compile=lambda checkpointer=None: object()
+            )
+            sqlite_module = types.ModuleType("langgraph.checkpoint.sqlite.aio")
+
+            class FakeSaver:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+                @classmethod
+                def from_conn_string(cls, _db_name):
+                    return cls()
+
+            sqlite_module.AsyncSqliteSaver = FakeSaver
+
+            payload = self._run_main(
+                ["--continue", "--session-id", "recover-me"],
+                extra_modules={
+                    "scripts.utils.pipeline": pipeline_module,
+                    "core.ppt_generator.graph": graph_module,
+                    "langgraph.checkpoint.sqlite.aio": sqlite_module,
+                },
+                cwd=tmp_dir,
+            )
+
+        self.assertEqual(payload["stage"], "completed")
+        self.assertEqual(payload["run_id"], run_id)
+        self.assertEqual(seen_inputs, [None])
+
+    def test_repeated_text_with_same_session_refuses_duplicate_run(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_id = "interrupted-run"
+            out_dir = Path(tmp_dir) / "output" / run_id
+            out_dir.mkdir(parents=True)
+            (out_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "session_id": "same-session",
+                        "text": "original request",
+                        "resume": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "checkpointer.sqlite").touch()
+
+            payload = self._run_main(
+                ["--text", "retry request", "--session-id", "same-session"],
+                cwd=tmp_dir,
+            )
+
+        self.assertEqual(payload["stage"], "invalid_request")
+        self.assertEqual(payload["run_id"], run_id)
+        self.assertIn("--continue", payload["output"]["message"])
+        self.assertIn("duplicate", payload["output"]["message"])
 
     def test_render_stage_without_outline_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

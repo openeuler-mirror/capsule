@@ -89,6 +89,23 @@ def _infer_llm_error_hint(error: Exception) -> str:
     return ""
 
 
+def _is_non_retryable_invalid_image_error(error: Exception) -> bool:
+    """Identify deterministic invalid-image requests that retries cannot fix."""
+    status_code = getattr(error, "status_code", None)
+    if status_code is None:
+        response = getattr(error, "response", None)
+        status_code = getattr(response, "status_code", None)
+    if status_code != 400:
+        return False
+
+    message = str(error).lower()
+    image_markers = ("image data", "image_url", "invalid image", "invalid_image")
+    invalid_markers = ("invalid", "valid image", "unsupported", "cannot decode")
+    return any(marker in message for marker in image_markers) and any(
+        marker in message for marker in invalid_markers
+    )
+
+
 def _client_model_name(client: Any) -> str:
     return getattr(client, "model_name", None) or getattr(client, "model", "") or "unknown"
 
@@ -408,6 +425,9 @@ async def _invoke_with_retries(
                 f"failed for model={model_name}: {error}"
             )
             logger.debug(traceback.format_exc())
+            if _is_non_retryable_invalid_image_error(error):
+                logger.warning("Invalid VLM image request is not retryable; aborting retries.")
+                break
             if attempt < MAX_INVOKE_ATTEMPTS:
                 await asyncio.sleep(RETRY_SLEEP_SECONDS)
 
@@ -441,6 +461,9 @@ async def _raw_ainvoke_with_retries(
                 f"failed for model={model_name}, schema={schema_name}: {error}"
             )
             logger.debug(traceback.format_exc())
+            if _is_non_retryable_invalid_image_error(error):
+                logger.warning("Invalid VLM image request is not retryable; aborting retries.")
+                break
             if attempt < MAX_INVOKE_ATTEMPTS:
                 await asyncio.sleep(RETRY_SLEEP_SECONDS)
 

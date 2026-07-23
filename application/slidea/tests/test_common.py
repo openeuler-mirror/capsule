@@ -1,5 +1,6 @@
 import importlib.util
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -72,7 +73,11 @@ def _load_common_module():
             )(),
         ),
         "core.utils.config": _stub_module("core.utils.config", app_base_dir="/tmp"),
-        "core.utils.image_payload": _stub_module("core.utils.image_payload", build_image_url=lambda value: value),
+        "core.utils.image_payload": _stub_module(
+            "core.utils.image_payload",
+            build_image_url=lambda value: value,
+            is_valid_vlm_image_file=lambda _value: False,
+        ),
         "core.ppt_generator.utils.browser": _stub_module(
             "core.ppt_generator.utils.browser",
             BrowserManager=type("BrowserManager", (), {}),
@@ -203,6 +208,44 @@ class CommonUtilsTests(unittest.TestCase):
         self.assertIn("url(https://fallback.example.com/npm/katex@0.16.9/dist/fonts/demo.woff2)", rewritten)
         self.assertIn("url('https://fallback.example.com/npm/katex@0.16.9/img/a.png')", rewritten)
         self.assertIn("url(data:image/png;base64,abc)", rewritten)
+
+
+class DownloadImageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_download_is_dropped_without_creating_placeholder(self):
+        common = _load_common_module()
+
+        class FakeResponse:
+            status_code = 200
+            headers = {"Content-Type": "image/png"}
+            content = b"not-a-real-png"
+
+            @staticmethod
+            def raise_for_status():
+                return None
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return False
+
+            async def get(self, *_args, **_kwargs):
+                return FakeResponse()
+
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+            common.httpx,
+            "AsyncClient",
+            return_value=FakeClient(),
+            create=True,
+        ):
+            result = await common.download_image(
+                "https://example.com/broken.png",
+                tmp_dir,
+            )
+
+            self.assertIsNone(result)
+            self.assertEqual(list(Path(tmp_dir).iterdir()), [])
 
 
 if __name__ == "__main__":

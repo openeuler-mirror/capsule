@@ -37,6 +37,7 @@ EA_FONTS = {
     'STHeiti', 'STSong', 'STFangsong', 'STXihei', 'STZhongsong',
     'Hiragino Sans', 'Hiragino Sans GB', 'Hiragino Mincho ProN',
     'Noto Sans SC', 'Noto Sans TC', 'Noto Serif SC', 'Noto Serif TC',
+    'Noto Sans CJK SC', 'Noto Serif CJK SC',
     'Source Han Sans SC', 'Source Han Sans TC',
     'Source Han Serif SC', 'Source Han Serif TC',
     'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei',
@@ -62,8 +63,10 @@ FONT_FALLBACK_WIN = {
     'Songti SC': 'SimSun',
     'Songti TC': 'SimSun',
     'Noto Sans SC': 'Microsoft YaHei',
+    'Noto Sans CJK SC': 'Microsoft YaHei',
     'Noto Sans TC': 'Microsoft JhengHei',
     'Noto Serif SC': 'SimSun',
+    'Noto Serif CJK SC': 'SimSun',
     'Noto Serif TC': 'SimSun',
     'Source Han Sans SC': 'Microsoft YaHei',
     'Source Han Sans TC': 'Microsoft JhengHei',
@@ -235,18 +238,38 @@ def get_effective_filter_id(elem: ET.Element, ctx: ConvertContext) -> str | None
 # Font parsing
 # ---------------------------------------------------------------------------
 
-def parse_font_family(font_family_str: str) -> dict[str, str]:
+def parse_font_family(
+    font_family_str: str,
+    source_font: str | None = None,
+) -> dict[str, str]:
     """Parse CSS font-family into latin/ea typeface names.
 
-    Prioritizes Windows-available fonts since PPTX is primarily opened on
-    Windows. macOS/Linux-only fonts are mapped via FONT_FALLBACK_WIN.
+    CSS selects the first face that contains a glyph. CJK sans fonts such as
+    Microsoft YaHei and Noto Sans CJK also contain Latin glyphs, so a stack
+    like ``Microsoft YaHei, Arial`` must not silently render its digits and
+    Latin text in Arial. ``source_font`` preserves the original OOXML face
+    when ooxml-svg supplied that metadata.
     """
-    if not font_family_str:
+    if not font_family_str and not source_font:
         return {'latin': 'Segoe UI', 'ea': 'Microsoft YaHei'}
 
-    fonts = [f.strip().strip("'\"") for f in font_family_str.split(',')]
-    latin_font = None
-    ea_font = None
+    fonts = (
+        [f.strip().strip("'\"") for f in font_family_str.split(',')]
+        if font_family_str
+        else []
+    )
+    latin_font: str | None = None
+    ea_font: str | None = None
+
+    if source_font:
+        original = source_font.strip().strip("'\"")
+        if original and original not in SYSTEM_FONTS and original not in GENERIC_FONT_MAP:
+            resolved_source = FONT_FALLBACK_WIN.get(original, original)
+            if original in EA_FONTS or resolved_source in EA_FONTS:
+                ea_font = resolved_source
+                latin_font = resolved_source
+            else:
+                latin_font = resolved_source
 
     for font in fonts:
         if font in SYSTEM_FONTS:
@@ -259,6 +282,9 @@ def parse_font_family(font_family_str: str) -> dict[str, str]:
         win_font = FONT_FALLBACK_WIN.get(font, font)
         if font in EA_FONTS:
             ea_font = ea_font or win_font
+            # CJK fonts cover Latin too. Respect the CSS first-match semantics
+            # unless an explicit source face already selected the Latin font.
+            latin_font = latin_font or win_font
         else:
             latin_font = latin_font or win_font
 
@@ -273,36 +299,6 @@ def parse_font_family(font_family_str: str) -> dict[str, str]:
         ea_font = 'SimSun' if final_latin in _SERIF_LATIN else 'Microsoft YaHei'
 
     return {'latin': final_latin, 'ea': ea_font}
-
-
-def is_cjk_char(ch: str) -> bool:
-    """Check if a character is CJK (Chinese/Japanese/Korean)."""
-    cp = ord(ch)
-    return (0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF or
-            0x2E80 <= cp <= 0x2EFF or 0x3000 <= cp <= 0x303F or
-            0xFF00 <= cp <= 0xFFEF or 0xF900 <= cp <= 0xFAFF or
-            0x20000 <= cp <= 0x2A6DF)
-
-
-def estimate_text_width(text: str, font_size: float, font_weight: str = '400') -> float:
-    """Estimate text width in SVG pixels."""
-    width = 0.0
-    for ch in text:
-        if is_cjk_char(ch):
-            width += font_size
-        elif ch == ' ':
-            width += font_size * 0.3
-        elif ch in 'mMwWOQ':
-            width += font_size * 0.75
-        elif ch in 'iIlj1!|':
-            width += font_size * 0.3
-        else:
-            width += font_size * 0.55
-
-    if font_weight in ('bold', '600', '700', '800', '900'):
-        width *= 1.05
-
-    return width
 
 
 def _xml_escape(text: str) -> str:

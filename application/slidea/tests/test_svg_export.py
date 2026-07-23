@@ -13,6 +13,14 @@ SVG_PAGE = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http:
 <text x="110" y="250" font-family="Microsoft YaHei, Arial, sans-serif" font-size="28" fill="#2563EB">native editable shapes</text>
 </svg>"""
 
+GROUPED_SVG_PAGE = """<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+<g id="background"><rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/></g>
+<g id="main-message">
+  <rect x="80" y="120" width="420" height="160" rx="12" fill="#E8F1FF"/>
+  <text x="110" y="200" font-family="Microsoft YaHei, Arial, sans-serif" font-size="28">grouped content</text>
+</g>
+</svg>"""
+
 
 class SVGExportSmokeTests(unittest.IsolatedAsyncioTestCase):
     async def test_svgs_to_pptx_creates_openable_pptx(self):
@@ -41,6 +49,19 @@ class SVGExportSmokeTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaisesRegex(Exception, "SVG"):
                 await svgs_to_pptx([], tmp_dir, "empty")
+
+    async def test_svgs_to_pptx_preserves_semantic_groups(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            svg_path = base / "01_grouped.svg"
+            svg_path.write_text(GROUPED_SVG_PAGE, encoding="utf-8")
+
+            _, pptx_path = await svgs_to_pptx([str(svg_path)], str(base), "grouped")
+            with zipfile.ZipFile(pptx_path) as archive:
+                slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
+
+        self.assertIn("<p:grpSp>", slide_xml)
+        self.assertIn('prst="roundRect"', slide_xml)
 
 
 if __name__ == "__main__":

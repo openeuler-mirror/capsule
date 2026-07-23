@@ -6,6 +6,7 @@ from langchain.messages import HumanMessage
 
 from core.utils.logger import logger
 from core.utils.config import settings
+from core.utils.image_payload import is_valid_vlm_image_file
 from core.ppt_generator.utils.common import download_image
 from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
 
@@ -199,11 +200,17 @@ async def get_ai_images_content(ai_images_prompts, ai_results, save_dir):
 
     for prompt, result in paired_results:
         if os.path.exists(str(result)):
+            if not is_valid_vlm_image_file(str(result)):
+                logger.warning(f"Skip invalid generated image: {result}")
+                continue
             results.append(f"图片'{prompt}'的下载结果：{result}")
             img_list.append(str(result))
             image_descriptions[str(result)] = prompt
         else:
             img_path = await download_image(result, images_dir)
+            if not img_path:
+                logger.warning(f"Skip unavailable generated image: {result}")
+                continue
             results.append(f"图片'{prompt}'的下载结果：{img_path}")
             final_path = os.path.join(save_dir, img_path)
             img_list.append(final_path)

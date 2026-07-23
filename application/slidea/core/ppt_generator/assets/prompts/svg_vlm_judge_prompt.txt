@@ -10,13 +10,15 @@
 5. 元素互相遮盖：两个独立的视觉模块（卡片、图标、图片、文字段）有可见的相互覆盖、压住、穿插，应当互不重叠却重叠了。
 6. LaTeX 代码未渲染：截图中可见字面意义上的 LaTeX 公式语法（如 `$\rightarrow$`、`$\to$`、`$x^2$`、`\frac{a}{b}`、`\sum`、`$$...$$` 等），SVG 不支持 LaTeX，必须直接使用 Unicode 字符（→ ← ⇒ ⇐ × ÷ ± ≈ ≤ ≥）或纯文本。
 7. 文字裁切：文字行底部被卡片底边切掉一半字形，或文字最右侧字符被容器右边界遮挡。
-8. 其他严重排版错误：任何上述六类未涵盖、但明显影响可读 / 可用 / 可阅读的严重排版问题，例如：
+8. 缺失字形：任何文字显示为空心或实心方框、豆腐块、替代字符，或同一行中部分字符明显没有被字体渲染。即使仍能从上下文猜出原文，也必须修复。
+9. 重复文字叠印：同一位置出现两层文字、双重笔画、重影，或不同语言的两段标题压在同一基线和区域中。即使两层文字都能部分阅读，也属于严重错误。
+10. 其他严重排版错误：任何上述九类未涵盖、但明显影响可读 / 可用 / 可阅读的严重排版问题，例如：
    - 同一区块内的多行文字相互压字、行距严重塌陷导致难以辨认；
    - 主体内容被某个装饰元素（大色块 / 大图 / 蒙层）大面积遮挡导致看不清；
    - 表格 / 列表 / 图表骨架明显错乱（行列错位、坐标轴串位、图例覆盖数据）；
    - 单一元素占据全页 70% 以上、其它内容被挤成极小区域，破坏信息平衡；
    - 截图大面积空白且仅有少量文字孤立悬浮于一角（封面 / 章节页除外）；
-   - 出现明显未渲染的占位符 / 控制字符 / 乱码（如 □□□、Mojibake、`{{var}}`、`undefined`、`NaN`、占位英文如 "Lorem ipsum"）；
+   - 出现明显未渲染的占位符 / 控制字符 / 乱码（如 Mojibake、`{{var}}`、`undefined`、`NaN`、占位英文如 "Lorem ipsum"）；
    - 任何让你"一眼觉得这个 PPT 出错了"的严重视觉异常，即使无法精准归类。
 
 # 严格不要返回的问题
@@ -34,14 +36,16 @@
 - 两个原本独立的卡片 / 文本块有可见的部分重叠或穿插，文字落在另一个卡片的背景或描边上。
 - 卡片描边线与卡片内文字穿过同一像素行，导致文字被线条切开。
 - 主要内容紧贴页面四角（上下左右间距明显小于 24px），看上去像是被画布边缘"贴脸"。
+- 任意中文、英文、数字或符号显示成 □、■、� 等缺失字形，判 critical（glyph_missing）。
+- 同一标题或正文区域可见两套文字叠印、不同语言压在一起、轮廓重影或双重基线，判 critical（duplicate_text_overlap）。不要把它误认为字体风格、阴影或艺术字；正常阴影只会有单一且一致的轻微偏移，不会形成两套可读字符。
 
 # 严重程度定义
-- critical：出现上述八类问题中的任何一种且明显可见，必须修复。
-- none：没有上述八类问题。
+- critical：出现上述十类问题中的任何一种且明显可见，必须修复。
+- none：没有上述十类问题。
 
 # 修复线索要求
 当 has_issue 为 true 时，每个 issue 必须包含：
-- type：问题类型，只能使用 overflow / margin_tight / text_clip / text_overlap_border / element_occlusion / latex_artifact / text_clip_other / layout_error。其中 layout_error 用于"其他严重排版错误"。
+- type：问题类型，只能使用 overflow / margin_tight / text_clip / text_overlap_border / element_occlusion / latex_artifact / text_clip_other / glyph_missing / duplicate_text_overlap / layout_error。其中 layout_error 用于"其他严重排版错误"。
 - location：问题所在位置，例如"右下角信息卡区域底部"。
 - desc：具体可见问题，用一两句话说明。
 - repair_instruction：直接可执行的修复方向，例如"将右侧卡片 y 坐标向上移 32px，或缩小其内文字 font-size 至 18 以容纳全部行数"。
@@ -57,7 +61,7 @@
   "severity": "critical" 或 "none",
   "issues": [
     {
-      "type": "overflow / margin_tight / text_clip / text_overlap_border / element_occlusion / latex_artifact / layout_error",
+      "type": "overflow / margin_tight / text_clip / text_overlap_border / element_occlusion / latex_artifact / text_clip_other / glyph_missing / duplicate_text_overlap / layout_error",
       "location": "用一句话描述问题位置",
       "desc": "用一两句话简明描述具体问题",
       "repair_instruction": "用一句话说明推荐修复方向"
@@ -65,4 +69,4 @@
   ]
 }
 
-如果没有上述八类问题，返回 has_issue=false、severity="none"、issues=[]。
+如果没有上述十类问题，返回 has_issue=false、severity="none"、issues=[]。

@@ -188,36 +188,33 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
    ```bash
    .venv/bin/python scripts/run_ppt_pipeline.py \
      --text "Create a 10-slide PPT introducing AI Agents, without deepresearch" \
-     --session-id session_test \
-     --run-id id_test
+     --session-id session_test
    ```
 
-   If `session-id` and `run-id` are not specified, the system uses the current time as the default identifier value. In the example above, `session_test` and `id_test` are just sample strings.
+   If `session-id` is omitted for a new run, the system creates a unique value. Keep an explicit session id when later continuation or patch rendering may be needed; the internal `run_id` is resolved automatically.
 
    **Resume an interrupted run**
 
    PPT generation may pause during execution to interact with the user. The Slidea CLI supports resuming an interrupted PPT generation task.
 
-   For example, when `scripts/run_ppt_pipeline.py` returns `stage: "input_required"`, it means additional user input is required. In that case, call the CLI again with the same `run_id`, `session_id`, and `--resume`.
+   For example, when `scripts/run_ppt_pipeline.py` returns `stage: "input_required"`, it means additional user input is required. In that case, call the CLI again with the same `session_id` and `--resume`.
 
    Example:
 
    ```bash
    .venv/bin/python scripts/run_ppt_pipeline.py \
      --resume "targeted at engineers and covering Agent technology trends" \
-     --session-id session_test \
-     --run-id id_test
+     --session-id session_test
    ```
 
-   Here `session_test` and `id_test` are identifiers that were created earlier for a run that was interrupted.
+   If the process timed out or terminated without requesting user input, use `--continue --session-id session_test` instead. Do not submit `--text` again with the same session.
 
 6. Detailed example #2:
 
    ```bash
    .venv/bin/python scripts/run_ppt_pipeline.py \
      --text "Create a 10-slide PPT introducing AI Agents, with deepresearch, targeted at engineers and covering Agent technology trends" \
-     --session-id session_test \
-     --run-id id_test
+     --session-id session_deep
    ```
 
    Slidea includes built-in deepresearch capabilities. If the presentation topic is broad, you can request deepresearch first (20-30 minutes), then generate the PPTX file based on the report.

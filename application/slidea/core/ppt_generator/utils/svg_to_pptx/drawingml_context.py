@@ -101,8 +101,10 @@ class ConvertContext:
             defs=self.defs,
             id_counter=self.id_counter,
             slide_num=self.slide_num,
-            translate_x=self.translate_x + dx,
-            translate_y=self.translate_y + dy,
+            # Child translations are expressed in the parent's user-space and
+            # therefore inherit the parent's scale.
+            translate_x=self.translate_x + dx * self.scale_x,
+            translate_y=self.translate_y + dy * self.scale_y,
             scale_x=self.scale_x * sx,
             scale_y=self.scale_y * sy,
             filter_id=filter_id or self.filter_id,

@@ -31,7 +31,7 @@ These docs are written for three use cases:
 The project is built around one primary workflow:
 
 1. Parse the user request and optionally ask follow-up questions.
-   If the graph interrupts for clarification, the caller can later resume the same run with `--resume` and the original `run_id`.
+   If the graph interrupts for clarification, the caller replies with `--resume` and the original `session-id`. If the process itself stops, `--continue` restores its checkpoint using that session id; callers do not need the internal `run_id`.
 2. Collect references from user-provided URLs and optional search/deep research.
 3. Generate a PPT writing thought process.
 4. Convert that thought plus source material into a slide outline.

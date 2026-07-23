@@ -20,14 +20,15 @@ This is an environment-level setting, not a CLI flag. The agent does not pass it
 
 | Flag | Values | When to use |
 |---|---|---|
-| `--text "<request>"` | string | New PPT request text. Required unless `--resume` is given. Preserve user original input as much as possible. If Phase 1 was run, append `参考文件路径: <SPEECH_SCRIPT_MD_PATH>` after the request text. |
-| `--resume "<user reply>"` | string | Continue an interrupted LangGraph run using the user's answer, selection, or edited text. |
-| `--session-id <id>` | string | Session/thread id. If omitted, a unique id (`auto_<pid>_<ts>`) is auto-generated. **Reuse the same explicit value when resuming or running staged execution** — the auto-generated default changes every invocation and cannot be recovered. |
+| `--text "<request>"` | string | Supply the PPT request. Exactly one of `--text`, `--resume`, or `--continue` is required. With default `--stages all`, this starts a fresh run and an existing session is rejected. With non-default `--stages`, the same session may be reused intentionally to read cached stage outputs. Preserve the user's original input as much as possible. If Phase 1 was run, append `参考文件路径: <SPEECH_SCRIPT_MD_PATH>`. |
+| `--resume "<user reply>"` | string | Supply the user's answer, selection, or edited text after `stage: input_required`. This flag takes the reply directly; do not also pass `--text`. Not used for process timeout recovery. |
+| `--continue` | flag | Continue unfinished checkpoint tasks after timeout/process termination. Pass no `--text`, `--resume`, non-default `--stages`, or replacement runtime settings. |
+| `--session-id <id>` | string | Public task/session id. If omitted for a new run, a unique id (`auto_<pid>_<ts>`) is generated. Reuse the same explicit value for continuation, interrupt replies, patch rendering, or staged execution. |
 | `--stages <csv>` | `all` (default), `parse`, `research`, `outline`, `render` | Stage selection. See [staged-execution.md](staged-execution.md). |
 | `--render-mode` | `svg` (default) | **Do not pass this flag.** The default SVG route is what this skill advertises. |
 | `--research-mode` | `skip`, `simple`, `deep`, `''` (default) | Force research mode. **High-impact parameter** — see rule below. |
 | `--image-search` | `on`, `off` | Toggle web image search. |
-| `--run-id <id>` | string | Pin or reuse a specific run_id. Skips the LLM-based semantic suffix generation. **Rarely needed** — staged execution and resume auto-recover `run_id` from `--session-id`. Use only when you want a custom directory name or to skip the LLM run_id-summary call. |
+| `--run-id <id>` | string | Advanced internal override. Normal Agent workflows must use `--session-id`; use this only to disambiguate legacy session collisions or for low-level debugging. |
 | `--recursion-limit <int>` | integer | Override LangGraph recursion limit. |
 | `--dry-run` | flag | Run preflight only and skip generation. |
 
@@ -45,9 +46,12 @@ See [patch-render.md](patch-render.md) for full usage. Flags:
 
 | Flag | Required | Purpose |
 |---|---|---|
-| `--run-id <id>` | yes | The run to patch. |
-| `--text "<request>"` | no | Original request text reused in render prompts. |
+| `--session-id <id>` | yes* | Normal Agent-facing task id; resolves the internal run automatically. |
+| `--run-id <id>` | yes* | Advanced mutually exclusive alternative for legacy collision debugging. |
+| `--text "<request>"` | no | Explicit override; normally omit so the original request is restored from `run.json`. |
 | `--indices "<csv>"` | no | 0-based page indices to regenerate. Omit to auto-detect missing. |
+
+`*` Exactly one of `--session-id` or `--run-id` is required.
 
 ## Distinguishing Explicit Intent from Task Content
 

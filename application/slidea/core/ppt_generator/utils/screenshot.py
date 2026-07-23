@@ -171,8 +171,22 @@ def _prepend_cjk_font_stack(font_family: str) -> str:
     if _has_available_cjk_font(normalized, _prefers_serif(normalized)):
         return font_family
 
-    cjk_stack = _get_cjk_font_stack(_prefers_serif(normalized))
-    return f"{cjk_stack}, {font_family}"
+    serif = _prefers_serif(normalized)
+    preferred_names = _get_cjk_font_names(serif)
+    preferred_normalized = {name.lower() for name in preferred_names}
+    # A real CJK font later in the CSS list is not sufficient for Cairo/Pango:
+    # fontconfig may resolve an unavailable first family (for example Microsoft
+    # YaHei on Linux) to a Latin-only alias and never reach the later Noto face.
+    # Move all known CJK fallbacks to the front of the in-memory screenshot copy
+    # and remove duplicates from the original tail. The SVG on disk is untouched.
+    original_tail = [
+        family.strip()
+        for family in font_family.split(",")
+        if family.strip().strip("\"'").lower() not in preferred_normalized
+    ]
+    return ", ".join(
+        [*(_quote_font_family(name) for name in preferred_names), *original_tail]
+    )
 
 
 def _prefers_serif(normalized_font_family: str) -> bool:
@@ -180,11 +194,16 @@ def _prefers_serif(normalized_font_family: str) -> bool:
 
 
 def _has_available_cjk_font(normalized_font_family: str, serif: bool) -> bool:
+    first_family = normalized_font_family.split(",", 1)[0].strip().strip("\"'")
+    # The bundled face is made visible by _bundled_fonts_context even when
+    # other system CJK fonts exist. Only the first CSS family is decisive:
+    # finding Noto later in the list does not make an unavailable first family
+    # safe for Cairo/Pango.
+    bundled_names = CJK_SERIF_FONT_FALLBACKS if serif else CJK_SANS_FONT_FALLBACKS
+    if first_family in {name.lower() for name in bundled_names[:2]}:
+        return True
     detected = detect_system_cjk_fonts(serif)
-    if detected:
-        return any(name.lower() in normalized_font_family for name in detected)
-    fallbacks = CJK_SERIF_FONT_FALLBACKS if serif else CJK_SANS_FONT_FALLBACKS
-    return any(name.lower() in normalized_font_family for name in fallbacks)
+    return first_family in {name.lower() for name in detected}
 
 
 @lru_cache(maxsize=2)
@@ -199,7 +218,9 @@ def _get_cjk_font_names(serif: bool) -> tuple[str, ...]:
 
     names = []
     seen = set()
-    for name in (*detected, *fallbacks):
+    # Portable bundled Noto first; exact source families already present in
+    # the SVG are left untouched by _has_available_cjk_font.
+    for name in (*fallbacks, *detected):
         cleaned = name.strip().strip("\"'")
         normalized = cleaned.lower()
         if not cleaned or normalized in seen:
@@ -305,23 +326,18 @@ def _quote_font_family(font_name: str) -> str:
 
 @contextmanager
 def _bundled_fonts_context():
-    """Scope-local fontconfig pointing at bundled CJK fonts when the system has none.
+    """Scope-local fontconfig that always exposes the bundled CJK fonts.
 
     Why: cairosvg/pango use fontconfig. On a system without CJK fonts (e.g. a minimal
     intranet Linux), Chinese chars in the rasterized PNG fallback become tofu squares,
     breaking both human preview and VLM layout reflection. Slidea bundles Noto Sans
     CJK SC under ``assets/fonts/`` as a last-resort source.
 
-    How: detects via ``fc-list :charset=4e2d`` first. If the system already has any
-    CJK-capable font, this is a no-op so user preferences (Source Han, PingFang, etc.)
-    are respected. If none is found *and* bundled fonts exist, swaps ``FONTCONFIG_FILE``
-    to a temporary ``fonts.conf`` that adds the bundled dir while still ``<include>``-ing
-    the system config. Restored in ``finally``.
+    The bundled directory is added before the system configuration. CSS family
+    order still decides which exact installed source font wins; this merely
+    guarantees that ``Noto Sans CJK SC`` is available whenever a converted SVG
+    declares it as its resolved fallback face.
     """
-    if _detect_system_cjk_fonts(False):
-        yield
-        return
-
     bundled = _list_bundled_font_files()
     if not bundled:
         logger.debug("包内无 CJK 字体可用，跳过 fontconfig 注入")
@@ -351,7 +367,7 @@ def _bundled_fonts_context():
 
         prev_fc = os.environ.get("FONTCONFIG_FILE")
         os.environ["FONTCONFIG_FILE"] = str(conf_path)
-        logger.info(f"系统未检测到 CJK 字体，临时启用包内字体: {fonts_dir}")
+        logger.debug(f"为当前 SVG 渲染启用包内字体: {fonts_dir}")
         try:
             yield
         finally:

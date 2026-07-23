@@ -14,22 +14,24 @@ Patch render regenerates the targeted pages via the same LLM pipeline used durin
 
 ```bash
 .venv/bin/python scripts/patch_render_missing.py \
-  --run-id <run_id> \
-  --text "<PPT request>" \
+  --session-id <same_session_id> \
   --indices "0,1,2,9"
 ```
 
-- `--run-id <run_id>` (required): the run to patch. Must correspond to an existing `output/<run_id>/` with a valid `outline/outline.json`.
-- `--text "<PPT request>"` (optional): the original request text, reused in render prompts.
+- `--session-id <same_session_id>` (required for normal Agent use): resolves the original internal run directory automatically. Do not search for or expose `--run-id` in the normal workflow.
+- `--run-id <run_id>` (advanced alternative): only for manually disambiguating legacy data where multiple original runs share one session id.
+- `--text "<PPT request>"` (optional override): normally omit it; the script restores the original request from `run.json`.
 - `--indices "0,1,2,9"` (optional): comma-separated 0-based page indices to regenerate. Omit to auto-detect missing pages.
 
 ## Behavior
 
-- Reads `output/<run_id>/ppt.json` to find `slides_dir` and `template_name`.
+- Resolves the run from `--session-id`, then reads `run.json` for the original request, render mode, and session binding.
+- Reads `ppt.json` when available to find `slides_dir` and `template_name`; incomplete runs without `ppt.json` use `<run>/slides` and the render mode from `run.json`.
 - Reads `output/<run_id>/outline/outline.json` to get page metadata.
-- Reuses the persisted `template_name` so the regenerated pages match the original visual style — does not re-run LLM template selection.
+- Reuses the run's immutable `style_pack` snapshot and the `style_reference_id` already assigned in `outline.json`. Style-mode quality checks inspect only generated dynamic content and then restore the fixed reference shell; the legacy no-style-pack path remains unchanged.
 - For each target index, regenerates that page's SVG via the LLM (same prompt template as initial generation).
 - Re-runs quality check on all pages (including non-targeted ones).
+- Refuses PPTX export with `render_incomplete` if any outline page is still missing after the patch.
 - Re-exports the PPTX to `<run_id>/<topic>.pptx` at the cache root (overwrites the previous PPTX).
 - Updates `output/<run_id>/ppt.json` with new paths.
 
@@ -46,6 +48,8 @@ Top-level `stage` values from `patch_render_missing.py`:
 - `missing_outline` — `outline/outline.json` not found; nothing to patch
 - `empty_outline` — outline exists but has zero pages
 - `svg_quality_failed` — quality check failed after regeneration; check the message field for details
+- `render_incomplete` — one or more outline pages are still absent; PPTX export was skipped
+- `invalid_request` — session not found or ambiguous
 
 Always inspect `stage` first before deciding whether to continue, retry, or surface the issue to the user.
 

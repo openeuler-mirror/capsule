@@ -41,9 +41,15 @@ class PPTPage(BaseModel):
     abstract: str   # PPT页面内容的摘要
     type: PageType  # 1: 普通页, 2: 目录, 3: 分隔页, 4: 封面页/封底致谢页
     index: int = 0  # 页码
+    source: int = -1  # 所属章节索引；用于长大纲按章节分批选择参考版式
     reference_doc: str = ""  # 该页PPT内容所对应的原始文档内容
     reference_images: list = []  # 该页PPT内容所对应的图片列表
     reference_doc_is_full_context: bool = False  # reference_doc 已是完整可用上下文，跳过二次抽取
+    style_reference_id: str = ""  # outline 阶段由模型选择的 style pack 参考页 id
+    style_reference_svg: str = ""  # 已复制到当前 run 的参考 SVG 绝对路径
+    style_reference_page_type: str = ""  # 由 manifest 解析的运行时参考页类型，不写入 outline.json
+    style_reference_guidance: str = ""  # Agent 编写的全局/逐页设计契约，仅在运行时注入 prompt
+    style_reference_rules: dict = {}  # 可确定性执行的逐页样式规则，不写入 outline.json
 
     def __str__(self) -> str:
         page_dict = self.model_dump(include={'index', 'title', 'abstract', 'type'})
@@ -77,6 +83,7 @@ class PPTState(TypedDict):
     topic: str  # PPT主题
     template_name: NotRequired[str]  # 选中的模板名称（HTML/SVG 共用）
     template: NotRequired[str]  # 模板内容（HTML/SVG 共用）
+    style_pack_dir: NotRequired[str]  # 当前 run 内的 style pack 快照目录
     ppt_prompt: str  # 生成PPT的提示词
     language: str  # 生成PPT的语言
 
@@ -95,3 +102,4 @@ class InputSchema(TypedDict):
     template_name: Optional[str]  # 模板名称
     html_template_name: NotRequired[Optional[str]]  # 兼容旧的 HTML 模板参数
     images: NotRequired[list]  # 用于生成PPT的图片列表
+    style_pack_dir: NotRequired[str]

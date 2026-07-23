@@ -10,7 +10,9 @@ import sys
 sys.path.append(str(ROOT))
 
 from core.utils.cache import load_json, run_dir, save_json
+from core.utils.config import output_files_dir
 from scripts.utils.cli_output import emit_stage_payload
+from scripts.utils.run_identity import resolve_run_by_session, session_resolution_message
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,24 @@ def _resolve_save_dir(out_dir: str, topic: str):
     return os.path.join(out_dir, "slides")
 
 
+def _resolve_style_pack_dir(out_dir: str) -> str:
+    """Reuse the immutable style-pack snapshot when patching a styled run."""
+    candidate = Path(out_dir) / "style_pack"
+    return str(candidate) if (candidate / "style-pack.json").is_file() else ""
+
+
+def _load_run_context(args, out_dir: str) -> dict:
+    """Restore the original request/session rather than drifting on a patch run."""
+    metadata = load_json(Path(out_dir) / "run.json") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    if not args.text:
+        args.text = str(metadata.get("text") or "")
+    if not args.session_id:
+        args.session_id = str(metadata.get("session_id") or "")
+    return metadata
+
+
 def _resolve_target_indices(args, save_dir: str, outline):
     return _resolve_target_indices_for_mode(args, save_dir, outline, "svg")
 
@@ -125,6 +145,23 @@ def _svg_path_for_index(save_dir: str, index: int) -> str | None:
     return str(matches[0])
 
 
+def _emit_incomplete_render(args, out_dir: str, target_indices: list[int], missing_indices: list[int]) -> None:
+    emit_stage_payload(
+        "render_incomplete",
+        {
+            "stage": "render_incomplete",
+            "message": (
+                "patch generation finished without producing every outline page; "
+                "PPTX export was skipped"
+            ),
+            "target_indices": target_indices,
+            "missing_indices": missing_indices,
+        },
+        run_id=args.run_id,
+        output_dir=out_dir,
+    )
+
+
 async def _patch_render_html(context: PatchRenderContext):
     """HTML-route patch render."""
     args = context.args
@@ -135,8 +172,9 @@ async def _patch_render_html(context: PatchRenderContext):
     target_indices = context.target_indices
     from core.ppt_generator.thought_to_ppt.state import PageType
     from core.ppt_generator.thought_to_ppt.page_generators.node import prepare_generation_context_node
-    from core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.graph import (
-        generate_cover_thanks_pages_app,
+    from core.ppt_generator.thought_to_ppt.page_generators.cover_thanks_pages_generator.node import (
+        generate_cover_node,
+        generate_thanks_node,
     )
     from core.ppt_generator.thought_to_ppt.page_generators.sep_pages_generator.node import (
         generate_sep_template_node,
@@ -155,6 +193,7 @@ async def _patch_render_html(context: PatchRenderContext):
         "topic": topic,
         "save_dir": save_dir,
         "template_name": cached_template_name,
+        "style_pack_dir": _resolve_style_pack_dir(out_dir),
         "ppt_prompt": "",
         "language": "",
         "generated_pages": [],
@@ -165,23 +204,38 @@ async def _patch_render_html(context: PatchRenderContext):
     writer = DummyWriter()
     ctx = await prepare_generation_context_node(state, writer)
     state.update(ctx)
+    # Preparation may deep-copy the outline while distributing images, then
+    # bind runtime-only style reference paths on that copy. Always continue
+    # with the returned outline; the originally loaded objects only contain
+    # persisted reference ids and would silently fall back to the base theme.
+    outline = state["outline"]
     template_content = state.get("template", "")
 
     target_pages = [p for p in outline if p.index in set(target_indices)]
     target_types = {p.type for p in target_pages}
 
-    if PageType.COVER_THANKS in target_types:
-        await generate_cover_thanks_pages_app.ainvoke({
+    cover_thanks_pages = sorted(
+        (p for p in outline if p.type == PageType.COVER_THANKS),
+        key=lambda page: page.index,
+    )
+    for page in (p for p in target_pages if p.type == PageType.COVER_THANKS):
+        cover_page = page if page.index == cover_thanks_pages[0].index else None
+        thanks_page = page if cover_page is None else None
+        page_state = {
             "query": state["query"],
             "save_dir": state["save_dir"],
             "ppt_prompt": state["ppt_prompt"],
             "language": state["language"],
             "template": template_content,
             "outline": outline,
-            "cover_page": None,
-            "thanks_page": None,
+            "cover_page": cover_page,
+            "thanks_page": thanks_page,
             "generated_pages": [],
-        })
+        }
+        if cover_page is not None:
+            await generate_cover_node(page_state)
+        else:
+            await generate_thanks_node(page_state)
 
     if PageType.TOC in target_types:
         await generate_toc_page_node({
@@ -233,7 +287,10 @@ async def _patch_render_html(context: PatchRenderContext):
 
     outline_indices = sorted({p.index for p in outline})
     files = [str(Path(save_dir) / f"{idx}.html") for idx in outline_indices]
-    files = [p for p in files if Path(p).exists()]
+    missing_after_patch = [idx for idx, path in zip(outline_indices, files) if not Path(path).exists()]
+    if missing_after_patch:
+        _emit_incomplete_render(args, out_dir, target_indices, missing_after_patch)
+        return
 
     pdf_path, pptx_path = await htmls_to_pptx(files, save_dir, sanitize_filename(topic))
 
@@ -242,6 +299,7 @@ async def _patch_render_html(context: PatchRenderContext):
         "topic": topic,
         "render_mode": "html",
         "slides_dir": save_dir,
+        "style_pack_dir": state.get("style_pack_dir", ""),
         "pdf_path": pdf_path,
         "pptx_path": pptx_path,
     }
@@ -273,8 +331,9 @@ async def _patch_render_svg(context: PatchRenderContext):
         prepare_generation_context_node,
         quality_check_node,
     )
-    from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.graph import (
-        generate_cover_thanks_pages_app,
+    from core.ppt_generator.thought_to_ppt.svg_page_generators.cover_thanks_pages_generator.node import (
+        generate_cover_node,
+        generate_thanks_node,
     )
     from core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.node import (
         generate_sep_template_node,
@@ -297,6 +356,7 @@ async def _patch_render_svg(context: PatchRenderContext):
         "topic": topic,
         "save_dir": save_dir,
         "template_name": cached_template_name,
+        "style_pack_dir": _resolve_style_pack_dir(out_dir),
         "ppt_prompt": "",
         "language": "",
         "generated_pages": [],
@@ -307,23 +367,36 @@ async def _patch_render_svg(context: PatchRenderContext):
     writer = DummyWriter()
     ctx = await prepare_generation_context_node(state, writer)
     state.update(ctx)
+    # SVG preparation deep-copies the outline during image distribution and
+    # binds runtime style references on that returned copy.
+    outline = state["outline"]
     template_content = state.get("template", "")
 
     target_pages = [p for p in outline if p.index in set(target_indices)]
     target_types = {p.type for p in target_pages}
 
-    if PageType.COVER_THANKS in target_types:
-        await generate_cover_thanks_pages_app.ainvoke({
+    cover_thanks_pages = sorted(
+        (p for p in outline if p.type == PageType.COVER_THANKS),
+        key=lambda page: page.index,
+    )
+    for page in (p for p in target_pages if p.type == PageType.COVER_THANKS):
+        cover_page = page if page.index == cover_thanks_pages[0].index else None
+        thanks_page = page if cover_page is None else None
+        page_state = {
             "query": state["query"],
             "save_dir": state["save_dir"],
             "ppt_prompt": state["ppt_prompt"],
             "language": state["language"],
             "template": template_content,
             "outline": outline,
-            "cover_page": None,
-            "thanks_page": None,
+            "cover_page": cover_page,
+            "thanks_page": thanks_page,
             "generated_pages": [],
-        })
+        }
+        if cover_page is not None:
+            await generate_cover_node(page_state)
+        else:
+            await generate_thanks_node(page_state)
 
     if PageType.TOC in target_types:
         await generate_toc_page_node({
@@ -375,13 +448,27 @@ async def _patch_render_svg(context: PatchRenderContext):
 
     outline_indices = sorted({p.index for p in outline})
     files = []
+    missing_after_patch = []
     for idx in outline_indices:
         path = _svg_path_for_index(save_dir, idx)
         if path:
             files.append(path)
+        else:
+            missing_after_patch.append(idx)
+
+    if missing_after_patch:
+        _emit_incomplete_render(args, out_dir, target_indices, missing_after_patch)
+        return
 
     try:
-        await quality_check_node({"page_files": files}, writer)
+        await quality_check_node(
+            {
+                "page_files": files,
+                "outline": outline,
+                "style_pack_dir": state.get("style_pack_dir", ""),
+            },
+            writer,
+        )
     except ValueError as error:
         emit_stage_payload(
             "svg_quality_failed",
@@ -404,6 +491,7 @@ async def _patch_render_svg(context: PatchRenderContext):
         "slides_dir": save_dir,
         "svg_dir": save_dir,
         "template_name": state.get("template_name", ""),
+        "style_pack_dir": state.get("style_pack_dir", ""),
         "pdf_path": pdf_path,
         "pptx_path": pptx_path,
     }
@@ -433,26 +521,60 @@ async def _patch_render(context: PatchRenderContext):
 def _read_render_mode(out_dir: str) -> str:
     try:
         ppt_record = load_json(str(Path(out_dir) / "ppt.json")) or {}
-        return ppt_record.get("render_mode", "svg")
+        run_record = load_json(str(Path(out_dir) / "run.json")) or {}
+        return ppt_record.get("render_mode") or run_record.get("render_mode") or "svg"
     except Exception:
         return "svg"
 
 
+def _resolve_patch_run_id(args) -> str:
+    if args.run_id:
+        return args.run_id
+    resolution = resolve_run_by_session(output_files_dir, args.session_id)
+    if resolution.status == "found":
+        return resolution.run_id
+    emit_stage_payload(
+        "invalid_request",
+        {
+            "stage": "invalid_request",
+            "message": session_resolution_message(
+                resolution,
+                args.session_id,
+                action="patch missing pages",
+            ),
+        },
+    )
+    return ""
+
+
 async def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run-id", required=True)
+    identity = parser.add_mutually_exclusive_group(required=True)
+    identity.add_argument(
+        "--session-id",
+        default="",
+        help="Public task/session id. The original run directory is resolved automatically.",
+    )
+    identity.add_argument(
+        "--run-id",
+        default="",
+        help="Advanced fallback for manually disambiguating legacy session collisions.",
+    )
     parser.add_argument("--text", required=False, default="")
     parser.add_argument("--indices", required=False, default="")
     args = parser.parse_args()
 
+    args.run_id = _resolve_patch_run_id(args)
+    if not args.run_id:
+        return
     out_dir = run_dir(args.run_id)
+    _load_run_context(args, out_dir)
     outline, topic = _load_outline_or_emit(args, out_dir)
     if not outline:
         return
 
     save_dir = _resolve_save_dir(out_dir, topic)
-    ppt_json = load_json(str(Path(out_dir) / "ppt.json")) or {}
-    render_mode = ppt_json.get("render_mode") or "svg"
+    render_mode = _read_render_mode(out_dir)
     target_indices = _resolve_target_indices_for_mode(args, save_dir, outline, render_mode)
     if not target_indices:
         emit_stage_payload(

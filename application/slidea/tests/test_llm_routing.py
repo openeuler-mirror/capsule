@@ -1,7 +1,7 @@
 import importlib
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 
 class FakeResponse:
@@ -202,6 +202,32 @@ class LLMRoutingTests(unittest.IsolatedAsyncioTestCase):
              patch.object(self.llm_module.settings, "has_premium_llm_config", return_value=True):
             with self.assertRaises(self.llm_module.LLMInvokeError):
                 await self.llm_module.llm_invoke(self.llm_module.ModelRoute.PREMIUM, ["text"])
+
+    async def test_invalid_image_bad_request_is_not_retried(self):
+        class InvalidImageRequestError(RuntimeError):
+            status_code = 400
+
+        client = FakeClient(
+            "default-vlm",
+            error=InvalidImageRequestError(
+                "The image data is invalid. Please ensure the image is a valid image."
+            ),
+        )
+
+        with patch.object(self.llm_module, "MAX_INVOKE_ATTEMPTS", 5), patch.object(
+            self.llm_module.asyncio,
+            "sleep",
+            new_callable=AsyncMock,
+        ) as sleep_mock:
+            with self.assertRaises(self.llm_module.LLMInvokeError):
+                await self.llm_module._raw_ainvoke_with_retries(  # pylint: disable=protected-access
+                    client,
+                    ["image"],
+                    kind=self.llm_module.ModelKind.VLM,
+                )
+
+        self.assertEqual(len(client.calls), 1)
+        sleep_mock.assert_not_awaited()
 
     async def test_pydantic_schema_uses_plain_ainvoke_and_post_parse(self):
         default_llm = FakeClientWithoutStructuredOutput(
