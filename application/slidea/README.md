@@ -42,13 +42,13 @@ The system is designed for agent-driven usage. It supports staged execution, res
 
 ## Quick Start: Install Skills Through an Agent (Recommended)
 
-Slidea provides two skills that can be installed as skills inside an agent environment: **Slidea** (PPT generation) and **Deep Research** (deep research). If your agent platform supports local skills, you can install either or both. After installation, configure `.env` according to the current two-tier routing setup.
+Slidea provides two skills that can be installed as skills inside an agent environment: **Slidea** (PPT generation) and **Deep Research** (deep research). If your agent platform supports local skills, you can install either or both. After installation, configure `.env` before use.
 
 Both skills currently support openEuler, Apple Silicon macOS, Windows WSL/PowerShell, and some other Linux environments. They can be installed and run conveniently in mainstream agent environments such as OpenClaw, Codex, and Claude Code.
 
 ### Slidea Skill
 
-Slidea is an AI-driven PPT generation skill. In most cases you only need to configure `DEFAULT_LLM` first. If you want to enable `PREMIUM` mode, keep `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` and `PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1` unchanged, and usually only fill in `PREMIUM_LLM_API_KEY`.
+Slidea is an AI-driven PPT generation skill. Configure `DEFAULT_LLM` before use.
 
 #### Install the Slidea Skill
 
@@ -153,27 +153,15 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
    cp .env.example .env
    ```
    Then configure at least these values in `.env`:
-   - `SLIDEA_MODE`
    - `DEFAULT_LLM_MODEL`
    - `DEFAULT_LLM_API_KEY`
    - `DEFAULT_LLM_API_BASE_URL`
    These settings currently support OpenAI-compatible APIs only.
-   The minimum runnable setup is `SLIDEA_MODE=ECONOMIC` plus the three `DEFAULT_LLM_*` values.
-   If Slidea connects to `model_service` and you want `model_service` to choose models through AgentProfile routing, set `MODEL_INVOKE_HANDOVER=true`. Slidea will ignore `SLIDEA_MODE`, `PREMIUM_LLM_*`, and `DEFAULT_VLM_*`; all text and vision requests go to `DEFAULT_LLM_API_BASE_URL` with an empty request model name and AgentProfile headers. `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` are still required, but `DEFAULT_LLM_MODEL` is no longer required.
-   Slidea uses two-tier model routing. `DEFAULT_LLM` is required — most pipeline callsites (parsing, deep research, outline default branches, page generation, HTML visual review) always use it; without it the pipeline cannot start. `PREMIUM_LLM` is optional — under `SLIDEA_MODE=PREMIUM` it powers two quality-critical callsites (outline main structure and SVG page generation); on error it automatically falls back to `DEFAULT_LLM`.
-
-   Three configuration outcomes:
-
-   - **Only `DEFAULT_LLM` configured**: pipeline runs end-to-end. Even with `SLIDEA_MODE=PREMIUM`, premium-routed callsites log a warning and fall back to `DEFAULT_LLM`, which is functionally identical to `SLIDEA_MODE=ECONOMIC`. This is the minimum setup and is sufficient for normal use.
-   - **Only `PREMIUM_LLM` configured (DEFAULT_LLM empty)**: pipeline fails at the first DEFAULT-routed call with `Missing configuration for default_llm`. Not supported.
-   - **Both configured + `SLIDEA_MODE=PREMIUM`**: premium-routed callsites use `PREMIUM_LLM` first with automatic fallback to `DEFAULT_LLM` on error.
-
-   If you want premium-routed callsites to use the premium model first, also fill in `PREMIUM_LLM_API_KEY`. The default `PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview` is fine; GLM-5.2 is also a recommended option for the premium slot.
+   The minimum runnable setup is the three `DEFAULT_LLM_*` values.
 
    Recommended models:
 
    - `DEFAULT_LLM_MODEL`: `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
-   - `PREMIUM_LLM_MODEL`: `google/gemini-3.1-pro-preview` or `GLM-5.2` (default is gemini)
    - `DEFAULT_VLM_MODEL`: `kimi-2.5` or `kimi-2.6`
 
 4. Quick example:

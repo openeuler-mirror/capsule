@@ -53,31 +53,16 @@ The installer creates `.venv`, installs Python dependencies for the default SVG 
 Fill at least these fields in `.env`:
 
 ```env
-SLIDEA_MODE=ECONOMIC
-MODEL_INVOKE_HANDOVER=false
 DEFAULT_LLM_MODEL=...
 DEFAULT_LLM_API_KEY=...
 DEFAULT_LLM_API_BASE_URL=...
 ```
 
-When Slidea is pointed at `model_service`, set `MODEL_INVOKE_HANDOVER=true` to let `model_service` route by AgentProfile headers. In that mode Slidea ignores `SLIDEA_MODE`, `PREMIUM_LLM_*`, and `DEFAULT_VLM_*`; all text and vision requests go to `DEFAULT_LLM_API_BASE_URL` with an empty request model name. `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` are still required, but `DEFAULT_LLM_MODEL` can stay empty.
-
-Optional premium routing setup:
-
-```env
-PREMIUM_LLM_MODEL=google/gemini-3.1-pro-preview
-PREMIUM_LLM_API_KEY=...
-PREMIUM_LLM_API_BASE_URL=https://openrouter.ai/api/v1
-```
-
-`PREMIUM_LLM_MODEL` and `PREMIUM_LLM_API_BASE_URL` are intentionally fixed to the recommended default. In most cases you only need to fill in `PREMIUM_LLM_API_KEY`.
-
-`DEFAULT_LLM` is the baseline — the pipeline cannot start without it, and configuring only `DEFAULT_LLM` is sufficient for normal use. `PREMIUM_LLM` is optional and only used by two quality-critical callsites under `SLIDEA_MODE=PREMIUM` (outline main structure and SVG page generation), with automatic fallback to `DEFAULT_LLM` on error or empty key.
+`DEFAULT_LLM` is required for the pipeline to start and is sufficient for normal use.
 
 Recommended models:
 
 - `DEFAULT_LLM_MODEL`: `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
-- `PREMIUM_LLM_MODEL`: `google/gemini-3.1-pro-preview` or `GLM-5.2` (default is gemini)
 - `DEFAULT_VLM_MODEL`: `kimi-2.5` or `kimi-2.6`
 
 Recommended minimum for a friction-free local setup:
@@ -226,8 +211,7 @@ EMBEDDING_API_BASE_URL=...
 
 If `preflight_failed` is returned:
 
-- check `SLIDEA_MODE` and the three default LLM settings first,
-- if `SLIDEA_MODE=PREMIUM`, also make sure `PREMIUM_LLM_API_KEY` is filled in when you want premium-routed callsites to use the premium model first,
+- check the three default LLM settings first,
 - make sure the local runtime has been bootstrapped with `scripts/install/install.py`.
 
 If search silently skips:
