@@ -32,7 +32,7 @@ from scripts.utils.run_identity import (
 async def new_semantic_run_id(text: str, fallback_prefix: str = "ppt") -> str:
     """Build a run_id as <timestamp>_<llm_summary>. Falls back to <ts>_<prefix> on any failure."""
     from datetime import datetime, timezone
-    from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
+    from core.utils.llm import llm_invoke
     from langchain.messages import HumanMessage
     from core.ppt_generator.utils.common import sanitize_filename
 
@@ -49,9 +49,7 @@ async def new_semantic_run_id(text: str, fallback_prefix: str = "ppt") -> str:
     )
     try:
         response = await llm_invoke(
-            ModelRoute.DEFAULT,
             [HumanMessage(content=prompt)],
-            InvokeOptions(work_node="run_id_summary"),
         )
         summary = sanitize_filename(response.strip())[:30]
         if summary and summary != "slide":

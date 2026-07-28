@@ -9,9 +9,7 @@ import logging
 import subprocess
 import sys
 
-from langchain_openai import ChatOpenAI
 from scripts.ci.review import PatchReviewer, format_text_report
-from core.utils.config import settings
 
 
 PATCH_FILE = "review.patch"
@@ -48,8 +46,8 @@ def generate_patch(context_type: str, commit: str = None) -> int:
     return len(content)
 
 
-async def run_review(patch_file: str, llm: ChatOpenAI = None) -> int:
-    reviewer = PatchReviewer(patch_file, llm=llm)
+async def run_review(patch_file: str) -> int:
+    reviewer = PatchReviewer(patch_file)
     report = await reviewer.run_review()
 
     logging.info(format_text_report(report))
@@ -61,9 +59,6 @@ async def run_review(patch_file: str, llm: ChatOpenAI = None) -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="PR Review Script")
-    parser.add_argument("-m", "--model", help="LLM Model")
-    parser.add_argument("-b", "--api-base", help="API Base URL")
-    parser.add_argument("-k", "--api-key", help="API Key")
     parser.add_argument("-c", "--commit", help="Specific commit hash to review")
     parser.add_argument(
         "-s", "--max-patch-size", type=int, help="Maximum patch size in bytes"
@@ -80,15 +75,6 @@ def main():
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s"
-        )
-
-    custom_llm = None
-    if args.model or args.api_base or args.api_key:
-        custom_llm = ChatOpenAI(
-            model=args.model or settings.DEFAULT_LLM_MODEL,
-            api_key=args.api_key or settings.DEFAULT_LLM_API_KEY,
-            base_url=args.api_base or settings.DEFAULT_LLM_API_BASE_URL,
-            timeout=600,
         )
 
     max_size = args.max_patch_size if args.max_patch_size else 65536
@@ -115,7 +101,7 @@ def main():
             break
 
     logging.info("Running review...")
-    return asyncio.run(run_review(PATCH_FILE, custom_llm))
+    return asyncio.run(run_review(PATCH_FILE))
 
 
 if __name__ == "__main__":

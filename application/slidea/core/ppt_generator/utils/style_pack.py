@@ -21,7 +21,7 @@ from core.ppt_generator.utils.svg_to_pptx.drawingml_transform import (
     AffineMatrix,
     parse_transform_info,
 )
-from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
+from core.utils.llm import InvokeOptions, llm_invoke
 from core.utils.logger import logger
 
 
@@ -1782,12 +1782,8 @@ async def assign_style_references_for_outline(
 """
             try:
                 assignments = await llm_invoke(
-                    ModelRoute.PREMIUM,
                     [HumanMessage(content=prompt)],
-                    InvokeOptions(
-                        json_schema=schema,
-                        work_node=f"outline_style_assignment[{batch_number}]",
-                    ),
+                    InvokeOptions(json_schema=schema),
                 )
             except Exception as error:
                 logger.warning(
