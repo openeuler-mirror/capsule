@@ -57,15 +57,18 @@ async def run_review(patch_file: str) -> int:
     return 1
 
 
-def main():
+def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="PR Review Script")
     parser.add_argument("-c", "--commit", help="Specific commit hash to review")
     parser.add_argument(
         "-s", "--max-patch-size", type=int, help="Maximum patch size in bytes"
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    return parser
 
-    args = parser.parse_args()
+
+def main():
+    args = build_argument_parser().parse_args()
     if args.verbose:
         logging.basicConfig(
             level=logging.DEBUG,

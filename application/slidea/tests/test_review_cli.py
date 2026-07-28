@@ -1,7 +1,4 @@
-import io
-import sys
 import unittest
-from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -34,13 +31,7 @@ class ReviewCliTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(created_with, ["/tmp/review.patch"])
 
     def test_help_does_not_expose_custom_model_options(self):
-        output = io.StringIO()
-        with patch.object(sys, "argv", ["review_pr.py", "--help"]):
-            with self.assertRaises(SystemExit) as raised, redirect_stdout(output):
-                review_pr.main()
-
-        self.assertEqual(raised.exception.code, 0)
-        help_text = output.getvalue()
+        help_text = review_pr.build_argument_parser().format_help()
         self.assertNotIn("--model", help_text)
         self.assertNotIn("--api-base", help_text)
         self.assertNotIn("--api-key", help_text)

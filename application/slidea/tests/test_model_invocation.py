@@ -2,7 +2,7 @@ import importlib
 import inspect
 import sys
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 
 class FakeResponse:
@@ -25,7 +25,8 @@ class FakeClient:
             raise self._error
         return FakeResponse(self._content)
 
-    def with_structured_output(self, *_args, **_kwargs):
+    @staticmethod
+    def with_structured_output(*_args, **_kwargs):
         raise AssertionError("structured output must be parsed after the plain invocation")
 
 
@@ -71,7 +72,7 @@ class ModelInvocationTests(unittest.IsolatedAsyncioTestCase):
             [["image"], ["raw-image"]],
         )
 
-    def test_default_clients_use_independent_settings(self):
+    async def test_default_clients_use_independent_settings(self):
         with patch.object(self.llm_module.settings, "DEFAULT_LLM_MODEL", "text-model"), patch.object(
             self.llm_module.settings, "DEFAULT_LLM_API_KEY", "text-key"
         ), patch.object(
@@ -86,17 +87,39 @@ class ModelInvocationTests(unittest.IsolatedAsyncioTestCase):
             self.llm_module.settings,
             "DEFAULT_VLM_API_BASE_URL",
             "https://vision.example/v1",
-        ):
-            text_config = self.llm_module._resolve_chat_client_config("default_llm")
-            vision_config = self.llm_module._resolve_chat_client_config("default_vlm")
+        ), patch.object(
+            self.llm_module,
+            "ChatOpenAI",
+            side_effect=lambda **kwargs: FakeClient(
+                kwargs["model"],
+                content=f'{kwargs["model"]}-result',
+            ),
+        ) as chat_openai_mock:
+            text = await self.llm_module.llm_invoke(["text"])
+            vision = await self.llm_module.vlm_invoke(["image"])
 
+        self.assertEqual(text, "text-model-result")
+        self.assertEqual(vision, "vision-model-result")
         self.assertEqual(
-            (text_config.request_model_name, text_config.api_key, text_config.base_url),
-            ("text-model", "text-key", "https://text.example/v1"),
-        )
-        self.assertEqual(
-            (vision_config.request_model_name, vision_config.api_key, vision_config.base_url),
-            ("vision-model", "vision-key", "https://vision.example/v1"),
+            chat_openai_mock.call_args_list,
+            [
+                call(
+                    model="text-model",
+                    api_key="text-key",
+                    base_url="https://text.example/v1",
+                    timeout=600,
+                    max_retries=5,
+                    streaming=False,
+                ),
+                call(
+                    model="vision-model",
+                    api_key="vision-key",
+                    base_url="https://vision.example/v1",
+                    timeout=300,
+                    max_retries=5,
+                    streaming=False,
+                ),
+            ],
         )
 
     async def test_pydantic_schema_is_parsed_after_plain_invocation(self):
@@ -175,19 +198,34 @@ class ModelInvocationTests(unittest.IsolatedAsyncioTestCase):
     async def test_client_handle_creates_and_reuses_one_default_client(self):
         built_client = FakeClient("default-llm", content="text-result")
 
-        with patch.object(
+        with patch.object(self.llm_module.settings, "DEFAULT_LLM_MODEL", "default-llm"), patch.object(
+            self.llm_module.settings, "DEFAULT_LLM_API_KEY", "text-key"
+        ), patch.object(
+            self.llm_module.settings,
+            "DEFAULT_LLM_API_BASE_URL",
+            "https://text.example/v1",
+        ), patch.object(
             self.llm_module,
-            "_build_chat_client_for_name",
+            "ChatOpenAI",
             return_value=built_client,
-        ) as build_mock:
-            handle = self.llm_module._ClientHandle("default_llm")
-            with patch.object(self.llm_module, "default_llm", handle):
-                first = await self.llm_module.llm_invoke(["first"])
-                second = await self.llm_module.llm_invoke(["second"])
+        ) as chat_openai_mock:
+            first = await self.llm_module.llm_invoke(["first"])
+            second = await self.llm_module.llm_invoke(["second"])
 
         self.assertEqual(first, "text-result")
         self.assertEqual(second, "text-result")
-        build_mock.assert_called_once_with("default_llm")
+        chat_openai_mock.assert_called_once_with(
+            model="default-llm",
+            api_key="text-key",
+            base_url="https://text.example/v1",
+            timeout=600,
+            max_retries=5,
+            streaming=False,
+        )
+        self.assertEqual(
+            [client_call["args"] for client_call in built_client.calls],
+            [["first"], ["second"]],
+        )
 
     async def test_model_clients_cannot_be_passed_through_public_interfaces(self):
         self.assertEqual(
