@@ -18,7 +18,7 @@ from langgraph.types import StreamWriter
 from core.utils.logger import logger
 from core.utils.config import app_base_dir, output_files_dir
 from core.utils.cache import get_run_id, run_dir_from_config, save_json
-from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
+from core.utils.llm import can_vlm_invoke, llm_invoke, vlm_raw_invoke
 from core.ppt_generator.utils.common import sanitize_filename, download_image, build_image_url
 from core.ppt_generator.utils.svg import (
     extract_svg_content,
@@ -111,7 +111,6 @@ async def prepare_generation_context_node(state: PPTState, writer: StreamWriter,
         raise Exception("获取PPT Prompt失败") from e
 
     response = await llm_invoke(
-        ModelRoute.DEFAULT,
         [HumanMessage(content=f"根据'{state['query']}'确定使用的语言,只回答'中文'、'英文'等结果。")],
     )
 
@@ -221,8 +220,10 @@ def encode_image(image_path: str) -> str:
 async def distribute_images_via_vlm(outline: List[Any]) -> List[Any]:
     processed_pages = copy.deepcopy(outline)
 
-    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
-        logger.warning("No available VLM route for image distribution. Skip VLM-based image distribution.")
+    if not can_vlm_invoke():
+        logger.warning(
+            "DEFAULT_VLM is not configured. Skip VLM-based image distribution."
+        )
         return processed_pages
 
     mode = detect_distribution_mode(processed_pages)
@@ -340,7 +341,7 @@ PPT页面大纲：
 """
 
     try:
-        response = await vlm_raw_invoke(ModelRoute.DEFAULT, [HumanMessage(
+        response = await vlm_raw_invoke([HumanMessage(
             content=[
                 {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": b64_img}},
@@ -678,7 +679,7 @@ async def _check_one_style_dynamic_svg(
             style_guidance=style_guidance_for_page(page),
             content=deterministic_dynamic,
         )
-        response = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)])
+        response = await llm_invoke([HumanMessage(content=prompt)])
         repaired = repair_svg_content(extract_svg_content(response))
         validate_svg_content(repaired)
         _validate_style_dynamic_repair_contract(deterministic_dynamic, repaired)
@@ -824,7 +825,7 @@ async def _repair_failed_svg_files(failed: list[dict]) -> None:
                 issues=format_quality_issues([item]),
                 content=svg_content[:30000],
             )
-            response = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)])
+            response = await llm_invoke([HumanMessage(content=prompt)])
             repaired = repair_svg_content(extract_svg_content(response))
             validate_svg_content(repaired)
             with open(svg_path, "w", encoding="utf-8") as fh:

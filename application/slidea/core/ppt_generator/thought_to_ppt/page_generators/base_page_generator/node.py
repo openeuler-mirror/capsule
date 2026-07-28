@@ -9,7 +9,7 @@ from langchain.messages import HumanMessage
 
 from core.utils.logger import logger
 from core.utils.config import settings, app_base_dir
-from core.utils.llm import InvokeOptions, ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
+from core.utils.llm import can_vlm_invoke, llm_invoke, vlm_raw_invoke
 from core.ppt_generator.utils.common import (
     build_remote_asset_request_router,
     get_scale_step_value,
@@ -78,9 +78,7 @@ async def generate_ppt_page_node(state: PPTWorkerState):
     """generate ppt page"""
     _save_generate_prompt(state)
     response = await llm_invoke(
-        ModelRoute.PREMIUM,
         [HumanMessage(content=state["generate_ppt_prompt"])],
-        InvokeOptions(work_node="generate_ppt_page"),
     )
     html_content = extract_html_content_regex(response)
 
@@ -94,9 +92,9 @@ async def modify_ppt_page_node(state: PPTWorkerState):
 
     if not html_path:
         raise ValueError("State中缺少 html_path，无法进行修改")
-    if not can_vlm_invoke_route(ModelRoute.PREMIUM):
+    if not can_vlm_invoke():
         logger.warning(
-            "No available VLM route for page modification. "
+            "DEFAULT_VLM is not configured. "
             "Skip page modification and keep the current HTML."
         )
         return {"content": state["content"]}
@@ -129,9 +127,7 @@ async def modify_ppt_page_node(state: PPTWorkerState):
 {state["content"]}
 """
     summarized_html = await llm_invoke(
-        ModelRoute.DEFAULT,
         [HumanMessage(content=summary_prompt)],
-        InvokeOptions(work_node="html_summary"),
     )
     if not summarized_html:
         summarized_html = state["content"]
@@ -150,14 +146,12 @@ PPT的HTML网页摘要如下：
 """
 
     response = await vlm_raw_invoke(
-        ModelRoute.PREMIUM,
         [HumanMessage(
             content=[
                 {"type": "text", "text": generate_ppt_prompt},
                 {"type": "image_url", "image_url": {"url": build_image_url(img_path)}},
             ]
         )],
-        work_node="modify_ppt_page",
     )
     html_content = extract_html_content_regex(response.content)
 
@@ -229,7 +223,6 @@ async def vlm_judge_node(state: PPTWorkerState):
 
     try:
         response = await vlm_raw_invoke(
-            ModelRoute.PREMIUM,
             [HumanMessage(
                 content=[
                     {"type": "text", "text": judge_prompt},
@@ -237,7 +230,6 @@ async def vlm_judge_node(state: PPTWorkerState):
                 ]
             )],
             schema_name="vlm_judge",
-            work_node="vlm_judge",
         )
     except Exception as error:
         logger.warning(f"vlm_judge call failed for page {index}: {error}")
@@ -315,7 +307,6 @@ async def vlm_modify_node(state: PPTWorkerState):
 
     try:
         response = await vlm_raw_invoke(
-            ModelRoute.PREMIUM,
             [HumanMessage(
                 content=[
                     {"type": "text", "text": fix_prompt},
@@ -323,7 +314,6 @@ async def vlm_modify_node(state: PPTWorkerState):
                 ]
             )],
             schema_name="vlm_fix",
-            work_node="vlm_fix",
         )
     except Exception as error:
         logger.warning(f"vlm_modify call failed for page {index}: {error}")
@@ -365,10 +355,8 @@ async def vlm_select_best_node(state: PPTWorkerState):
 
     try:
         response = await vlm_raw_invoke(
-            ModelRoute.PREMIUM,
             [HumanMessage(content=content)],
             schema_name="vlm_select_best",
-            work_node="vlm_select_best",
         )
     except Exception as error:
         logger.warning(f"vlm_select_best call failed for page {index}: {error}")
@@ -517,7 +505,7 @@ def _write_vlm_review_json(state: PPTWorkerState, final_file_path: str) -> None:
 
 def route_after_generate(state: PPTWorkerState) -> str:
     """generate 之后选择审阅路径：VLM > ratio。"""
-    if settings.ENABLE_VLM_VISUAL_REVIEW and can_vlm_invoke_route(ModelRoute.PREMIUM):
+    if settings.ENABLE_VLM_VISUAL_REVIEW and can_vlm_invoke():
         return "VLM"
     return "RATIO"
 

@@ -15,7 +15,7 @@ from core.utils.document_parser.config import PDFEngineConfig
 from core.utils.document_parser.models import ImageInfo, PageContent, ParseResult
 from core.utils.document_parser.pdf_engines.fitz_parser import FitzPDFParser
 
-from core.utils.llm import ModelRoute, can_vlm_invoke_route, vlm_raw_invoke
+from core.utils.llm import can_vlm_invoke, vlm_raw_invoke
 
 
 class FitzVLMPDFParser(FitzPDFParser):
@@ -29,7 +29,7 @@ class FitzVLMPDFParser(FitzPDFParser):
         if not super().is_available(config):
             return False
 
-        if not can_vlm_invoke_route(ModelRoute.PREMIUM):
+        if not can_vlm_invoke():
             return False
 
         return True
@@ -125,7 +125,6 @@ class FitzVLMPDFParser(FitzPDFParser):
 
             prompt = "请简要描述这张图片的内容，用一句话概括。"
             response = await vlm_raw_invoke(
-                ModelRoute.PREMIUM,
                 [
                     HumanMessage(
                         content=[
@@ -139,7 +138,6 @@ class FitzVLMPDFParser(FitzPDFParser):
                         ]
                     )
                 ],
-                work_node="document_image_description",
             )
             return response.content
         except Exception as e:
@@ -168,7 +166,6 @@ class FitzVLMPDFParser(FitzPDFParser):
 """
         try:
             response = await vlm_raw_invoke(
-                ModelRoute.PREMIUM,
                 [
                     HumanMessage(
                         content=[
@@ -182,7 +179,6 @@ class FitzVLMPDFParser(FitzPDFParser):
                         ]
                     )
                 ],
-                work_node="document_vector_chart_classification",
             )
             content = response.content
             logger.debug("Fitz-VLM 引擎分类矢量图 {}: {}", page_num, content)

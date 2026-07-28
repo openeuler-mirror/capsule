@@ -11,7 +11,7 @@ from langchain.messages import HumanMessage
 
 from core.utils.logger import logger
 from core.utils.config import settings, app_base_dir
-from core.utils.llm import ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_raw_invoke
+from core.utils.llm import can_vlm_invoke, llm_invoke, vlm_raw_invoke
 from core.ppt_generator.utils.common import build_image_url
 from core.ppt_generator.utils.screenshot import screenshot_svg, screenshot_svg_bytes
 from core.ppt_generator.utils.svg import (
@@ -154,7 +154,7 @@ async def _llm_repair_svg(svg_content: str, issue: str) -> Optional[str]:
             issues=issue or "SVG is not well-formed XML",
             content=svg_content[:30000],
         )
-        response = await llm_invoke(ModelRoute.PREMIUM, [HumanMessage(content=prompt)])
+        response = await llm_invoke([HumanMessage(content=prompt)])
         return repair_svg_content(extract_svg_content(response))
     except Exception as error:
         logger.warning(f"svg LLM repair call failed: {error}")
@@ -202,7 +202,6 @@ async def generate_ppt_page_node(state: SVGWorkerState):
 
     for attempt in range(max_attempts):
         response = await llm_invoke(
-            ModelRoute.PREMIUM,
             [HumanMessage(content=prompt)],
         )
         raw_svg = await _svg_process_llm_response(
@@ -267,7 +266,6 @@ async def vlm_judge_node(state: SVGWorkerState):
 
     try:
         response = await vlm_raw_invoke(
-            ModelRoute.PREMIUM,
             [HumanMessage(
                 content=[
                     {"type": "text", "text": judge_prompt},
@@ -364,7 +362,6 @@ async def vlm_modify_node(state: SVGWorkerState):
 
     try:
         response = await vlm_raw_invoke(
-            ModelRoute.PREMIUM,
             [HumanMessage(
                 content=[
                     {"type": "text", "text": fix_prompt},
@@ -432,7 +429,6 @@ async def vlm_select_best_node(state: SVGWorkerState):
 
     try:
         response = await vlm_raw_invoke(
-            ModelRoute.PREMIUM,
             [HumanMessage(content=content)],
             schema_name="vlm_select_best",
         )
@@ -587,7 +583,7 @@ def _write_vlm_review_json(state: SVGWorkerState, final_file_path: str) -> None:
 
 def route_after_generate(state: SVGWorkerState) -> str:
     """generate 之后选择审阅路径：VLM 可用就走 VLM，否则直接落盘。"""
-    if settings.ENABLE_VLM_VISUAL_REVIEW and can_vlm_invoke_route(ModelRoute.PREMIUM):
+    if settings.ENABLE_VLM_VISUAL_REVIEW and can_vlm_invoke():
         return "VLM"
     return "SAVE_ONLY"
 

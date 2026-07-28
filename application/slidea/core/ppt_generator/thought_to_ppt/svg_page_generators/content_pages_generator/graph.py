@@ -50,8 +50,8 @@ def assign_img_score_workers(state: ContentWorkerState):
     # 下游 extend_relevant_material_node 据此把可用图片告诉生图 LLM，所以不能整段跳过。
     # 真正缺失的是 VLM 看图打分能力——所有候选图都给固定 5.0 分，排序退化为按原顺序取前 N。
     from core.utils.logger import logger
-    from core.utils.llm import ModelRoute, can_vlm_invoke_route
-    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
+    from core.utils.llm import can_vlm_invoke
+    if not can_vlm_invoke():
         n_images = len(reference_images)
         logger.info(
             f"VLM not configured; {n_images} reference image(s) will skip VLM scoring. "

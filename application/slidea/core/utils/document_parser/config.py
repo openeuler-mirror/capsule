@@ -1,8 +1,7 @@
 import os
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
-from core.utils.llm import default_vlm
 from core.utils.config import output_files_dir
 
 
@@ -11,11 +10,8 @@ class PDFEngineConfig:
     engine: Optional[str] = None
     output_dir: Optional[str] = None
     extract_images: Optional[bool] = None
-    vlm_model: Optional[Any] = None
 
     def __post_init__(self):
-        if self.vlm_model is None:
-            self.vlm_model = default_vlm
         if self.output_dir is None:
             self.output_dir = output_files_dir
         if self.extract_images is None:
@@ -76,12 +72,9 @@ class PptxConfig:
 
 @dataclass
 class ImageConfig:
-    vlm_model: Optional[Any] = None
     output_dir: Optional[str] = None
 
     def __post_init__(self):
-        if self.vlm_model is None:
-            self.vlm_model = default_vlm
         if self.output_dir is None:
             self.output_dir = output_files_dir
 
