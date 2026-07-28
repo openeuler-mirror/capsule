@@ -225,8 +225,7 @@ Always inspect the top-level `stage` field first before deciding whether to cont
 
 - Keep all paths relative to the working directory unless the user explicitly asks for something else.
 - Once bootstrap is complete, all runtime commands must go through the Python interpreter inside `.venv`.
-- `DEFAULT_LLM_API_KEY` and `DEFAULT_LLM_API_BASE_URL` must be configured before running the pipeline.
-- If `MODEL_INVOKE_HANDOVER` is not `true`, `DEFAULT_LLM_MODEL` must also be configured, and `SLIDEA_MODE` should be `ECONOMIC` or `PREMIUM`.
+- `DEFAULT_LLM_MODEL`, `DEFAULT_LLM_API_KEY`, and `DEFAULT_LLM_API_BASE_URL` must be configured before running the pipeline.
 
 ## Advanced Topics (read on demand)
 

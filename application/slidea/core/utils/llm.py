@@ -30,18 +30,10 @@ from core.utils.config import settings
 
 MAX_INVOKE_ATTEMPTS = 5
 RETRY_SLEEP_SECONDS = 10
-SLIDEA_AGENT_ID = "slidea"
-AGENT_PROFILE_AGENT_HEADER = "X-Agent-Id"
-AGENT_PROFILE_WORK_NODE_HEADER = "X-Work-Node"
 
 
 class LLMInvokeError(RuntimeError):
     """Raised when an LLM or VLM call exhausts retries."""
-
-
-class ModelRoute(str, Enum):
-    DEFAULT = "default"
-    PREMIUM = "premium"
 
 
 class ModelKind(str, Enum):
@@ -61,19 +53,11 @@ class _ChatClientConfig:
     missing_settings: list[str]
 
 
-@dataclass(frozen=True)
-class _RouteResolution:
-    client_name: str
-    fallback_client_name: str | None = None
-    warning: str = ""
-
-
 @dataclass
 class InvokeOptions:
     config: Any = None
     pydantic_schema: Any = None
     json_schema: Any = None
-    work_node: str | None = None
 
 
 def _infer_llm_error_hint(error: Exception) -> str:
@@ -110,19 +94,6 @@ def _client_model_name(client: Any) -> str:
     return getattr(client, "model_name", None) or getattr(client, "model", "") or "unknown"
 
 
-def _normalize_model_route(route: ModelRoute | str) -> ModelRoute:
-    raw_route = route.value if isinstance(route, ModelRoute) else str(route).strip().lower()
-    if raw_route == ModelRoute.DEFAULT.value:
-        return ModelRoute.DEFAULT
-    if raw_route == ModelRoute.PREMIUM.value:
-        return ModelRoute.PREMIUM
-    raise ValueError(
-        f"Unsupported model route {route!r}. "
-        f"Only {ModelRoute.DEFAULT.value!r} and "
-        f"{ModelRoute.PREMIUM.value!r} are supported."
-    )
-
-
 def _kind_display_name(kind: ModelKind) -> str:
     return "LLM" if kind == ModelKind.LLM else "VLM"
 
@@ -157,25 +128,6 @@ class MissingConfigClient:
         return self
 
 
-class _RequestHeaderClient:
-    def __init__(self, client: Any, headers: dict[str, str]):
-        self._client = client
-        self._headers = headers
-        self.model_name = _client_model_name(client)
-        self.model = self.model_name
-
-    async def ainvoke(self, *args, **kwargs):
-        extra_headers = kwargs.pop("extra_headers", None) or {}
-        headers = {**self._headers, **extra_headers}
-        return await self._client.ainvoke(*args, **kwargs, extra_headers=headers)
-
-    def with_structured_output(self, *args, **kwargs):
-        return _RequestHeaderClient(
-            self._client.with_structured_output(*args, **kwargs),
-            self._headers,
-        )
-
-
 class _ClientHandle:
     def __init__(self, client_name: str):
         self.client_name = client_name
@@ -207,44 +159,7 @@ def _configured_model_name(client_name: str) -> str:
     return _resolve_chat_client_config(client_name).display_model_name
 
 
-def _resolve_handover_chat_client_config() -> _ChatClientConfig | None:
-    if not settings.should_handover_model_routing():
-        return None
-
-    return _ChatClientConfig(
-        display_model_name="model_service:auto",
-        request_model_name="",
-        api_key=settings.DEFAULT_LLM_API_KEY,
-        base_url=settings.DEFAULT_LLM_API_BASE_URL,
-        timeout=600,
-        max_retries=5,
-        streaming=False,
-        missing_settings=settings.missing_default_llm_settings(),
-    )
-
-
-def _has_handover_chat_client_config() -> bool:
-    handover_config = _resolve_handover_chat_client_config()
-    return handover_config is not None and not handover_config.missing_settings
-
-
 def _resolve_chat_client_config(client_name: str) -> _ChatClientConfig:
-    handover_config = _resolve_handover_chat_client_config()
-    if handover_config is not None:
-        return handover_config
-
-    if client_name == "premium_llm":
-        return _ChatClientConfig(
-            display_model_name=settings.PREMIUM_LLM_MODEL or "unconfigured:premium_llm",
-            request_model_name=settings.PREMIUM_LLM_MODEL,
-            api_key=settings.PREMIUM_LLM_API_KEY,
-            base_url=settings.PREMIUM_LLM_API_BASE_URL,
-            timeout=600,
-            max_retries=5,
-            streaming=False,
-            missing_settings=settings.missing_premium_llm_settings(),
-        )
-
     if client_name == "default_vlm":
         return _ChatClientConfig(
             display_model_name=settings.DEFAULT_VLM_MODEL or "unconfigured:default_vlm",
@@ -257,16 +172,19 @@ def _resolve_chat_client_config(client_name: str) -> _ChatClientConfig:
             missing_settings=settings.missing_default_vlm_settings(),
         )
 
-    return _ChatClientConfig(
-        display_model_name=settings.DEFAULT_LLM_MODEL or "unconfigured:default_llm",
-        request_model_name=settings.DEFAULT_LLM_MODEL,
-        api_key=settings.DEFAULT_LLM_API_KEY,
-        base_url=settings.DEFAULT_LLM_API_BASE_URL,
-        timeout=600,
-        max_retries=5,
-        streaming=False,
-        missing_settings=settings.missing_default_llm_settings(),
-    )
+    if client_name == "default_llm":
+        return _ChatClientConfig(
+            display_model_name=settings.DEFAULT_LLM_MODEL or "unconfigured:default_llm",
+            request_model_name=settings.DEFAULT_LLM_MODEL,
+            api_key=settings.DEFAULT_LLM_API_KEY,
+            base_url=settings.DEFAULT_LLM_API_BASE_URL,
+            timeout=600,
+            max_retries=5,
+            streaming=False,
+            missing_settings=settings.missing_default_llm_settings(),
+        )
+
+    raise ValueError(f"Unsupported chat client: {client_name}")
 
 
 def _build_chat_client(
@@ -277,7 +195,6 @@ def _build_chat_client(
     timeout: int,
     max_retries: int,
     streaming: bool = False,
-    default_headers: dict[str, str] | None = None,
 ):
     return ChatOpenAI(
         model=model,
@@ -286,11 +203,10 @@ def _build_chat_client(
         timeout=timeout,
         max_retries=max_retries,
         streaming=streaming,
-        default_headers=default_headers,
     )
 
 
-def _build_chat_client_for_name(client_name: str, default_headers: dict[str, str] | None = None):
+def _build_chat_client_for_name(client_name: str):
     if ChatOpenAI is None:
         return MissingDependencyClient("langchain_openai")
 
@@ -305,44 +221,11 @@ def _build_chat_client_for_name(client_name: str, default_headers: dict[str, str
         timeout=client_config.timeout,
         max_retries=client_config.max_retries,
         streaming=client_config.streaming,
-        default_headers=default_headers,
     )
 
 
-premium_llm = _ClientHandle("premium_llm")
 default_llm = _ClientHandle("default_llm")
 default_vlm = _ClientHandle("default_vlm")
-
-
-def _build_handover_work_node_headers(work_node: str | None) -> dict[str, str]:
-    if _resolve_handover_chat_client_config() is None or work_node is None:
-        return {}
-    normalized_work_node = str(work_node).strip()
-    if not normalized_work_node:
-        return {}
-    return {
-        AGENT_PROFILE_AGENT_HEADER: SLIDEA_AGENT_ID,
-        AGENT_PROFILE_WORK_NODE_HEADER: normalized_work_node,
-    }
-
-
-def _build_model_invoke_headers(client: Any, work_node: str | None) -> dict[str, str]:
-    return _build_handover_work_node_headers(work_node)
-
-
-def _with_model_request_headers(client: Any, work_node: str | None):
-    headers = _build_model_invoke_headers(client, work_node)
-    if not headers:
-        return client
-
-    if isinstance(client, _ClientHandle):
-        return _RequestHeaderClient(client, headers)
-
-    bind = getattr(client, "bind", None)
-    if callable(bind):
-        return bind(extra_headers=headers)
-
-    return _RequestHeaderClient(client, headers)
 
 
 def _build_invoke_error(model_name: str, schema_name: str, last_error: Exception | None) -> LLMInvokeError:
@@ -396,9 +279,7 @@ async def _invoke_with_retries(
     json_schema: Any = None,
     schema_name: str = "",
     kind: ModelKind = ModelKind.LLM,
-    work_node: str | None = None,
 ):
-    llm = _with_model_request_headers(raw_client, work_node)
     if pydantic_schema:
         json_schema = _schema_json(pydantic_schema)
 
@@ -406,7 +287,7 @@ async def _invoke_with_retries(
     last_error: Exception | None = None
     for attempt in range(1, MAX_INVOKE_ATTEMPTS + 1):
         try:
-            response = await llm.ainvoke(args, config=config)
+            response = await raw_client.ainvoke(args, config=config)
             content = _response_content(response)
             if pydantic_schema:
                 json_info = _parse_json_response_content(content, json_schema)
@@ -443,14 +324,12 @@ async def _raw_ainvoke_with_retries(
     config: Any = None,
     schema_name: str = "plain_text",
     kind: ModelKind = ModelKind.LLM,
-    work_node: str | None = None,
 ):
     model_name = _client_model_name(raw_client)
-    client = _with_model_request_headers(raw_client, work_node)
     last_error: Exception | None = None
     for attempt in range(1, MAX_INVOKE_ATTEMPTS + 1):
         try:
-            response = await client.ainvoke(args, config=config)
+            response = await raw_client.ainvoke(args, config=config)
             return response
         except Exception as error:
             last_error = error
@@ -472,246 +351,53 @@ async def _raw_ainvoke_with_retries(
     raise invoke_error
 
 
-def _default_client_name(kind: ModelKind) -> str:
-    return "default_vlm" if kind == ModelKind.VLM else "default_llm"
+def can_vlm_invoke() -> bool:
+    return settings.has_default_vlm_config()
 
 
-def _client_handle_for_name(client_name: str):
-    if client_name == "premium_llm":
-        return premium_llm
-    if client_name == "default_vlm":
-        return default_vlm
-    return default_llm
+def get_default_llm_model_name() -> str:
+    return _client_model_name(default_llm)
 
 
-def _resolve_route_resolution(kind: ModelKind, route: ModelRoute) -> _RouteResolution:
-    if _resolve_handover_chat_client_config() is not None:
-        return _RouteResolution(client_name="default_llm")
-
-    mode = settings.get_slidea_mode()
-    default_client_name = _default_client_name(kind)
-    default_client = _client_handle_for_name(default_client_name)
-    default_model_name = _client_model_name(default_client)
-
-    if mode == "ECONOMIC" or route == ModelRoute.DEFAULT:
-        return _RouteResolution(client_name=default_client_name)
-
-    if not settings.has_premium_llm_api_key():
-        return _RouteResolution(
-            client_name=default_client_name,
-            warning=(
-                f"SLIDEA_MODE=PREMIUM but PREMIUM_LLM_API_KEY is empty. "
-                f"Falling back to ECONOMIC mode for {_kind_display_name(kind)} calls and using {default_model_name}."
-            ),
-        )
-
-    if not settings.has_premium_llm_config():
-        return _RouteResolution(
-            client_name=default_client_name,
-            warning=(
-                f"SLIDEA_MODE=PREMIUM but PREMIUM_LLM settings are incomplete. "
-                f"Falling back to ECONOMIC mode for {_kind_display_name(kind)} calls and using {default_model_name}."
-            ),
-        )
-
-    return _RouteResolution(
-        client_name="premium_llm",
-        fallback_client_name=default_client_name,
-    )
-
-
-def _resolve_routed_client(kind: ModelKind, route: ModelRoute) -> dict[str, Any]:
-    route_resolution = _resolve_route_resolution(kind, route)
-    client = _client_handle_for_name(route_resolution.client_name)
-    fallback_client = (
-        _client_handle_for_name(route_resolution.fallback_client_name)
-        if route_resolution.fallback_client_name
-        else None
-    )
-    return {
-        "client": client,
-        "primary_model": _client_model_name(client),
-        "fallback_client": fallback_client,
-        "fallback_model": _client_model_name(fallback_client) if fallback_client else "",
-        "warning": route_resolution.warning,
-    }
-
-
-def _has_default_client_config(kind: ModelKind) -> bool:
-    if _resolve_handover_chat_client_config() is not None:
-        return _has_handover_chat_client_config()
-    if kind == ModelKind.VLM:
-        return settings.has_default_vlm_config()
-    return settings.has_default_llm_config()
-
-
-def can_invoke_route(kind: ModelKind, route: ModelRoute | str) -> bool:
-    if _resolve_handover_chat_client_config() is not None:
-        return _has_handover_chat_client_config()
-
-    normalized_route = _normalize_model_route(route)
-    if settings.get_slidea_mode() == "ECONOMIC" or normalized_route == ModelRoute.DEFAULT:
-        return _has_default_client_config(kind)
-    if not settings.has_premium_llm_api_key():
-        return _has_default_client_config(kind)
-    return settings.has_premium_llm_config() or _has_default_client_config(kind)
-
-
-def can_vlm_invoke_route(route: ModelRoute | str) -> bool:
-    return can_invoke_route(ModelKind.VLM, route)
-
-
-async def _execute_routed_invoke(
-    kind: ModelKind,
-    route: ModelRoute | str,
-    *,
-    invoke_func,
-    invoke_kwargs: dict[str, Any],
-):
-    normalized_route = _normalize_model_route(route)
-    resolution = _resolve_routed_client(kind, normalized_route)
-    if resolution["warning"]:
-        logger.warning(resolution["warning"])
-
-    try:
-        return await invoke_func(
-            resolution["client"],
-            kind=kind,
-            **invoke_kwargs,
-        )
-    except Exception as primary_error:
-        fallback_client = resolution["fallback_client"]
-        if fallback_client is None:
-            raise
-
-        fallback_model = resolution["fallback_model"] or _client_model_name(fallback_client)
-        logger.warning(
-            f"{_kind_display_name(kind)} premium call failed for model={resolution['primary_model']}. "
-            f"Fallback to {fallback_model}. Error: {primary_error}"
-        )
-        try:
-            return await invoke_func(
-                fallback_client,
-                kind=kind,
-                **invoke_kwargs,
-            )
-        except Exception as fallback_error:
-            raise LLMInvokeError(
-                f"{_kind_display_name(kind)} premium call failed and fallback also failed. "
-                f"Primary model={resolution['primary_model']}; fallback model={fallback_model}. "
-                f"Primary error: {primary_error}; fallback error: {fallback_error}"
-            ) from fallback_error
-
-
-async def _raw_ainvoke_routed_client(
-    kind: ModelKind,
-    route: ModelRoute | str,
-    args: Any,
-    *,
-    config: Any = None,
-    schema_name: str = "plain_text",
-    work_node: str | None = None,
-):
-    return await _execute_routed_invoke(
-        kind,
-        route,
-        invoke_func=_raw_ainvoke_with_retries,
-        invoke_kwargs={
-            "args": args,
-            "config": config,
-            "schema_name": schema_name,
-            "work_node": work_node,
-        },
-    )
-
-
-def get_llm_by_route(route: ModelRoute | str):
-    normalized_route = _normalize_model_route(route)
-    return _resolve_routed_client(ModelKind.LLM, normalized_route)["client"]
-
-
-async def llm_invoke(
-    route_or_client,
-    args,
-    options: InvokeOptions | None = None,
-):
+async def llm_invoke(args, options: InvokeOptions | None = None):
     """统一的文本模型调用接口。"""
 
     opts = options or InvokeOptions()
-
-    if isinstance(route_or_client, (ModelRoute, str)):
-        return await _execute_routed_invoke(
-            ModelKind.LLM,
-            route_or_client,
-            invoke_func=_invoke_with_retries,
-            invoke_kwargs={
-                "args": args,
-                "config": opts.config,
-                "pydantic_schema": opts.pydantic_schema,
-                "json_schema": opts.json_schema,
-                "work_node": opts.work_node,
-            },
-        )
-
     return await _invoke_with_retries(
-        route_or_client,
+        default_llm,
         args,
         config=opts.config,
         pydantic_schema=opts.pydantic_schema,
         json_schema=opts.json_schema,
         kind=ModelKind.LLM,
-        work_node=opts.work_node,
     )
 
 
-async def vlm_invoke(
-    route_or_client,
-    args,
-    options: InvokeOptions | None = None,
-):
+async def vlm_invoke(args, options: InvokeOptions | None = None):
     """统一的视觉模型调用接口。"""
 
     opts = options or InvokeOptions()
-
-    if isinstance(route_or_client, (ModelRoute, str)):
-        return await _execute_routed_invoke(
-            ModelKind.VLM,
-            route_or_client,
-            invoke_func=_invoke_with_retries,
-            invoke_kwargs={
-                "args": args,
-                "config": opts.config,
-                "pydantic_schema": opts.pydantic_schema,
-                "json_schema": opts.json_schema,
-                "work_node": opts.work_node,
-            },
-        )
-
     return await _invoke_with_retries(
-        route_or_client,
+        default_vlm,
         args,
         config=opts.config,
         pydantic_schema=opts.pydantic_schema,
         json_schema=opts.json_schema,
         kind=ModelKind.VLM,
-        work_node=opts.work_node,
     )
 
 
 async def vlm_raw_invoke(
-    route: ModelRoute | str,
     args,
     config=None,
     schema_name="plain_text",
-    work_node=None,
 ):
     """视觉模型原始调用接口。"""
 
-    return await _raw_ainvoke_routed_client(
-        ModelKind.VLM,
-        route,
+    return await _raw_ainvoke_with_retries(
+        default_vlm,
         args,
         config=config,
         schema_name=schema_name,
-        work_node=work_node,
+        kind=ModelKind.VLM,
     )

@@ -11,11 +11,10 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict
-from langchain_openai import ChatOpenAI
 
 
-from core.utils.config import settings, app_base_dir
-from core.utils.llm import InvokeOptions, default_llm, llm_invoke
+from core.utils.config import app_base_dir
+from core.utils.llm import InvokeOptions, llm_invoke
 
 
 @dataclass
@@ -91,8 +90,7 @@ CODE_QUALITY_REVIEW_SCHEMA = {
 
 
 class PatchReviewer:
-    def __init__(self, patch_path: str, llm=None):
-        self.llm = llm or default_llm
+    def __init__(self, patch_path: str):
         with open(patch_path, "r", encoding="utf-8") as f:
             self.patch_content = f.read()[:65536]
 
@@ -191,7 +189,6 @@ class PatchReviewer:
 """
 
         return await llm_invoke(
-            self.llm,
             [{"role": "user", "content": prompt}],
             InvokeOptions(json_schema=CODE_QUALITY_REVIEW_SCHEMA),
         )
@@ -232,7 +229,6 @@ class PatchReviewer:
 
         logging.debug("Invoking LLM for architecture review...")
         return await llm_invoke(
-            self.llm,
             [{"role": "user", "content": prompt}],
             InvokeOptions(json_schema=ARCHITECTURE_REVIEW_SCHEMA),
         )
@@ -286,9 +282,6 @@ async def main_async():
     parser = argparse.ArgumentParser(description="Professional Patch Review Tool")
     parser.add_argument("patch_file", help="Path to patch")
     parser.add_argument("--verbose", "-v", action="store_true")
-    parser.add_argument("--model", help="LLM Model")
-    parser.add_argument("--api-base", help="API Base URL")
-    parser.add_argument("--api-key", help="API Key")
 
     args = parser.parse_args()
     if args.verbose:
@@ -302,16 +295,7 @@ async def main_async():
             format="%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s"
         )
 
-    custom_llm = None
-    if args.model or args.api_base or args.api_key:
-        custom_llm = ChatOpenAI(
-            model=args.model or settings.DEFAULT_LLM_MODEL,
-            api_key=args.api_key or settings.DEFAULT_LLM_API_KEY,
-            base_url=args.api_base or settings.DEFAULT_LLM_API_BASE_URL,
-            timeout=600,
-        )
-
-    reviewer = PatchReviewer(args.patch_file, llm=custom_llm)
+    reviewer = PatchReviewer(args.patch_file)
     report = await reviewer.run_review()
     logging.info(format_text_report(report))
 

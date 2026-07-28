@@ -54,7 +54,7 @@ async def new_semantic_run_id(text: str, fallback_prefix: str = "research") -> s
     Falls back to <ts>_<fallback_prefix> on any LLM failure so run_id is always
     valid.
     """
-    from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
+    from core.utils.llm import llm_invoke
     from langchain.messages import HumanMessage
 
     ts = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
@@ -70,9 +70,7 @@ async def new_semantic_run_id(text: str, fallback_prefix: str = "research") -> s
     )
     try:
         response = await llm_invoke(
-            ModelRoute.DEFAULT,
             [HumanMessage(content=prompt)],
-            InvokeOptions(work_node="run_id_summary"),
         )
         summary = _sanitize_filename(response.strip())[:30]
         if summary and summary != "slide":

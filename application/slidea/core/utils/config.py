@@ -1,5 +1,4 @@
 import os
-import logging
 from pathlib import Path
 from typing import List, Literal, get_args, get_origin
 
@@ -44,11 +43,6 @@ except ImportError:  # pragma: no cover - optional dependency for stricter env p
 
 load_dotenv(dotenv_path=env_file, override=True)
 
-PREMIUM_LLM_DEFAULT_MODEL = "google/gemini-3.1-pro-preview"
-PREMIUM_LLM_DEFAULT_API_BASE_URL = "https://openrouter.ai/api/v1"
-SUPPORTED_SLIDEA_MODES = ("PREMIUM", "ECONOMIC")
-config_logger = logging.getLogger("slidea.config")
-
 
 class Settings(BaseSettings):
     """Application settings with an optional fallback BaseSettings implementation."""
@@ -64,19 +58,10 @@ class Settings(BaseSettings):
     # Relative paths resolve against app_base_dir.
     OUTPUT_DIR: str = ""
 
-    # Runtime routing mode
-    SLIDEA_MODE: str = "ECONOMIC"
-    MODEL_INVOKE_HANDOVER: bool = False
-
     # Default LLM Settings
     DEFAULT_LLM_MODEL: str = ""
     DEFAULT_LLM_API_KEY: str = ""
     DEFAULT_LLM_API_BASE_URL: str = ""
-
-    # Premium LLM Settings
-    PREMIUM_LLM_MODEL: str = PREMIUM_LLM_DEFAULT_MODEL
-    PREMIUM_LLM_API_KEY: str = ""
-    PREMIUM_LLM_API_BASE_URL: str = PREMIUM_LLM_DEFAULT_API_BASE_URL
 
     # Default VLM Settings
     DEFAULT_VLM_MODEL: str = ""
@@ -161,42 +146,9 @@ class Settings(BaseSettings):
     def has_tavily_search_config(self) -> bool:
         return bool(self.TAVILY_API_KEYS)
 
-    def get_slidea_mode(self) -> Literal["PREMIUM", "ECONOMIC"]:
-        raw_mode = str(self.SLIDEA_MODE or "").strip()
-        if not raw_mode:
-            config_logger.warning("SLIDEA_MODE is empty. Falling back to ECONOMIC mode.")
-            return "ECONOMIC"
-        if raw_mode in SUPPORTED_SLIDEA_MODES:
-            return raw_mode  # type: ignore[return-value]
-        raise ValueError(
-            f"Invalid SLIDEA_MODE={raw_mode!r}. Supported values: PREMIUM, ECONOMIC, or empty."
-        )
-
-    def should_handover_model_routing(self) -> bool:
-        return bool(self.MODEL_INVOKE_HANDOVER)
-
-    def missing_premium_llm_settings(self) -> List[str]:
-        if self.should_handover_model_routing():
-            return []
-
-        missing = []
-        if not self.PREMIUM_LLM_MODEL:
-            missing.append("PREMIUM_LLM_MODEL")
-        if not self.PREMIUM_LLM_API_KEY:
-            missing.append("PREMIUM_LLM_API_KEY")
-        if not self.PREMIUM_LLM_API_BASE_URL:
-            missing.append("PREMIUM_LLM_API_BASE_URL")
-        return missing
-
-    def has_premium_llm_config(self) -> bool:
-        return not self.missing_premium_llm_settings()
-
-    def has_premium_llm_api_key(self) -> bool:
-        return bool(self.PREMIUM_LLM_API_KEY)
-
     def missing_default_llm_settings(self) -> List[str]:
         missing = []
-        if not self.should_handover_model_routing() and not self.DEFAULT_LLM_MODEL:
+        if not self.DEFAULT_LLM_MODEL:
             missing.append("DEFAULT_LLM_MODEL")
         if not self.DEFAULT_LLM_API_KEY:
             missing.append("DEFAULT_LLM_API_KEY")
@@ -226,8 +178,6 @@ class Settings(BaseSettings):
 
 # Create settings instance
 settings = Settings()
-if not settings.should_handover_model_routing():
-    settings.get_slidea_mode()
 
 
 def _resolve_output_files_dir() -> str:

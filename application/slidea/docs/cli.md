@@ -109,7 +109,6 @@ Preflight checks include:
 - `SETUP_COMPLETED=true` in that `.env`,
 - use of the project `.venv` Python interpreter,
 - default LLM settings,
-- premium LLM settings when `SLIDEA_MODE=PREMIUM`,
 - Tavily availability for web search and image search,
 - default VLM settings,
 - embedding configuration for deep research.
@@ -119,7 +118,7 @@ The CLI also prints a human-readable preflight summary with warning/error lines 
 Blocking vs advisory behavior:
 
 - `env_setup` when `.env` is missing, and `default_llm`, are blocking checks.
-- `premium_llm`, `tavily`, `default_vlm`, and `embedding` are advisory warnings for agents.
+- `tavily`, `default_vlm`, and `embedding` are advisory warnings for agents.
 - `runtime_python` and incomplete `SETUP_COMPLETED` are advisory warnings and should not stop execution on their own.
 
 Possible top-level outcomes:
@@ -363,7 +362,7 @@ The current implementation runs the following observable steps:
 1. check or create the Python virtual environment,
 2. install Python dependencies from `requirements.txt`,
 3. ensure `.env` exists and write `SETUP_COMPLETED=true`,
-4. print post-install guidance for required model service configuration.
+4. print post-install guidance for the required default text-model configuration.
 
 ### Idempotent behavior
 

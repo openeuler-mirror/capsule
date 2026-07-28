@@ -10,7 +10,7 @@ from pydantic import TypeAdapter
 from core.utils.logger import logger
 from core.utils.config import app_base_dir, settings
 from core.ppt_generator.utils.common import get_web_images_content, build_image_url
-from core.utils.llm import InvokeOptions, ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_invoke
+from core.utils.llm import InvokeOptions, can_vlm_invoke, llm_invoke, vlm_invoke
 from core.utils.search import async_search
 from core.ppt_generator.utils.image import generate_ai_image, get_ai_images_content
 from core.ppt_generator.thought_to_ppt.state import PageType
@@ -197,7 +197,7 @@ async def extract_relevant_doc_node(state: ContentWorkerState):
 # 参考资料
 {page.reference_doc}
 """
-    response = await llm_invoke(ModelRoute.DEFAULT, [HumanMessage(content=prompt)])
+    response = await llm_invoke([HumanMessage(content=prompt)])
     return {"relevant_material": response}
 
 
@@ -264,7 +264,6 @@ async def generate_image_queries_node(state: ContentWorkerState):
 {relevant_material}
 """
     response = await llm_invoke(
-        ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
         InvokeOptions(pydantic_schema=ImageQueries),
     )
@@ -357,7 +356,6 @@ async def get_final_images_node(state: ContentWorkerState):
 """
     schema = TypeAdapter(List[str]).json_schema()
     img_list = await llm_invoke(
-        ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
         InvokeOptions(json_schema=schema),
     )
@@ -445,7 +443,7 @@ async def get_img_score_node(state: ImgScoreWorkerState):
         logger.debug(f"Error in get_img_score: {e} from img: {image_path}")
         return {"img_scores": [None]}
 
-    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
+    if not can_vlm_invoke():
         height, width = get_image_size(image_path)
         size = f"图片高度为{height}，宽度为{width}"
         # VLM 未配置是合法的预期场景（见 .env.example），不需要 WARNING 级别。
@@ -486,7 +484,6 @@ async def get_img_score_node(state: ImgScoreWorkerState):
 
     try:
         response_data = await vlm_invoke(
-            ModelRoute.DEFAULT,
             messages,
             InvokeOptions(pydantic_schema=ImageScoreResult),
         )

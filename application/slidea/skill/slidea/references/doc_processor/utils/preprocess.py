@@ -15,8 +15,7 @@ from core.utils.crawl import get_contents
 from core.utils.llm import (
     llm_invoke,
     vlm_invoke,
-    can_vlm_invoke_route,
-    ModelRoute,
+    can_vlm_invoke,
     InvokeOptions,
 )
 from core.utils.logger import logger
@@ -345,9 +344,8 @@ async def _judge_batch(images: list[dict], topic: str) -> list[dict | None]:
     msg = HumanMessage(content=content_parts)
     try:
         result = await vlm_invoke(
-            ModelRoute.DEFAULT,
             [msg],
-            InvokeOptions(json_schema=_BATCH_JUDGE_SCHEMA, work_node="image_relevance"),
+            InvokeOptions(json_schema=_BATCH_JUDGE_SCHEMA),
         )
     except Exception:
         return [None] * n
@@ -389,9 +387,8 @@ async def _judge_single(img: dict, topic: str) -> dict | None:
     ])
     try:
         return await vlm_invoke(
-            ModelRoute.DEFAULT,
             [msg],
-            InvokeOptions(json_schema=_SINGLE_JUDGE_SCHEMA, work_node="image_relevance"),
+            InvokeOptions(json_schema=_SINGLE_JUDGE_SCHEMA),
         )
     except Exception:
         return None
@@ -399,7 +396,7 @@ async def _judge_single(img: dict, topic: str) -> dict | None:
 
 async def _filter_images_by_topic(all_images: list, topic: str, output_dir: str,
                                   max_concurrency: int = 5) -> list:
-    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
+    if not can_vlm_invoke():
         return []
     os.makedirs(output_dir, exist_ok=True)
     total = len(all_images)
@@ -589,9 +586,8 @@ async def _summarize_one(chunk: dict, topic: str) -> dict | None:
     msg = HumanMessage(content=prompt)
     try:
         result = await llm_invoke(
-            ModelRoute.DEFAULT,
             [msg],
-            InvokeOptions(json_schema=_SummaryItem.model_json_schema(), work_node="summarize"),
+            InvokeOptions(json_schema=_SummaryItem.model_json_schema()),
         )
     except Exception:
         return None
@@ -711,7 +707,7 @@ async def preprocess(
     # 图片处理开关: 默认关闭(纯文本 PPT)。仅当调用方明确 enable_vlm=True
     # (用户要求用文档图片作插图)且环境配置了 VLM 时才真正启用;
     # 用户要开但环境没配 -> 降级关闭并记录,不报错。
-    if enable_vlm and not can_vlm_invoke_route(ModelRoute.DEFAULT):
+    if enable_vlm and not can_vlm_invoke():
         enable_vlm = False
         logger.warning("用户请求启用 VLM 图片筛选,但环境未配置 VLM 模型,自动降级为纯文本模式")
     if enable_vlm:

@@ -6,7 +6,7 @@ from langchain.messages import HumanMessage
 
 from core.ppt_generator.thought_to_ppt.svg_page_generators.state import TemplateResult
 from core.utils.config import app_base_dir
-from core.utils.llm import InvokeOptions, ModelRoute, llm_invoke
+from core.utils.llm import InvokeOptions, llm_invoke
 from core.utils.logger import logger
 
 
@@ -53,7 +53,6 @@ async def select_svg_template(query: str, outline: Any) -> str:
 }}
 """
     response = await llm_invoke(
-        ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
         InvokeOptions(pydantic_schema=TemplateResult),
     )

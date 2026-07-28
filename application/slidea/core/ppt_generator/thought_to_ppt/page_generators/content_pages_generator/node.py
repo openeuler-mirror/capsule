@@ -9,7 +9,7 @@ from pydantic import TypeAdapter
 from core.utils.logger import logger
 from core.utils.config import settings
 from core.ppt_generator.utils.common import get_web_images_content, build_image_url
-from core.utils.llm import InvokeOptions, ModelRoute, can_vlm_invoke_route, llm_invoke, vlm_invoke
+from core.utils.llm import InvokeOptions, can_vlm_invoke, llm_invoke, vlm_invoke
 from core.utils.search import async_search
 from core.ppt_generator.utils.image import generate_ai_image, get_ai_images_content
 from core.ppt_generator.thought_to_ppt.state import PageType
@@ -97,9 +97,7 @@ async def extract_relevant_doc_node(state: ContentWorkerState):
 {page.reference_doc}
 """
     response = await llm_invoke(
-        ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        InvokeOptions(work_node="extract_relevant_doc"),
     )
     return {"relevant_material": response}
 
@@ -133,9 +131,8 @@ async def generate_image_queries_node(state: ContentWorkerState):
 {state["relevant_material"]}
 """
     response = await llm_invoke(
-        ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        InvokeOptions(pydantic_schema=ImageQueries, work_node="generate_image_queries"),
+        InvokeOptions(pydantic_schema=ImageQueries),
     )
     if not response:
         response = ImageQueries(need_search_image=[], need_ai_image=[])
@@ -203,9 +200,8 @@ async def get_final_images_node(state: ContentWorkerState):
 """
     schema = TypeAdapter(List[str]).json_schema()
     img_list = await llm_invoke(
-        ModelRoute.DEFAULT,
         [HumanMessage(content=prompt)],
-        InvokeOptions(json_schema=schema, work_node="get_final_images"),
+        InvokeOptions(json_schema=schema),
     )
     if not img_list:
         img_list = []
@@ -261,11 +257,11 @@ async def get_img_score_node(state: ImgScoreWorkerState):
         logger.debug(f"Error in get_img_score: {e} from img: {image_path}")
         return {"img_scores": [None]}
 
-    if not can_vlm_invoke_route(ModelRoute.DEFAULT):
+    if not can_vlm_invoke():
         height, width = get_image_size(image_path)
         size = f"图片高度为{height}，宽度为{width}"
         logger.warning(
-            "No available VLM route for image scoring. Use a fallback image score without VLM analysis: "
+            "DEFAULT_VLM is not configured. Use a fallback image score without VLM analysis: "
             f"{image_path}"
         )
         return {"img_scores": [
@@ -297,9 +293,8 @@ async def get_img_score_node(state: ImgScoreWorkerState):
 
     try:
         response_data = await vlm_invoke(
-            ModelRoute.DEFAULT,
             messages,
-            InvokeOptions(pydantic_schema=ImageScoreResult, work_node="get_img_score"),
+            InvokeOptions(pydantic_schema=ImageScoreResult),
         )
 
         if not response_data or not response_data.img_description or not response_data.score:

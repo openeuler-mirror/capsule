@@ -5,7 +5,7 @@ import os
 
 from langchain_core.messages import HumanMessage
 
-from core.utils.llm import llm_invoke, ModelRoute, InvokeOptions
+from core.utils.llm import llm_invoke, InvokeOptions
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ async def score_images(topic: str, images: list, batch_size: int = 20,
             prompt = "\n".join(prompt_lines)
             try:
                 res = await llm_invoke(
-                    ModelRoute.DEFAULT, [HumanMessage(content=prompt)],
+                    [HumanMessage(content=prompt)],
                     InvokeOptions(json_schema={
                         "type": "object",
                         "properties": {
@@ -60,7 +60,7 @@ async def score_images(topic: str, images: list, batch_size: int = 20,
                             },
                         },
                         "required": ["scores"],
-                    }, work_node="place_images"),
+                    }),
                 )
             except Exception as ex:
                 logger.warning("llm_invoke failed during image scoring: %s", ex)

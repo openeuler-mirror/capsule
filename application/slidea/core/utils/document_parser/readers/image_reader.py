@@ -3,12 +3,12 @@ import io
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from core.utils.logger import logger
 from core.utils.document_parser.models import ParseResult, ImageInfo
 from core.utils.document_parser.config import ImageConfig
-from core.utils.llm import ModelRoute, can_vlm_invoke_route, vlm_raw_invoke
+from core.utils.llm import can_vlm_invoke, vlm_raw_invoke
 
 
 
@@ -18,7 +18,6 @@ _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", "
 class ImageReader:
     def __init__(self, config: ImageConfig):
         self.config = config
-        self.vlm_model: Optional[Any] = config.vlm_model
         self.output_dir = config.output_dir
 
     @staticmethod
@@ -34,7 +33,7 @@ class ImageReader:
             return ParseResult(text="", images=[], markdown_file="")
 
         description = ""
-        if can_vlm_invoke_route(ModelRoute.PREMIUM):
+        if can_vlm_invoke():
             description = await self._describe_image_via_vlm(file_path)
             logger.debug("ImageReader VLM 描述: {}", description)
         else:
@@ -82,7 +81,6 @@ class ImageReader:
             prompt = "请详细描述这张图片的内容。"
             logger.debug("ImageReader VLM 描述图片: {}", img_path)
             response = await vlm_raw_invoke(
-                ModelRoute.PREMIUM,
                 [
                     HumanMessage(
                         content=[
@@ -96,7 +94,6 @@ class ImageReader:
                         ]
                     )
                 ],
-                work_node="image_file_description",
             )
             return response.content
         except Exception as e:
