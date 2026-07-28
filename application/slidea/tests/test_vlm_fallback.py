@@ -53,8 +53,8 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
         image_module.generate_ai_image = Mock(return_value=None)
         image_module.get_ai_images_content = Mock(return_value=("", [], {}))
 
-        tavily_module = types.ModuleType("core.utils.tavily_search")
-        tavily_module.async_search = Mock(return_value=[])
+        search_module = types.ModuleType("core.utils.search")
+        search_module.async_search = Mock(return_value=[])
 
         json_repair_module = types.ModuleType("json_repair")
         json_repair_module.repair_json = repair_json
@@ -95,12 +95,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
         # the stubbed pydantic above can't satisfy.
         llm_module = types.ModuleType("core.utils.llm")
 
-        class ModelRoute:
-            DEFAULT = "default"
-            PREMIUM = "premium"
-
-        llm_module.ModelRoute = ModelRoute
-        llm_module.can_vlm_invoke_route = Mock(return_value=False)
+        llm_module.can_vlm_invoke = Mock(return_value=False)
 
         class InvokeOptions:
             def __init__(self, **kwargs):
@@ -145,7 +140,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
             "langchain_core.runnables": langchain_core_runnables_module,
             "core.ppt_generator.utils.common": common_module,
             "core.ppt_generator.utils.browser": browser_module,
-            "core.utils.tavily_search": tavily_module,
+            "core.utils.search": search_module,
             "core.utils.llm": llm_module,
             "core.ppt_generator.utils.image": image_module,
             "core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.graph": make_graph_module(
@@ -198,7 +193,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
                 "content": "<html>existing</html>",
             }
 
-            with patch.object(base_node, "can_vlm_invoke_route", return_value=False), patch.object(
+            with patch.object(base_node, "can_vlm_invoke", return_value=False), patch.object(
                 base_node.BrowserManager,
                 "get_browser_context",
                 side_effect=AssertionError("browser should not be used without VLM"),
@@ -228,7 +223,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
         with self._patched_optional_modules():
             page_node = self._import_fresh("core.ppt_generator.thought_to_ppt.page_generators.node")
 
-            with patch.object(page_node, "can_vlm_invoke_route", return_value=False):
+            with patch.object(page_node, "can_vlm_invoke", return_value=False):
                 result = await page_node.distribute_images_via_vlm({}, outline, "/tmp/images")
 
         self.assertEqual(result[0].reference_images, ["a.png", "b.png"])
@@ -266,7 +261,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
                     "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.node"
                 )
 
-                with patch.object(content_node, "can_vlm_invoke_route", return_value=False):
+                with patch.object(content_node, "can_vlm_invoke", return_value=False):
                     result = await content_node.get_img_score_node(
                         {
                             "relevant_material": "demo material",
@@ -282,7 +277,7 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(score["size"], "图片高度为10，宽度为20")
         self.assertEqual(score["image_path"], str(image_path))
 
-    async def test_modify_ppt_page_uses_premium_vlm_route_when_available(self):
+    async def test_modify_ppt_page_uses_default_vlm_when_available(self):
         with self._patched_optional_modules():
             base_node = self._import_fresh(
                 "core.ppt_generator.thought_to_ppt.page_generators.base_page_generator.node"
@@ -326,21 +321,21 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
                 "ppt_prompt": "demo prompt",
             }
 
-            with patch.object(base_node, "can_vlm_invoke_route", return_value=True), \
+            with patch.object(base_node, "can_vlm_invoke", return_value=True), \
                  patch.object(base_node, "llm_invoke", AsyncMock(return_value="页面摘要")), \
                  patch.object(
                      base_node,
                      "vlm_raw_invoke",
-                     AsyncMock(return_value=SimpleNamespace(content="```html\n<html>premium</html>\n```")),
+                     AsyncMock(return_value=SimpleNamespace(content="```html\n<html>default-vlm</html>\n```")),
                  ) as vlm_mock, \
                  patch.object(base_node, "wait_for_page_assets_ready", AsyncMock(return_value=None)), \
                  patch.object(base_node.BrowserManager, "get_browser_context", return_value=FakeBrowserContext()):
                 result = await base_node.modify_ppt_page_node(state)
 
-        self.assertEqual(result["content"], "<html>premium</html>")
-        self.assertEqual(vlm_mock.await_args.args[0], base_node.ModelRoute.PREMIUM)
+        self.assertEqual(result["content"], "<html>default-vlm</html>")
+        self.assertEqual(len(vlm_mock.await_args.args), 1)
 
-    async def test_distribute_images_via_vlm_runs_when_premium_route_is_available(self):
+    async def test_distribute_images_via_vlm_runs_when_default_vlm_is_available(self):
         outline = [
             PPTPage(
                 title="Page A",
@@ -354,14 +349,14 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
         with self._patched_optional_modules():
             page_node = self._import_fresh("core.ppt_generator.thought_to_ppt.page_generators.node")
 
-            with patch.object(page_node, "can_vlm_invoke_route", return_value=True), \
+            with patch.object(page_node, "can_vlm_invoke", return_value=True), \
                  patch.object(page_node, "detect_distribution_mode", return_value="global"), \
                  patch.object(page_node, "_process_global_mode", AsyncMock(return_value=None)) as process_mock:
                 await page_node.distribute_images_via_vlm({}, outline, "/tmp/images")
 
         process_mock.assert_awaited_once()
 
-    async def test_get_img_score_uses_premium_route_when_available(self):
+    async def test_get_img_score_uses_default_vlm_when_available(self):
         pil_module = types.ModuleType("PIL")
 
         class FakeImageFile:
@@ -399,11 +394,11 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
                     "core.ppt_generator.thought_to_ppt.page_generators.content_pages_generator.node"
                 )
 
-                with patch.object(content_node, "can_vlm_invoke_route", return_value=True), \
+                with patch.object(content_node, "can_vlm_invoke", return_value=True), \
                      patch.object(
                          content_node,
                          "vlm_invoke",
-                         AsyncMock(return_value=SimpleNamespace(img_description="premium description", score=8.2)),
+                         AsyncMock(return_value=SimpleNamespace(img_description="default VLM description", score=8.2)),
                      ) as vlm_mock:
                     result = await content_node.get_img_score_node(
                         {
@@ -414,9 +409,9 @@ class VlmFallbackTests(unittest.IsolatedAsyncioTestCase):
                     )
 
         score = result["img_scores"][0]
-        self.assertEqual(score["img_description"], "premium description")
+        self.assertEqual(score["img_description"], "default VLM description")
         self.assertEqual(score["score"], 8.2)
-        self.assertEqual(vlm_mock.await_args.args[0], content_node.ModelRoute.DEFAULT)
+        self.assertEqual(len(vlm_mock.await_args.args), 2)
 
 
 if __name__ == "__main__":

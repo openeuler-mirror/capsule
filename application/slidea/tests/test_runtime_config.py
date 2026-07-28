@@ -1,7 +1,3 @@
-import importlib
-import os
-import sys
-import types
 import unittest
 
 from core.utils.config import Settings
@@ -25,96 +21,27 @@ class RuntimeConfigTests(unittest.TestCase):
 
         self.assertFalse(settings.has_tavily_search_config())
 
-    def test_premium_defaults_are_present(self):
+    def test_default_llm_requires_all_fields(self):
         settings = Settings(
-            PREMIUM_LLM_MODEL="google/gemini-3.1-pro-preview",
-            PREMIUM_LLM_API_BASE_URL="https://openrouter.ai/api/v1",
+            DEFAULT_LLM_MODEL="text-model",
+            DEFAULT_LLM_API_KEY="",
+            DEFAULT_LLM_API_BASE_URL="",
         )
 
-        self.assertEqual(settings.PREMIUM_LLM_MODEL, "google/gemini-3.1-pro-preview")
-        self.assertEqual(settings.PREMIUM_LLM_API_BASE_URL, "https://openrouter.ai/api/v1")
+        self.assertEqual(
+            settings.missing_default_llm_settings(),
+            ["DEFAULT_LLM_API_KEY", "DEFAULT_LLM_API_BASE_URL"],
+        )
 
-    def test_slidea_mode_is_validated(self):
-        settings = Settings(SLIDEA_MODE="ECONOMIC")
-        self.assertEqual(settings.get_slidea_mode(), "ECONOMIC")
+    def test_default_vlm_requires_all_fields(self):
+        settings = Settings(
+            DEFAULT_VLM_MODEL="vision-model",
+            DEFAULT_VLM_API_KEY="vision-key",
+            DEFAULT_VLM_API_BASE_URL="https://vision.example/v1",
+        )
 
-        with self.assertRaises(ValueError):
-            Settings(SLIDEA_MODE="fast").get_slidea_mode()
-
-    def test_empty_slidea_mode_falls_back_to_economic_with_warning(self):
-        settings = Settings(SLIDEA_MODE="")
-
-        with self.assertLogs("slidea.config", level="WARNING") as logs:
-            mode = settings.get_slidea_mode()
-
-        self.assertEqual(mode, "ECONOMIC")
-        self.assertTrue(any("Falling back to ECONOMIC mode" in message for message in logs.output))
-
-    def test_model_handover_flag_controls_routing_mode(self):
-        self.assertFalse(Settings().should_handover_model_routing())
-        self.assertTrue(Settings(MODEL_INVOKE_HANDOVER=True).should_handover_model_routing())
-
-    def test_invalid_slidea_mode_fails_during_module_import(self):
-        def fake_load_dotenv(*args, **kwargs):
-            del args, kwargs
-            return False
-
-        original_mode = os.environ.get("SLIDEA_MODE")
-        original_dotenv = sys.modules.get("dotenv")
-        sys.modules.pop("core.utils.config", None)
-        os.environ["SLIDEA_MODE"] = "fast"
-        fake_dotenv = types.ModuleType("dotenv")
-        fake_dotenv.load_dotenv = fake_load_dotenv
-        sys.modules["dotenv"] = fake_dotenv
-
-        try:
-            with self.assertRaises(ValueError):
-                importlib.import_module("core.utils.config")
-        finally:
-            sys.modules.pop("core.utils.config", None)
-            if original_dotenv is None:
-                sys.modules.pop("dotenv", None)
-            else:
-                sys.modules["dotenv"] = original_dotenv
-            if original_mode is None:
-                os.environ.pop("SLIDEA_MODE", None)
-            else:
-                os.environ["SLIDEA_MODE"] = original_mode
-            importlib.import_module("core.utils.config")
-
-    def test_handover_skips_slidea_mode_validation_during_module_import(self):
-        def fake_load_dotenv(*args, **kwargs):
-            del args, kwargs
-            return False
-
-        original_mode = os.environ.get("SLIDEA_MODE")
-        original_handover = os.environ.get("MODEL_INVOKE_HANDOVER")
-        original_dotenv = sys.modules.get("dotenv")
-        sys.modules.pop("core.utils.config", None)
-        os.environ["SLIDEA_MODE"] = "fast"
-        os.environ["MODEL_INVOKE_HANDOVER"] = "true"
-        fake_dotenv = types.ModuleType("dotenv")
-        fake_dotenv.load_dotenv = fake_load_dotenv
-        sys.modules["dotenv"] = fake_dotenv
-
-        try:
-            module = importlib.import_module("core.utils.config")
-            self.assertTrue(module.settings.should_handover_model_routing())
-        finally:
-            sys.modules.pop("core.utils.config", None)
-            if original_dotenv is None:
-                sys.modules.pop("dotenv", None)
-            else:
-                sys.modules["dotenv"] = original_dotenv
-            if original_mode is None:
-                os.environ.pop("SLIDEA_MODE", None)
-            else:
-                os.environ["SLIDEA_MODE"] = original_mode
-            if original_handover is None:
-                os.environ.pop("MODEL_INVOKE_HANDOVER", None)
-            else:
-                os.environ["MODEL_INVOKE_HANDOVER"] = original_handover
-            importlib.import_module("core.utils.config")
+        self.assertEqual(settings.missing_default_vlm_settings(), [])
+        self.assertTrue(settings.has_default_vlm_config())
 
 
 if __name__ == "__main__":

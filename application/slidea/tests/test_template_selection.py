@@ -110,10 +110,6 @@ def _install_test_stubs():
     llm_module.default_llm = object()
     llm_module.default_vlm = object()
 
-    class ModelRoute:
-        DEFAULT = "default"
-        PREMIUM = "premium"
-
     async def llm_invoke(*_args, **_kwargs):
         raise AssertionError("test should patch llm_invoke")
 
@@ -123,10 +119,8 @@ def _install_test_stubs():
     async def vlm_invoke(*_args, **_kwargs):
         raise AssertionError("test should not call vlm_invoke")
 
-    def can_vlm_invoke_route(*_args, **_kwargs):
+    def can_vlm_invoke():
         return False
-
-    llm_module.ModelRoute = ModelRoute
 
     class InvokeOptions:
         def __init__(self, **kwargs):
@@ -134,7 +128,7 @@ def _install_test_stubs():
                 setattr(self, key, value)
 
     llm_module.InvokeOptions = InvokeOptions
-    llm_module.can_vlm_invoke_route = can_vlm_invoke_route
+    llm_module.can_vlm_invoke = can_vlm_invoke
     llm_module.llm_invoke = llm_invoke
     llm_module.raw_ainvoke = llm_invoke
     llm_module.vlm_raw_invoke = vlm_raw_invoke
@@ -231,7 +225,7 @@ class TemplateSelectionTests(unittest.IsolatedAsyncioTestCase):
             selected = await page_node.select_ppt_template("技术分享", "章节大纲")
 
         self.assertEqual(selected, "common_dark")
-        prompt = llm_mock.await_args.args[1][0].content
+        prompt = llm_mock.await_args.args[0][0].content
         self.assertIn("'name': 'common_light'", prompt)
         self.assertIn("适用于市场调研、技术洞察等专业分享场合，深色风格", prompt)
         self.assertNotIn("<!DOCTYPE html>", prompt)

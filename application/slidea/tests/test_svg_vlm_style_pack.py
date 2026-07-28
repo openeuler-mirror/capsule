@@ -60,7 +60,7 @@ class SVGStylePackVLMTests(unittest.IsolatedAsyncioTestCase):
             rejected = list((root / "style_generation_candidates").glob("*.svg"))
 
         self.assertEqual(invoke.await_count, 2)
-        retry_prompt = invoke.await_args_list[1].args[1][0].content
+        retry_prompt = invoke.await_args_list[1].args[0][0].content
         self.assertIn("Style-pack 合成门禁", retry_prompt)
         self.assertIn("retried body", update["content"])
         self.assertNotIn('<rect x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>', update["content"])
@@ -129,7 +129,7 @@ class SVGStylePackVLMTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(node, "vlm_raw_invoke", new=invoke):
                 update = await node.vlm_modify_node(state)
 
-        prompt_text = invoke.await_args.args[1][0].content[0]["text"]
+        prompt_text = invoke.await_args.args[0][0].content[0]["text"]
         self.assertIn("old body", prompt_text)
         self.assertNotIn("fixed footer", prompt_text)
         self.assertNotIn("data-slidea-style-shell", prompt_text)
@@ -163,7 +163,7 @@ class SVGStylePackVLMTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(node, "vlm_raw_invoke", new=invoke):
                 update = await node.vlm_modify_node(state)
 
-        prompt_text = invoke.await_args.args[1][0].content[0]["text"]
+        prompt_text = invoke.await_args.args[0][0].content[0]["text"]
         self.assertIn('<g id="header">', prompt_text)
         self.assertIn("old body", prompt_text)
         self.assertNotIn("固定外壳边界", prompt_text)

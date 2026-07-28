@@ -244,7 +244,7 @@ class StylePackTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([page.style_reference_id for page in outline], ["cover", "content"])
             self.assertTrue(all(Path(page.style_reference_svg).is_file() for page in outline))
             self.assertEqual(invoke.await_count, 2)
-            prompt = invoke.await_args_list[1].args[1][0].content
+            prompt = invoke.await_args_list[1].args[0][0].content
             self.assertIn("只根据页面类型、信息密度和版式结构选择", prompt)
             self.assertIn("三列并列卡片", prompt)
 

@@ -28,22 +28,6 @@ class PreflightTests(unittest.TestCase):
             ],
         )
 
-    def test_premium_llm_settings_are_reported_missing(self):
-        settings = Settings(
-            PREMIUM_LLM_MODEL="",
-            PREMIUM_LLM_API_KEY="",
-            PREMIUM_LLM_API_BASE_URL="",
-        )
-
-        self.assertEqual(
-            settings.missing_premium_llm_settings(),
-            [
-                "PREMIUM_LLM_MODEL",
-                "PREMIUM_LLM_API_KEY",
-                "PREMIUM_LLM_API_BASE_URL",
-            ],
-        )
-
     def test_default_vlm_is_optional(self):
         settings = Settings(
             DEFAULT_VLM_MODEL="",
@@ -53,55 +37,30 @@ class PreflightTests(unittest.TestCase):
 
         self.assertFalse(settings.has_default_vlm_config())
 
-    def test_model_handover_uses_default_llm_endpoint_without_other_model_settings(self):
-        settings = Settings(
-            MODEL_INVOKE_HANDOVER=True,
-            DEFAULT_LLM_MODEL="",
-            DEFAULT_LLM_API_KEY="key",
-            DEFAULT_LLM_API_BASE_URL="https://example.com/v1",
-            PREMIUM_LLM_MODEL="",
-            PREMIUM_LLM_API_KEY="",
-            PREMIUM_LLM_API_BASE_URL="",
-            DEFAULT_VLM_MODEL="",
-            DEFAULT_VLM_API_KEY="",
-            DEFAULT_VLM_API_BASE_URL="",
-        )
-
-        self.assertEqual(settings.missing_default_llm_settings(), [])
-        self.assertEqual(settings.missing_premium_llm_settings(), [])
-        self.assertFalse(settings.has_default_vlm_config())
-
-    def test_model_handover_preflight_ignores_premium_mode(self):
+    def test_preflight_reports_default_models_independently(self):
         from scripts.utils.preflight import run_preflight
 
         result = run_preflight(
             Settings(
-                MODEL_INVOKE_HANDOVER=True,
-                SLIDEA_MODE="PREMIUM",
-                DEFAULT_LLM_MODEL="",
+                DEFAULT_LLM_MODEL="text-model",
                 DEFAULT_LLM_API_KEY="key",
                 DEFAULT_LLM_API_BASE_URL="https://example.com/v1",
-                PREMIUM_LLM_MODEL="",
-                PREMIUM_LLM_API_KEY="",
-                PREMIUM_LLM_API_BASE_URL="",
+                DEFAULT_VLM_MODEL="",
+                DEFAULT_VLM_API_KEY="",
+                DEFAULT_VLM_API_BASE_URL="",
                 DISABLE_EMBEDDING=True,
             ),
             stages=["outline"],
             dry_run=True,
         )
 
-        self.assertEqual(
-            [item["name"] for item in result["checks"] if item["name"] == "premium_llm"],
-            [],
-        )
         default_checks = [item for item in result["checks"] if item["name"] == "default_llm"]
         self.assertEqual(default_checks[0]["status"], "ok")
-        self.assertEqual(
-            [item["name"] for item in result["checks"] if item["name"] == "default_vlm"],
-            [],
-        )
-        handover_checks = [item for item in result["checks"] if item["name"] == "model_handover"]
-        self.assertEqual(handover_checks[0]["status"], "ok")
+        vision_checks = [item for item in result["checks"] if item["name"] == "default_vlm"]
+        self.assertEqual(vision_checks[0]["status"], "warning")
+        self.assertIn("document image understanding", vision_checks[0]["message"])
+        self.assertIn("image scoring and distribution", vision_checks[0]["message"])
+        self.assertIn("slide review", vision_checks[0]["message"])
 
     def test_browser_preflight_reports_missing_playwright(self):
         from scripts.utils.preflight import check_browser_runtime
@@ -211,7 +170,6 @@ class PreflightTests(unittest.TestCase):
              patch("scripts.utils.preflight.check_libreoffice_runtime", return_value={"name": "libreoffice", "status": "warning", "message": "missing"}):
             result = run_preflight(
                 Settings(
-                    SLIDEA_MODE="ECONOMIC",
                     DEFAULT_LLM_MODEL="demo",
                     DEFAULT_LLM_API_KEY="key",
                     DEFAULT_LLM_API_BASE_URL="https://example.com",
@@ -242,7 +200,6 @@ class PreflightTests(unittest.TestCase):
         ) as libreoffice_check:
             result = run_preflight(
                 Settings(
-                    SLIDEA_MODE="ECONOMIC",
                     DEFAULT_LLM_MODEL="demo",
                     DEFAULT_LLM_API_KEY="key",
                     DEFAULT_LLM_API_BASE_URL="https://example.com",
@@ -279,7 +236,6 @@ class PreflightTests(unittest.TestCase):
              patch("scripts.utils.preflight.check_libreoffice_runtime", return_value={"name": "libreoffice", "status": "warning", "message": "libreoffice"}):
             result = run_preflight(
                 Settings(
-                    SLIDEA_MODE="ECONOMIC",
                     DEFAULT_LLM_MODEL="demo",
                     DEFAULT_LLM_API_KEY="key",
                     DEFAULT_LLM_API_BASE_URL="https://example.com",
@@ -303,29 +259,6 @@ class PreflightTests(unittest.TestCase):
                 "libreoffice",
             ],
         )
-
-    def test_preflight_reports_premium_warning_only_in_premium_mode(self):
-        from scripts.utils.preflight import run_preflight
-
-        result = run_preflight(
-            Settings(
-                SLIDEA_MODE="PREMIUM",
-                DEFAULT_LLM_MODEL="demo",
-                DEFAULT_LLM_API_KEY="key",
-                DEFAULT_LLM_API_BASE_URL="https://example.com",
-                PREMIUM_LLM_MODEL="",
-                PREMIUM_LLM_API_KEY="",
-                PREMIUM_LLM_API_BASE_URL="",
-                DISABLE_EMBEDDING=True,
-            ),
-            stages=["outline"],
-            dry_run=True,
-        )
-
-        premium_checks = [item for item in result["checks"] if item["name"] == "premium_llm"]
-        self.assertEqual(len(premium_checks), 1)
-        self.assertEqual(premium_checks[0]["status"], "warning")
-        self.assertIn("fall back", premium_checks[0]["message"].lower())
 
     def test_dry_run_uses_preflight_before_heavy_imports(self):
         env = os.environ.copy()
