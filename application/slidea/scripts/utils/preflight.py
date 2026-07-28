@@ -258,31 +258,6 @@ def run_preflight(
     else:
         checks.append(_result("default_llm", "ok", "Default LLM settings are configured."))
 
-    if not settings.should_handover_model_routing() and settings.get_slidea_mode() == "PREMIUM":
-        if not settings.has_premium_llm_api_key():
-            checks.append(
-                _result(
-                    "premium_llm",
-                    "warning",
-                    "Premium mode is enabled, but PREMIUM_LLM_API_KEY is empty. "
-                    "Runtime will fall back to ECONOMIC mode and use default models.",
-                )
-            )
-        else:
-            missing_premium = settings.missing_premium_llm_settings()
-            if missing_premium:
-                checks.append(
-                    _result(
-                        "premium_llm",
-                        "warning",
-                        "Premium mode is enabled, but PREMIUM_LLM settings are incomplete. "
-                        "Runtime will fall back to ECONOMIC mode and use default models: "
-                        + ", ".join(missing_premium),
-                    )
-                )
-            else:
-                checks.append(_result("premium_llm", "ok", "Premium LLM settings are configured."))
-
     if settings.has_tavily_search_config():
         checks.append(_result("tavily", "ok", "Tavily is configured for web search and image search."))
     else:
@@ -294,27 +269,20 @@ def run_preflight(
             )
         )
 
-    if settings.should_handover_model_routing():
+    missing_vlm = settings.missing_default_vlm_settings()
+    if missing_vlm:
         checks.append(
             _result(
-                "model_handover",
-                "ok",
-                "Model handover is enabled; text and vision requests use the DEFAULT_LLM endpoint.",
+                "default_vlm",
+                "warning",
+                "Missing default VLM settings: "
+                + ", ".join(missing_vlm)
+                + ". Visual analysis will be skipped, including document image "
+                "understanding, image scoring and distribution, and slide review.",
             )
         )
     else:
-        missing_vlm = settings.missing_default_vlm_settings()
-        if missing_vlm:
-            checks.append(
-                _result(
-                    "default_vlm",
-                    "warning",
-                    "Default VLM settings are not configured, so PPT reflection "
-                    "will be skipped, may increase layout anomalies.",
-                )
-            )
-        else:
-            checks.append(_result("default_vlm", "ok", "Default VLM settings are configured."))
+        checks.append(_result("default_vlm", "ok", "Default VLM settings are configured."))
 
     if settings.DISABLE_EMBEDDING:
         checks.append(
