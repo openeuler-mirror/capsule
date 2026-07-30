@@ -10,7 +10,7 @@ import asyncio
 import hashlib
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from PIL import Image
 
@@ -34,23 +34,27 @@ _SVG_USER_UNITS_PER_INCH = 96
 # so existing "images/<filename>" references in SVG/PPTX pipelines work
 # unchanged. The sha1 filename makes collisions essentially impossible.
 
+# Unicode ranges that mathtext cannot render. Keep this list data-driven so
+# is_cjk_contaminated stays a single-range loop instead of a long boolean OR.
+_CJK_CODE_RANGES = (
+    (0x3040, 0x30FF),   # Hiragana, Katakana
+    (0x3400, 0x4DBF),   # CJK Unified Ideographs Extension A
+    (0x4E00, 0x9FFF),   # CJK Unified Ideographs
+    (0xAC00, 0xD7AF),   # Hangul Syllables
+    (0xF900, 0xFAFF),   # CJK Compatibility Ideographs
+    (0xFF00, 0xFFEF),   # Halfwidth/Fullwidth (covers fullwidth Latin)
+)
+
 
 def is_cjk_contaminated(latex: str) -> bool:
     """Return True if the LaTeX source contains CJK characters that mathtext cannot render."""
     if not latex:
         return False
-    for ch in latex:
-        code = ord(ch)
-        if (
-            0x3040 <= code <= 0x30FF  # Hiragana, Katakana
-            or 0x3400 <= code <= 0x4DBF  # CJK Unified Ideographs Extension A
-            or 0x4E00 <= code <= 0x9FFF  # CJK Unified Ideographs
-            or 0xAC00 <= code <= 0xD7AF  # Hangul Syllables
-            or 0xF900 <= code <= 0xFAFF  # CJK Compatibility Ideographs
-            or 0xFF00 <= code <= 0xFFEF  # Halfwidth/Fullwidth (covers fullwidth Latin)
-        ):
-            return True
-    return False
+    return any(
+        low <= ord(ch) <= high
+        for ch in latex
+        for low, high in _CJK_CODE_RANGES
+    )
 
 
 def measure_png(path: str) -> tuple[int, int]:
@@ -62,7 +66,7 @@ def measure_png(path: str) -> tuple[int, int]:
     try:
         with Image.open(path) as img:
             return img.width, img.height
-    except (FileNotFoundError, OSError, ValueError) as e:
+    except (OSError, ValueError) as e:
         logger.warning(f"measure_png failed for {path}: {e}")
         return 0, 0
 
@@ -238,9 +242,9 @@ def append_formula_record_sync(run_dir: str, record: dict) -> None:
                     loaded = json.load(f)
                     if isinstance(loaded, list):
                         existing = loaded
-                except (json.JSONDecodeError, ValueError):
+                except ValueError:
                     existing = []
-        entry = {**record, "rendered_at": datetime.now().isoformat()}
+        entry = {**record, "rendered_at": datetime.now(timezone.utc).isoformat()}
         existing.append(entry)
         tmp_path = log_path + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:

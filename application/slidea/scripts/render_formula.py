@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -36,7 +37,12 @@ from core.ppt_generator.utils.formula import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 def main() -> int:
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+
     parser = argparse.ArgumentParser(
         description="Render one LaTeX formula to a transparent PNG for an existing slidea run.",
     )
@@ -67,7 +73,7 @@ def main() -> int:
 
     slides_dir = str(Path(args.out).expanduser().resolve())
     if not os.path.isdir(slides_dir):
-        sys.stderr.write(f"--out must be an existing directory: {slides_dir}\n")
+        logger.error("--out must be an existing directory: %s", slides_dir)
         return 2
 
     run_dir = os.path.dirname(slides_dir) or os.getcwd()
@@ -81,10 +87,11 @@ def main() -> int:
         )
     )
     if path is None or dims is None:
-        sys.stderr.write(
-            f"formula render failed for: {args.latex[:80]}\n"
+        logger.error(
+            "formula render failed for: %s\n"
             "Common causes: unsupported LaTeX syntax, CJK characters in source, "
-            "or write permission on the output directory.\n"
+            "or write permission on the output directory.",
+            args.latex[:80],
         )
         return 1
 
@@ -110,7 +117,7 @@ def main() -> int:
         "dpi": args.dpi,
         "relative_href": f"images/{Path(path).name}",
     }
-    print(json.dumps(payload, ensure_ascii=False))
+    logger.info(json.dumps(payload, ensure_ascii=False))
     return 0
 
 
