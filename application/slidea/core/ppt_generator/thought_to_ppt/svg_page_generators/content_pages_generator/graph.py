@@ -42,7 +42,10 @@ img_scoring_app = img_scoring_workflow.compile()
 def assign_img_score_workers(state: ContentWorkerState):
     reference_images = state["reference_images"]
     reference_image_descriptions = state.get("reference_image_descriptions") or {}
-    if not reference_images:
+    # 公式已在 get_final_images_node 里预填 img_scores（score=10.0），跳过 VLM worker。
+    formula_paths = set(state.get("formula_image_paths") or [])
+    candidate_images = [p for p in (reference_images or []) if p not in formula_paths]
+    if not candidate_images:
         return "extend_relevant_material"
 
     # 每页只提示一次：VLM 未配置时下游 worker 会走兜底打分（不调 VLM API）。
@@ -52,7 +55,7 @@ def assign_img_score_workers(state: ContentWorkerState):
     from core.utils.logger import logger
     from core.utils.llm import can_vlm_invoke
     if not can_vlm_invoke():
-        n_images = len(reference_images)
+        n_images = len(candidate_images)
         logger.info(
             f"VLM not configured; {n_images} reference image(s) will skip VLM scoring. "
             "Each image gets a fixed score of 5.0; path/dimensions/upstream descriptions are still collected. "
@@ -64,7 +67,7 @@ def assign_img_score_workers(state: ContentWorkerState):
                      "relevant_material": state["relevant_material"],
                      "image_path": image_path,
                      "image_description": reference_image_descriptions.get(image_path, ""),
-                 }) for image_path in reference_images]
+                 }) for image_path in candidate_images]
 
 
 content_worker_workflow = StateGraph(ContentWorkerState, output_schema=WorkerOutput)

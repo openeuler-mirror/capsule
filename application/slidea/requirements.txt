@@ -22,3 +22,4 @@ cairosvg
 Pillow>=10
 lxml>=5
 beautifulsoup4
+matplotlib>=3.7

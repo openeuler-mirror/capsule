@@ -32,6 +32,7 @@ from core.ppt_generator.thought_to_ppt.state import GeneratedPageResult, PPTPage
 class ImageQueries(BaseModel):
     need_search_image: List[str] = pydantic_field(default_factory=list, description="网络搜图的搜索关键词。")
     need_ai_image: List[str] = pydantic_field(default_factory=list, description="AI生图的Prompt。")
+    need_formula: List[str] = pydantic_field(default_factory=list, description="display 数学公式的 LaTeX 源码，例如 \\\\frac{a}{b}。")
 
 
 class ImageScoreResult(BaseModel):
@@ -71,6 +72,10 @@ class ContentWorkerState(TypedDict):
     reference_image_descriptions: Optional[dict[str, str]]
     need_search_image: Optional[List[str]]
     need_ai_image: Optional[List[str]]
+    need_formula: Optional[List[str]]
+    formula_image_paths: Optional[List[str]]
+    formula_image_sizes: Optional[dict[str, tuple[int, int]]]
+    formula_image_latex: Optional[dict[str, str]]
     img_content: Optional[str]
     img_scores: Annotated[List[Optional[ImageScore]], operator.add]
 
