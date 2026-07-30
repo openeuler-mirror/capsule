@@ -853,35 +853,6 @@
       </div>
     </div>
 
-    <!-- 优势 4：多模型组合降本增效 -->
-    <div class="feature flip reveal">
-      <div class="f-text">
-        <div class="f-num">04 / MULTI-MODEL ROUTING</div>
-        <h3>多模型组合，降本增效</h3>
-        <p>一份 PPT 的背后是几十次模型调用，但它们对质量的要求并不相同。Slidea 采用两层模型路由：绝大多数调用走性价比高的 DEFAULT_LLM，只有两个质量关键点在大纲主结构与 SVG 页面生成时才启用旗舰模型。</p>
-        <ul class="f-list">
-          <li>ECONOMIC 模式：全部走 DEFAULT_LLM，用低价模型也能完整跑通流水线</li>
-          <li>PREMIUM 模式：质量关键点优先 PREMIUM_LLM，调用失败自动回退 DEFAULT_LLM，不中断任务</li>
-          <li>可选服务缺失时优雅降级：没有搜索跳过搜索、没有 VLM 跳过视觉复核，永不整体失败</li>
-        </ul>
-      </div>
-      <div class="panel">
-        <div class="panel-title">两层模型路由 · 调用点分配</div>
-        <table class="route-table">
-          <thead>
-            <tr><th>调用环节</th><th>路由</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>需求解析 / 深度研究</td><td><span class="pill default">DEFAULT · 低价模型</span></td></tr>
-            <tr><td>大纲默认分支 / 页面生成</td><td><span class="pill default">DEFAULT · 低价模型</span></td></tr>
-            <tr><td>HTML 视觉复核</td><td><span class="pill default">DEFAULT · 低价模型</span></td></tr>
-            <tr><td>大纲主结构 ★ 质量关键</td><td><span class="pill premium">PREMIUM · 旗舰模型</span></td></tr>
-            <tr><td>SVG 页面生成 ★ 质量关键</td><td><span class="pill premium">PREMIUM · 旗舰模型</span></td></tr>
-          </tbody>
-        </table>
-        <div class="route-note">★ 仅 SLIDEA_MODE=PREMIUM 时启用，失败自动回退 DEFAULT_LLM</div>
-      </div>
-    </div>
   </div>
 </section>
 
@@ -981,8 +952,7 @@ https://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/sl
         <div class="snum">2</div>
         <h4>配置模型（.env）</h4>
         <p>最小可用配置只需一个 DEFAULT_LLM，OpenAI 兼容 API 即可。</p>
-        <div class="codeblock">SLIDEA_MODE=ECONOMIC
-DEFAULT_LLM_MODEL=deepseek-v4-pro
+        <div class="codeblock">DEFAULT_LLM_MODEL=deepseek-v4-pro
 DEFAULT_LLM_API_KEY=sk-...
 DEFAULT_LLM_API_BASE_URL=https://...</div>
       </div>
@@ -1192,22 +1162,6 @@ DEFAULT_LLM_API_BASE_URL=https://...</div>
       "原生可编辑": "native editable",
       "交互修改": "Interactive Edit",
       "就地编辑 SVG": "edit SVG in place",
-      "多模型组合，降本增效": "Multi-Model Routing: Higher Quality, Lower Cost",
-      "一份 PPT 的背后是几十次模型调用，但它们对质量的要求并不相同。Slidea 采用两层模型路由：绝大多数调用走性价比高的 DEFAULT_LLM，只有两个质量关键点在大纲主结构与 SVG 页面生成时才启用旗舰模型。": "Behind one deck are dozens of model calls — and they don't all need the same quality. Slidea uses two-tier routing: most calls go to the cost-effective DEFAULT_LLM, and only two quality-critical points — outline main structure and SVG page generation — engage the flagship model.",
-      "ECONOMIC 模式：全部走 DEFAULT_LLM，用低价模型也能完整跑通流水线": "ECONOMIC mode: everything runs on DEFAULT_LLM — the full pipeline works even on low-cost models",
-      "PREMIUM 模式：质量关键点优先 PREMIUM_LLM，调用失败自动回退 DEFAULT_LLM，不中断任务": "PREMIUM mode: quality-critical points prefer PREMIUM_LLM, with automatic fallback to DEFAULT_LLM on failure — the task never breaks",
-      "可选服务缺失时优雅降级：没有搜索跳过搜索、没有 VLM 跳过视觉复核，永不整体失败": "Graceful degradation when optional services are missing: no search skips search, no VLM skips visual review — the pipeline never fails outright",
-      "两层模型路由 · 调用点分配": "Two-Tier Model Routing · Callsite Allocation",
-      "调用环节": "Callsite",
-      "路由": "Route",
-      "需求解析 / 深度研究": "Parsing / Deep Research",
-      "大纲默认分支 / 页面生成": "Outline default branch / Page generation",
-      "HTML 视觉复核": "HTML visual review",
-      "大纲主结构 ★ 质量关键": "Outline main structure ★ quality-critical",
-      "SVG 页面生成 ★ 质量关键": "SVG page generation ★ quality-critical",
-      "DEFAULT · 低价模型": "DEFAULT · low-cost model",
-      "PREMIUM · 旗舰模型": "PREMIUM · flagship model",
-      "★ 仅 SLIDEA_MODE=PREMIUM 时启用，失败自动回退 DEFAULT_LLM": "★ Enabled only with SLIDEA_MODE=PREMIUM; falls back to DEFAULT_LLM on failure",
       "从一句话到 PPTX：六个阶段": "From One Sentence to PPTX: Six Stages",
       "每个阶段的产物都缓存在 output/<run_id>/ 下，可检查、可编辑、可恢复、可复用。": "Every stage's artifacts are cached under output/<run_id>/ — inspectable, editable, resumable, reusable.",
       "把自然语言请求解析为结构化需求，缺失关键信息时主动向你提问": "Parses natural-language requests into structured requirements, and asks you proactively when key info is missing",
@@ -1250,7 +1204,7 @@ DEFAULT_LLM_API_BASE_URL=https://...</div>
     document.documentElement.lang = "en";
     document.title = "Slidea — AI-Powered PPT Generation Skill";
     const meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.content = "Slidea is an AI-powered PPT generation Skill: PPTX template learning, built-in Deep Research, an interactive staged workflow, and multi-model routing for cost efficiency — one sentence produces a native, editable, professional PPT.";
+    if (meta) meta.content = "Slidea is an AI-powered PPT generation Skill: PPTX template learning, built-in Deep Research, an interactive staged workflow, and graceful degradation when optional services are missing — one sentence produces a native, editable, professional PPT.";
 
     const ctaH2 = document.querySelector(".cta-banner h2");
     if (ctaH2) {
