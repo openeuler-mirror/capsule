@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Slidea Cloud — 打开浏览器，一句话生成专业 PPT</title>
+<meta name="description" content="Slidea Cloud 是开源项目 Slidea 的在线版：无需安装任何环境，上传 PPTX 模板、一句话描述需求，自动完成研究、排版与渲染，导出原生可编辑的 PPTX。" />
+<link rel="icon" type="image/png" href="/site/assets/favicon.png" />
+<script>
+  // 前置主题判定：手动选择（localStorage，与开源站共享）优先，否则默认浅色；首屏渲染前设置，避免闪烁
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem("slidea-theme"); } catch (e) {}
+    if (t !== "light" && t !== "dark") t = "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  :root {
+    /* ===== 主题变量（默认浅色） ===== */
+    --bg: #f6f7f9;
+    --bg-soft: #ffffff;
+    --card: rgba(15, 23, 42, 0.028);
+    --border: rgba(15, 23, 42, 0.09);
+    --text: #161a20;
+    --muted: #5c6572;
+    --list-text: #3d4550;
+    --accent: #4f83ff;
+    --accent-soft: rgba(79, 131, 255, 0.10);
+    --green: #0d9668;
+    --radius: 12px;
+    --maxw: 1180px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace;
+    --nav-bg: rgba(255, 255, 255, 0.78);
+    --chrome-bg: #eef1f5;
+    --chrome-pill: rgba(15, 23, 42, 0.05);
+    --frame-border: rgba(15, 23, 42, 0.10);
+    --frame-shadow: 0 30px 70px rgba(15, 23, 42, 0.14);
+    --mb-shadow: 0 24px 60px rgba(15, 23, 42, 0.10);
+    --mb-shadow-hover: 0 32px 72px rgba(15, 23, 42, 0.15);
+    --glow-opacity: 0.5;
+    /* mirrorbrain 真实 UI 配色（浅色工作台）——与页面主题无关 */
+    --mb-bg: #ffffff;
+    --mb-side: #f8fafc;
+    --mb-border: #e2e8f0;
+    --mb-text: #0f172a;
+    --mb-sub: #64748b;
+    --mb-faint: #94a3b8;
+    --mb-bubble: #f1f5f9;
+    --mb-blue50: #eff6ff;
+    --mb-blue100: #dbeafe;
+    --mb-blue500: #3b82f6;
+    --mb-blue600: #2563eb;
+    --mb-blue700: #1d4ed8;
+    --mb-red: #ef4444;
+  }
+  html[data-theme="dark"] {
+    --bg: #0a0b0e;
+    --bg-soft: #0e1013;
+    --card: rgba(255, 255, 255, 0.025);
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #f2f4f7;
+    --muted: #99a0ab;
+    --list-text: #c6ccd6;
+    --accent-soft: rgba(79, 131, 255, 0.12);
+    --green: #34d399;
+    --nav-bg: rgba(10, 11, 14, 0.72);
+    --chrome-bg: #101216;
+    --chrome-pill: rgba(255, 255, 255, 0.05);
+    --frame-border: rgba(255, 255, 255, 0.11);
+    --frame-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
+    --mb-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+    --mb-shadow-hover: 0 38px 92px rgba(0, 0, 0, 0.62);
+    --glow-opacity: 1;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    line-height: 1.7;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+  ::selection { background: rgba(79, 131, 255, 0.3); }
+
+  /* ===== 背景光斑 ===== */
+  .glow {
+    position: fixed; border-radius: 50%; filter: blur(130px);
+    pointer-events: none; z-index: 0; opacity: var(--glow-opacity);
+  }
+  .glow-1 { width: 620px; height: 620px; background: rgba(79,131,255,.20); top: -200px; left: -140px; }
+  .glow-2 { width: 520px; height: 520px; background: rgba(139,92,246,.16); top: 32%; right: -180px; }
+  .glow-3 { width: 560px; height: 560px; background: rgba(34,150,220,.11); bottom: -220px; left: 28%; }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 28px; position: relative; z-index: 1; }
+
+  /* ===== 导航 ===== */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    background: var(--nav-bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    max-width: var(--maxw); margin: 0 auto; padding: 0 28px;
+    height: 60px; display: flex; align-items: center; gap: 32px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+  .logo-img { height: 30px; width: auto; }
+  .logo-word { height: 19px; width: auto; margin-top: -2px; }
+  .logo-img-foot { height: 24px; width: auto; opacity: .92; }
+  .logo-word-foot { height: 15px; width: auto; margin-top: -1px; opacity: .92; }
+  .cloud-badge {
+    font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    padding: 2px 9px; border-radius: 6px; color: #9db9ff;
+    background: var(--accent-soft); border: 1px solid rgba(79,131,255,.35);
+  }
+  html[data-theme="light"] .cloud-badge { color: #1d4ed8; }
+  .nav-links { display: flex; gap: 24px; margin-left: auto; font-size: 14px; color: var(--muted); }
+  .nav-links a { transition: color .15s; }
+  .nav-links a:hover { color: var(--text); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-radius: 8px; font-size: 14.5px; font-weight: 600;
+    cursor: pointer; border: none; transition: background .15s ease, border-color .15s ease, filter .15s ease, box-shadow .15s ease;
+  }
+  .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 8px 26px rgba(79,131,255,.32); }
+  .btn-primary:hover { filter: brightness(1.1); box-shadow: 0 10px 32px rgba(79,131,255,.42); }
+  .btn-ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--accent-soft); }
+  .btn-nav { padding: 7px 16px; font-size: 13.5px; }
+
+  /* ===== 主题切换按钮 ===== */
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 8px; flex: 0 0 auto;
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--muted); background: var(--card); }
+  .icon-btn svg { width: 16px; height: 16px; }
+  .nav-tools { display: flex; align-items: center; gap: 8px; }
+  .ic-sun { display: none; }
+  html[data-theme="light"] .ic-sun { display: block; }
+  html[data-theme="light"] .ic-moon { display: none; }
+
+  /* ===== Hero（居中式，与开源站双栏布局区分） ===== */
+  header.hero { padding: 158px 0 64px; position: relative; text-align: center; }
+  header.hero::before {
+    content: ""; position: absolute; top: -140px; left: 50%; transform: translateX(-50%);
+    width: 1040px; height: 540px; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(79,131,255,.13), transparent 62%);
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 14px; border-radius: 999px;
+    font-size: 12.5px; color: var(--muted);
+    background: var(--card); border: 1px solid var(--border);
+    margin-bottom: 26px;
+  }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  h1 { font-size: clamp(38px, 5.4vw, 64px); line-height: 1.12; font-weight: 700; letter-spacing: -.035em; }
+  h1 .hl { color: var(--accent); }
+  .hero-sub { margin: 24px auto 36px; color: var(--muted); font-size: 17px; max-width: 660px; }
+  .hero-cta { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .hero-stats {
+    display: flex; margin-top: 52px; flex-wrap: wrap; justify-content: center;
+    padding-top: 26px; border-top: 1px solid var(--border);
+    max-width: 860px; margin-left: auto; margin-right: auto;
+  }
+  .stat { padding: 0 34px; }
+  .stat + .stat { border-left: 1px solid var(--border); }
+  .stat .num { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+  /* ===== 通用区块 ===== */
+  section { padding: 96px 0; position: relative; }
+  .sec-head { margin-bottom: 64px; text-align: center; }
+  .sec-tag {
+    display: inline-block; font-family: var(--mono); font-size: 11.5px;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 16px;
+    padding: 4px 12px; border-radius: 999px;
+    background: var(--accent-soft); border: 1px solid rgba(79,131,255,.28);
+  }
+  h2 { font-size: clamp(26px, 3.2vw, 36px); font-weight: 700; letter-spacing: -.025em; line-height: 1.22; }
+  .sec-desc { color: var(--muted); margin: 16px auto 0; font-size: 16px; max-width: 560px; }
+
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.visible { opacity: 1; transform: none; }
+  .reveal-d1 { transition-delay: .15s; }
+
+  /* ===== 功能区块 ===== */
+  .feature { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; padding: 72px 0; border-top: 1px solid var(--border); }
+  .feature .mb { transition: transform .35s ease, box-shadow .35s ease; }
+  .feature .mb:hover { transform: translateY(-3px); box-shadow: var(--mb-shadow-hover); }
+  .feature.flip > .f-text { order: 1; }
+  .f-num { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; color: var(--accent); margin-bottom: 14px; }
+  .f-text h3 { font-size: clamp(21px, 2.4vw, 27px); font-weight: 700; letter-spacing: -.02em; margin-bottom: 14px; }
+  .f-text p { color: var(--muted); font-size: 15px; }
+  .f-list { list-style: none; margin-top: 22px; display: grid; gap: 10px; }
+  .f-list li { padding-left: 22px; position: relative; color: var(--list-text); font-size: 14px; }
+  .f-list li::before {
+    content: ""; position: absolute; left: 0; top: 8px;
+    width: 12px; height: 6px; border-left: 2px solid var(--green); border-bottom: 2px solid var(--green);
+    transform: rotate(-45deg);
+  }
+
+  /* ============================================================
+     mirrorbrain 真实工作台 UI 复刻（浅色，详见 .design-qa 截图）
+     ============================================================ */
+  .mb {
+    background: var(--mb-bg); color: var(--mb-text);
+    border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--frame-border);
+    box-shadow: var(--mb-shadow);
+    display: grid; grid-template-columns: 1fr 1.25fr;
+    min-height: 460px; font-size: 13px; line-height: 1.55;
+    text-align: left;
+  }
+  .mb.with-side { grid-template-columns: 168px 1fr 1.35fr; height: 681px; }
+  /* 渲染区高度 = 恰好两页幻灯片（2×帧高 295.5 + 间隙 10 + 上下内边距 28），其余页滚动查看 */
+  .mb.with-side .mb-scroll { max-height: 629px; }
+
+  /* 浏览器窗口外框（产品演示包裹） */
+  .app-frame {
+    border-radius: 16px; overflow: hidden; position: relative;
+    border: 1px solid var(--frame-border);
+    background: var(--bg-soft);
+    box-shadow: var(--frame-shadow);
+  }
+  .app-frame .mb { border: none; border-radius: 0; box-shadow: none; }
+  .app-chrome {
+    height: 38px; display: flex; align-items: center; gap: 7px; padding: 0 14px;
+    background: var(--chrome-bg); border-bottom: 1px solid var(--border);
+  }
+  .ch-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .ch-dot.r { background: #ff5f57; } .ch-dot.y { background: #febc2e; } .ch-dot.g { background: #28c840; }
+  .ch-url {
+    margin: 0 auto; font-size: 11.5px; color: var(--muted);
+    background: var(--chrome-pill); border: 1px solid var(--frame-border);
+    padding: 2px 16px; border-radius: 6px;
+  }
+  .demo-glow {
+    position: absolute; top: -80px; left: 50%; transform: translateX(-50%);
+    width: 920px; height: 440px; pointer-events: none; z-index: -1;
+    background: radial-gradient(ellipse at center, rgba(79,131,255,.15), transparent 65%);
+  }
+
+  /* —— 左侧会话栏 —— */
+  .mb-side {
+    background: var(--mb-side); border-right: 1px solid var(--mb-border);
+    display: flex; flex-direction: column; padding: 10px 10px 12px; gap: 2px;
+  }
+  .mb-newchat {
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 10px; border-radius: 8px; border: 1px solid var(--mb-border);
+    background: #fff; font-size: 12.5px; font-weight: 500; color: var(--mb-text);
+  }
+  .mb-newchat svg, .mb-search svg { width: 13px; height: 13px; color: var(--mb-sub); }
+  .mb-search {
+    display: flex; align-items: center; gap: 7px; padding: 7px 10px;
+    font-size: 12.5px; color: var(--mb-sub);
+  }
+  .mb-hist-label { font-size: 10.5px; color: var(--mb-faint); padding: 10px 10px 4px; }
+  .mb-hist {
+    display: flex; align-items: center; gap: 7px; padding: 6px 10px;
+    border-radius: 8px; font-size: 12px; color: var(--mb-sub);
+    white-space: nowrap; overflow: hidden;
+  }
+  .mb-hist svg { width: 13px; height: 13px; flex: 0 0 auto; }
+  .mb-hist span { overflow: hidden; text-overflow: ellipsis; }
+  .mb-hist.on { background: #e8edf3; color: var(--mb-text); }
+  .mb-hist time { margin-left: auto; font-size: 10.5px; color: var(--mb-faint); flex: 0 0 auto; }
+  .mb-user {
+    margin-top: auto; display: flex; align-items: center; gap: 8px;
+    padding: 7px 8px; border-top: 1px solid var(--mb-border);
+    font-size: 12px; color: var(--mb-text);
+  }
+  .mb-avatar {
+    width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto;
+    background: #0d9668; color: #fff; font-size: 9.5px; font-weight: 700;
+    display: grid; place-items: center;
+  }
+
+  /* —— 中间对话面板 —— */
+  .mb-chat { display: flex; flex-direction: column; min-width: 0; background: #fff; }
+  .mb-chat-head {
+    height: 40px; flex: 0 0 auto; border-bottom: 1px solid var(--mb-border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11.5px; color: var(--mb-faint); gap: 6px;
+  }
+  .mb-chat-head::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: #cbd5e1; }
+  .mb-msgs { flex: 1; padding: 16px 16px 12px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .mb-msg { max-width: 88%; }
+  .mb-msg.user {
+    align-self: flex-end; background: var(--mb-bubble);
+    border-radius: 12px; padding: 8px 12px; font-size: 12.5px; color: var(--mb-text);
+  }
+  .mb-msg.agent { align-self: flex-start; font-size: 12.5px; color: #334155; }
+  .mb-status {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 10.5px; color: var(--mb-faint);
+  }
+  .mb-status svg { width: 11px; height: 11px; }
+  .mb-filecard {
+    display: flex; align-items: center; gap: 9px; align-self: flex-start;
+    border: 1px solid var(--mb-border); border-radius: 10px;
+    padding: 8px 12px; font-size: 12.5px; color: var(--mb-text); background: #fff;
+    max-width: 100%;
+  }
+  .mb-filecard .fc-ic {
+    width: 26px; height: 26px; border-radius: 7px; flex: 0 0 auto;
+    background: var(--mb-blue50); color: var(--mb-blue700);
+    display: grid; place-items: center;
+  }
+  .mb-filecard .fc-ic svg { width: 14px; height: 14px; }
+  .mb-filecard small { display: block; font-size: 10.5px; color: var(--mb-faint); }
+  .mb-filecard .fc-act { margin-left: 10px; color: var(--mb-faint); flex: 0 0 auto; }
+  .mb-filecard .fc-act svg { width: 14px; height: 14px; }
+
+  /* 输入框与附件 */
+  .mb-composer { padding: 10px 14px 14px; }
+  .mb-chips { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .mb-chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--mb-border); border-radius: 9px; background: #fff;
+    padding: 5px 9px; font-size: 11.5px; color: var(--mb-text);
+  }
+  .mb-chip .cp-ic {
+    width: 20px; height: 20px; border-radius: 5px; flex: 0 0 auto;
+    background: var(--mb-blue50); color: var(--mb-blue700);
+    display: grid; place-items: center;
+  }
+  .mb-chip .cp-ic svg { width: 11px; height: 11px; }
+  .mb-chip .cp-x { color: var(--mb-faint); display: grid; place-items: center; }
+  .mb-chip .cp-x svg { width: 10px; height: 10px; }
+  .mb-chip .cp-bar { height: 3px; border-radius: 2px; background: var(--mb-blue100); overflow: hidden; width: 100%; margin-top: 4px; }
+  .mb-chip .cp-fill { height: 100%; width: 0; background: var(--mb-blue600); transition: width 1.6s cubic-bezier(.3,.6,.3,1); }
+  .mb-chip .cp-ok { color: #0d9668; display: none; }
+  .mb-chip.done .cp-ok { display: grid; }
+  .mb-chip.done .cp-x { display: none; }
+  .mb-chip .cp-ok svg { width: 12px; height: 12px; }
+  .mb-input {
+    border: 1px solid var(--mb-border); border-radius: 12px;
+    padding: 10px 12px; font-size: 12.5px; color: var(--mb-text);
+    display: flex; flex-direction: column; gap: 10px; background: #fff;
+  }
+  .mb-input .ip-text { min-height: 18px; color: var(--mb-text); }
+  .mb-input .ip-text.placeholder { color: var(--mb-faint); }
+  .mb-input .ip-bar { display: flex; align-items: center; gap: 10px; color: var(--mb-faint); }
+  .mb-input .ip-bar svg { width: 15px; height: 15px; }
+  .mb-send {
+    margin-left: auto; width: 24px; height: 24px; border-radius: 50%;
+    background: #eef2f7; display: grid; place-items: center; color: var(--mb-sub);
+  }
+  .mb-send svg { width: 13px; height: 13px; }
+  .mb-caret { display: inline-block; width: 1.5px; height: 13px; background: var(--mb-blue600); vertical-align: -2px; animation: mbblink 1s steps(1) infinite; }
+  @keyframes mbblink { 50% { opacity: 0; } }
+
+  /* —— 右侧 PPTX 工作台 —— */
+  .mb-stage { display: flex; flex-direction: column; min-width: 0; border-left: 1px solid var(--mb-border); background: #fff; }
+  .mb-topbar {
+    height: 52px; flex: 0 0 auto; border-bottom: 1px solid var(--mb-border);
+    display: flex; align-items: center; gap: 10px; padding: 0 14px;
+  }
+  .mb-file-ic {
+    width: 32px; height: 32px; border-radius: 9px; flex: 0 0 auto;
+    background: var(--mb-blue50); color: var(--mb-blue700);
+    box-shadow: inset 0 0 0 1px var(--mb-blue100);
+    display: grid; place-items: center;
+  }
+  .mb-file-ic svg { width: 16px; height: 16px; }
+  .mb-file-meta { min-width: 0; }
+  .mb-file-name {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12.5px; font-weight: 600; color: var(--mb-text);
+    white-space: nowrap; overflow: hidden;
+  }
+  .mb-file-name span:first-child { overflow: hidden; text-overflow: ellipsis; }
+  .mb-ext {
+    flex: 0 0 auto; border-radius: 5px; padding: 1px 6px;
+    background: var(--mb-blue50); color: var(--mb-blue700);
+    box-shadow: inset 0 0 0 1px var(--mb-blue100);
+    font-size: 10px; font-weight: 600;
+  }
+  .mb-file-sub {
+    display: flex; align-items: center; gap: 6px; margin-top: 1px;
+    font-size: 10.5px; color: var(--mb-sub); white-space: nowrap;
+  }
+  .mb-file-sub svg { width: 11px; height: 11px; }
+  .mb-file-sub .ok { color: var(--mb-blue500); display: inline-flex; align-items: center; gap: 3px; }
+  .mb-file-sub .ok svg { width: 11px; height: 11px; }
+  .mb-file-sub .dotsep { width: 3px; height: 3px; border-radius: 50%; background: #cbd5e1; }
+  .mb-actions { margin-left: auto; display: flex; gap: 2px; flex: 0 0 auto; }
+  .mb-icon-btn {
+    width: 26px; height: 26px; border-radius: 7px;
+    display: grid; place-items: center; color: var(--mb-sub);
+  }
+  .mb-icon-btn svg { width: 14px; height: 14px; }
+  .mb-icon-btn.hot { color: var(--mb-blue600); background: var(--mb-blue50); animation: mbpulse 1.6s ease infinite; }
+  @keyframes mbpulse { 50% { box-shadow: 0 0 0 5px rgba(59,130,246,.12); } }
+  .mb-scroll {
+    flex: 1; padding: 14px 16px; overflow-y: auto; overflow-x: hidden;
+    display: flex; flex-direction: column; gap: 10px; position: relative;
+    scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;
+    scroll-behavior: smooth;
+  }
+  .mb-scroll::-webkit-scrollbar { width: 6px; }
+  .mb-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  .mb-scroll::-webkit-scrollbar-track { background: transparent; }
+  .mb-scroll > * { flex: 0 0 auto; }
+  .mb-empty {
+    margin: auto; text-align: center; color: var(--mb-faint); font-size: 12px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .mb-empty .em-ic {
+    width: 40px; height: 40px; border-radius: 11px;
+    border: 1px solid var(--mb-border); background: var(--mb-side);
+    display: grid; place-items: center; color: var(--mb-faint);
+  }
+  .mb-empty .em-ic svg { width: 18px; height: 18px; }
+  .mb-frame {
+    border: 1.5px solid transparent; border-radius: 9px; padding: 4px;
+    transition: border-color .3s, background .3s, box-shadow .3s;
+  }
+  .mb-frame.on { border-color: var(--mb-blue500); background: var(--mb-blue50); }
+  .mb-frame.editing { border-color: var(--mb-blue600); background: var(--mb-blue50); box-shadow: 0 0 0 3px rgba(37,99,235,.18); }
+  .mb-slide-img { position: relative; border-radius: 5px; overflow: hidden; box-shadow: 0 10px 26px rgba(15,23,42,.14); }
+  .mb-slide-img img { width: 100%; display: block; }
+  .mb-slide-img .swap { position: absolute; inset: 0; opacity: 0; transition: opacity .6s ease; }
+  .mb-slide-img .swap.on { opacity: 1; }
+
+  /* 红圈圈选覆盖层（对应 svg-red-mark-overlay） */
+  .mb-redmark { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  .mb-redmark path {
+    fill: none; stroke: var(--mb-red); stroke-width: 4;
+    stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 100; stroke-dashoffset: 100;
+    transition: stroke-dashoffset 1.5s cubic-bezier(.4,.1,.4,1), opacity .5s;
+  }
+  .mb-redmark.draw path { stroke-dashoffset: 0; }
+  .mb-redmark.fade path { opacity: 0; }
+
+  /* PowerPoint 风格选中框（原生可编辑演示） */
+  .mb-selbox {
+    position: absolute; z-index: 6; pointer-events: none;
+    border: 1.5px dashed var(--mb-blue600); border-radius: 2px;
+    opacity: 0; transition: opacity .4s, transform .9s cubic-bezier(.3,.7,.3,1);
+  }
+  .mb-selbox.on { opacity: 1; }
+  .mb-selbox .hd {
+    position: absolute; width: 7px; height: 7px; background: #fff;
+    border: 1.5px solid var(--mb-blue600); border-radius: 1.5px;
+  }
+  .mb-selbox .hd.tl { left: -5px; top: -5px; } .mb-selbox .hd.t { left: calc(50% - 3.5px); top: -5px; } .mb-selbox .hd.tr { right: -5px; top: -5px; }
+  .mb-selbox .hd.l { left: -5px; top: calc(50% - 3.5px); } .mb-selbox .hd.r { right: -5px; top: calc(50% - 3.5px); }
+  .mb-selbox .hd.bl { left: -5px; bottom: -5px; } .mb-selbox .hd.b { left: calc(50% - 3.5px); bottom: -5px; } .mb-selbox .hd.br { right: -5px; bottom: -5px; }
+  .mb-cursor {
+    position: absolute; z-index: 7; width: 17px; height: 17px;
+    transition: transform .9s cubic-bezier(.3,.7,.3,1), opacity .3s;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,.3));
+  }
+  .mb-edtag {
+    position: absolute; z-index: 8;
+    font-family: var(--mono); font-size: 10px; letter-spacing: .03em;
+    color: var(--mb-blue700); background: rgba(255,255,255,.95);
+    border: 1px solid var(--mb-blue100); border-radius: 5px; padding: 2px 8px;
+    opacity: 0; transform: translateY(-4px);
+    transition: opacity .35s, transform .35s;
+    pointer-events: none;
+  }
+  .mb-edtag.on { opacity: 1; transform: none; }
+
+  /* 功能 3：纯幻灯片可编辑演示（不使用工作台 UI） */
+  .ppt-slide {
+    position: relative; border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--frame-border);
+    box-shadow: var(--frame-shadow);
+  }
+  .ppt-slide img { width: 100%; display: block; }
+  .ppt-badge {
+    position: absolute; right: 14px; bottom: 12px; z-index: 8;
+    font-size: 11.5px; color: var(--mb-blue700);
+    background: rgba(255,255,255,.95); border: 1px solid var(--mb-blue100);
+    border-radius: 999px; padding: 4px 12px;
+  }
+  .ppt-slide .swap { position: absolute; inset: 0; opacity: 0; transition: opacity .5s ease; }
+  .ppt-slide .swap.on { opacity: 1; }
+  /* 文字选中高亮（模拟拖选"大脑"二字） */
+  .ppt-txtsel {
+    position: absolute; z-index: 6; pointer-events: none;
+    background: rgba(37, 99, 235, .38); border-radius: 2px;
+    opacity: 0; transition: opacity .3s;
+  }
+  .ppt-txtsel.on { opacity: 1; }
+
+  /* 演示动画通用显隐 */
+  .anim { opacity: 0; transform: translateY(6px); transition: opacity .4s ease, transform .4s ease; }
+  .anim.show { opacity: 1; transform: none; }
+
+  /* 幻灯片帧：未出现时折叠为零高，出现时平滑撑开 —— 渲染区随每页出现逐步长高 */
+  .mb-frame.anim {
+    max-height: 0; padding-top: 0; padding-bottom: 0; overflow: hidden;
+    transition: max-height .6s ease, opacity .4s ease, transform .4s ease, padding .6s ease, border-color .3s, background .3s, box-shadow .3s;
+  }
+  .mb-frame.anim.show { max-height: 600px; padding-top: 4px; padding-bottom: 4px; }
+
+  /* ===== 底部 CTA ===== */
+  .cta-banner {
+    border-radius: 16px; padding: 72px 40px; text-align: center;
+    background: var(--bg-soft); border: 1px solid var(--border);
+    position: relative; overflow: hidden;
+  }
+  .cta-banner::before {
+    content: ""; position: absolute; top: -160px; left: 50%; transform: translateX(-50%);
+    width: 720px; height: 340px; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(79,131,255,.16), transparent 65%);
+  }
+  .cta-banner h2 { margin-bottom: 14px; }
+  .cta-banner p { color: var(--muted); margin-bottom: 32px; }
+
+  footer { padding: 48px 0 40px; border-top: 1px solid var(--border); }
+  .foot { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+  .foot a { transition: color .15s; }
+  .foot a:hover { color: var(--text); }
+  .foot .right { margin-left: auto; }
+
+  /* ===== 响应式 ===== */
+  @media (max-width: 1100px) {
+    .mb.with-side { grid-template-columns: 1fr 1.35fr; }
+    .mb.with-side .mb-side { display: none; }
+  }
+  @media (max-width: 960px) {
+    .feature { grid-template-columns: 1fr; }
+    .feature.flip > .f-text { order: 0; }
+    .nav-links { display: none; }
+    .nav-inner .nav-tools { margin-left: auto; }
+    .nav-inner .btn-nav { margin-left: 0; }
+    .mb, .mb.with-side { grid-template-columns: 1fr; min-height: 0; height: auto; }
+    .mb.with-side .mb-side { display: none; }
+    .mb-stage { border-left: none; border-top: 1px solid var(--mb-border); }
+    .mb-scroll, .mb.with-side .mb-scroll { max-height: 300px; }
+  }
+  @media (max-width: 560px) {
+    header.hero { padding-top: 126px; }
+    .stat { padding: 0 18px; }
+  }
+</style>
+</head>
+<body id="top">
+<div class="glow glow-1"></div>
+<div class="glow glow-2"></div>
+<div class="glow glow-3"></div>
+
+<!-- ============ 导航 ============ -->
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="#top"><img class="logo-img" src="/site/assets/logo-icon.png" alt="" /><img class="logo-word" src="/site/assets/logo-wordmark-dark.png" alt="Slidea" /><span class="cloud-badge">Cloud</span></a>
+    <div class="nav-links">
+      <a href="#demo">产品演示</a>
+      <a href="#features">功能</a>
+      <a href="/site/">开源项目</a>
+    </div>
+    <div class="nav-tools">
+      <button class="icon-btn js-theme-toggle" type="button" aria-label="切换深色 / 浅色外观" title="切换外观">
+        <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+        <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+    </div>
+    <a class="btn btn-primary btn-nav js-app-link" href="#" target="_blank" rel="noopener">进入在线体验 →</a>
+  </div>
+</nav>
+
+<!-- ============ Hero ============ -->
+<header class="hero">
+  <div class="wrap">
+    <div class="reveal">
+      <span class="badge"><span class="dot"></span>Slidea Cloud · 在线版</span>
+      <h1>打开浏览器，<br /><span class="hl">一句话生成专业 PPT</span></h1>
+      <p class="hero-sub">无需安装任何环境。上传模板、描述需求，剩下的交给 Slidea —— 从资料研究到排版渲染全自动完成，产出原生可编辑的 PPTX 文件。</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary js-app-link" href="#" target="_blank" rel="noopener">立即在线体验 →</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><div class="num">3 步</div><div class="lbl">上传模板 · 描述需求 · 导出成稿</div></div>
+        <div class="stat"><div class="num">任意</div><div class="lbl">PPTX 模板，即传即学</div></div>
+        <div class="stat"><div class="num">圈选式</div><div class="lbl">右键圈选，自然语言修改</div></div>
+        <div class="stat"><div class="num">100%</div><div class="lbl">原生可编辑 PPTX</div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 主产品演示：一次完整生成流程（真实工作台 UI） ============ -->
+<section id="demo" style="padding-top: 40px;">
+  <div class="wrap">
+    <div class="demo-glow" aria-hidden="true"></div>
+    <div class="app-frame reveal">
+      <div class="app-chrome" aria-hidden="true">
+        <span class="ch-dot r"></span><span class="ch-dot y"></span><span class="ch-dot g"></span>
+        <span class="ch-url">app.slidea.cloud · 工作空间</span>
+      </div>
+    <div class="mb with-side" id="demoApp">
+      <!-- 左侧会话栏 -->
+      <aside class="mb-side">
+        <div class="mb-newchat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          新会话
+        </div>
+        <div class="mb-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          搜索
+        </div>
+        <div class="mb-hist-label">历史会话</div>
+        <div class="mb-hist on">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span>LLM 与 AI Agent 工作原理</span><time>1 分钟</time>
+        </div>
+        <div class="mb-hist">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span>季度复盘演示</span><time>2 小时</time>
+        </div>
+        <div class="mb-user"><span class="mb-avatar">WQ</span>Workspace</div>
+      </aside>
+
+      <!-- 中间对话面板 -->
+      <div class="mb-chat">
+        <div class="mb-chat-head">工作空间</div>
+        <div class="mb-msgs">
+          <div class="mb-msg user anim" id="dUser">帮我生成一个 PPT，介绍 LLM 与 AI Agent 的工作原理，4 页左右，面向技术新人，信息密度要高。</div>
+          <div class="mb-msg agent anim" id="dStatus1">正在准备幻灯片和附件…</div>
+          <div class="mb-msg agent anim" id="dAgent">好的，已学习模板的配色与版式，先确认大纲：</div>
+          <div class="mb-msg agent anim" id="dOutline">大纲共 4 页：封面 → 目录 → LLM 训练三部曲 → AI Agent 体系</div>
+          <div class="mb-msg agent anim" id="dStatus2">正在并行渲染 4 个页面…</div>
+          <div class="mb-msg agent anim" id="dStatus3">正在聚合并导出 PPTX…</div>
+          <div class="mb-msg agent anim" id="dDone">已生成 4 页幻灯片，PPTX 已导出，可直接下载：</div>
+          <div class="mb-filecard anim" id="dCard">
+            <span class="fc-ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+            </span>
+            <div>LLM与AIAgent工作原理.pptx<small>PPTX · 原生可编辑</small></div>
+            <span class="fc-act">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            </span>
+          </div>
+        </div>
+        <div class="mb-composer">
+          <div class="mb-input">
+            <div class="ip-text placeholder">询问你的问题…</div>
+            <div class="ip-bar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              <span class="mb-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧 PPTX 工作台 -->
+      <div class="mb-stage">
+        <div class="mb-topbar anim" id="dTopbar">
+          <span class="mb-file-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+          </span>
+          <div class="mb-file-meta">
+            <div class="mb-file-name"><span>LLM与AIAgent工作原理.pptx</span><span class="mb-ext">PPTX</span></div>
+            <div class="mb-file-sub">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg>
+              <span id="dPageTotal">共 4 页</span>
+              <span class="dotsep"></span>
+              <span class="ok">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76z"/><path d="m9 12 2 2 4-4"/></svg>
+                <span id="dStageStatus">正在渲染预览</span>
+              </span>
+            </div>
+          </div>
+          <div class="mb-actions">
+            <span class="mb-icon-btn" id="dExport">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            </span>
+            <span class="mb-icon-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </span>
+          </div>
+        </div>
+        <div class="mb-scroll" id="dScroll">
+          <div class="mb-empty" id="dEmpty">
+            <span class="em-ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20"/></svg>
+            </span>
+            生成的 PPT 会实时渲染在这里
+          </div>
+          <div class="mb-frame anim" id="dS1"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-01.png" alt="第 1 页" /></div></div>
+          <div class="mb-frame anim" id="dS2"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-02.png" alt="第 2 页" /></div></div>
+          <div class="mb-frame anim" id="dS3"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-04.png" alt="第 3 页" /></div></div>
+          <div class="mb-frame anim" id="dS4"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-06.png" alt="第 4 页" /></div></div>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 功能 ============ -->
+<section id="features" style="padding-top: 24px;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">Features</span>
+      <h2>从上传到导出，每一步都看得见</h2>
+      <p class="sec-desc">开源引擎 Slidea 的完整能力，装进一个打开即用的在线工作台。</p>
+    </div>
+
+    <!-- 功能 1：上传 PPTX 模板 -->
+    <div class="feature reveal">
+      <div class="f-text">
+        <div class="f-num">01 / TEMPLATE</div>
+        <h3>上传 PPTX，它就是你的模板</h3>
+        <p>把公司的品牌模板或任何喜欢的 PPT 拖进来，Slidea 自动学习配色、字体与版式风格，之后生成的每一页都沿用这套视觉语言 —— 像交给一位看过你所有历史稿件的设计师。</p>
+        <ul class="f-list">
+          <li>拖拽上传即可，无需任何配置</li>
+          <li>风格与内容严格隔离，只学设计不带入原文</li>
+          <li>封面、目录、过渡页版式自动匹配</li>
+        </ul>
+      </div>
+      <div class="mb" id="upPanel">
+        <div class="mb-chat">
+          <div class="mb-chat-head">工作空间</div>
+          <div class="mb-msgs">
+            <div class="mb-msg user anim" id="uUser">参考这份模板的风格，做一份 LLM 与 AI Agent 的技术分享 PPT。</div>
+            <div class="mb-msg agent anim" id="uAgent">已学习模板的配色、字体与版式，新生成的页面将沿用这套视觉语言：</div>
+          </div>
+          <div class="mb-composer">
+            <div class="mb-chips">
+              <span class="mb-chip anim" id="uChip">
+                <span class="cp-ic">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                </span>
+                <span>学术模板.pptx
+                  <span class="cp-bar"><span class="cp-fill" id="uFill"></span></span>
+                </span>
+                <span class="cp-ok">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+                <span class="cp-x">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </span>
+              </span>
+            </div>
+            <div class="mb-input">
+              <div class="ip-text placeholder">询问你的问题…</div>
+              <div class="ip-bar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                <span class="mb-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mb-stage">
+          <div class="mb-topbar anim" id="uTopbar">
+            <span class="mb-file-ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+            </span>
+            <div class="mb-file-meta">
+              <div class="mb-file-name"><span>LLM与AIAgent工作原理.pptx</span><span class="mb-ext">PPTX</span></div>
+              <div class="mb-file-sub">
+                <span>共 2 页</span>
+                <span class="dotsep"></span>
+                <span class="ok">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76z"/><path d="m9 12 2 2 4-4"/></svg>
+                  就绪
+                </span>
+              </div>
+            </div>
+            <div class="mb-actions">
+              <span class="mb-icon-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              </span>
+            </div>
+          </div>
+          <div class="mb-scroll" id="uScroll">
+            <div class="mb-frame anim" id="uS1"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-01.png" alt="按模板风格生成的封面" /></div></div>
+            <div class="mb-frame anim" id="uS2"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-02.png" alt="按模板风格生成的目录页" /></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 功能 2：圈选交互修改 -->
+    <div class="feature flip reveal">
+      <div class="f-text">
+        <div class="f-num">02 / ANNOTATION EDITING</div>
+        <h3>右键圈一圈，改到你满意</h3>
+        <p>生成不是终点。在右侧预览区用鼠标右键圈出想改的地方，左侧输入修改意见 —— 改文案、换配色、调布局，页面实时更新，直到每一页都如你所想。</p>
+        <ul class="f-list">
+          <li>右键圈选任意区域，精准定位修改目标</li>
+          <li>自然语言描述修改意见，无需懂设计软件</li>
+          <li>所见即所得，修改立刻呈现并重新导出</li>
+        </ul>
+      </div>
+      <div class="mb" id="selPanel">
+        <div class="mb-chat">
+          <div class="mb-chat-head">工作空间</div>
+          <div class="mb-msgs">
+            <div class="mb-msg user anim" id="eUser">第 4 页圈选的部分，把底部横幅换成金色。</div>
+            <div class="mb-msg agent anim" id="eAgent">已更新第 4 页：底部结论横幅已换成金色，PPTX 已重新导出。</div>
+          </div>
+          <div class="mb-composer">
+            <div class="mb-input">
+              <div class="ip-text placeholder">询问你的问题…</div>
+              <div class="ip-bar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                <span class="mb-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mb-stage">
+          <div class="mb-topbar">
+            <span class="mb-file-ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+            </span>
+            <div class="mb-file-meta">
+              <div class="mb-file-name"><span>LLM与AIAgent工作原理.pptx</span><span class="mb-ext">PPTX</span></div>
+              <div class="mb-file-sub">
+                <span>共 4 页</span>
+                <span class="dotsep"></span>
+                <span class="ok">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76z"/><path d="m9 12 2 2 4-4"/></svg>
+                  <span id="eStatus">就绪</span>
+                </span>
+              </div>
+            </div>
+            <div class="mb-actions">
+              <span class="mb-icon-btn" id="eExport">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              </span>
+            </div>
+          </div>
+          <div class="mb-scroll">
+            <div class="mb-frame editing" id="eFrame">
+              <div class="mb-slide-img">
+                <img src="/cloud-site/assets/slides/page-04.png" alt="第 4 页" />
+                <img class="swap" id="eSwap" src="/cloud-site/assets/slides/page-04-edited.png" alt="修改后的第 4 页" />
+                <svg class="mb-redmark" id="eMark" viewBox="0 0 1281 720" preserveAspectRatio="none" aria-hidden="true">
+                  <path pathLength="100" vector-effect="non-scaling-stroke" d="M 62 599 C 60 576 320 564 640 564 C 960 564 1218 576 1220 599 C 1222 622 960 634 640 634 C 320 634 64 622 62 599 Z" />
+                </svg>
+                <svg class="mb-cursor" id="eCursor" viewBox="0 0 24 24" style="left:14%; top:74%; opacity:0;" aria-hidden="true">
+                  <path d="M4 2 L4 19.5 L8.6 15.3 L11.2 21.5 L13.8 20.5 L11.2 14.4 L17.5 14.4 Z" fill="#ffffff" stroke="#111318" stroke-width="1.4" stroke-linejoin="round"/>
+                </svg>
+                <span class="mb-edtag" id="eHint" style="left:16%; top:66%;">按住右键圈选</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 功能 3：原生可编辑导出 -->
+    <div class="feature reveal">
+      <div class="f-text">
+        <div class="f-num">03 / NATIVE PPTX</div>
+        <h3>导出的是真正的 PPT，可直接编辑</h3>
+        <p>预览什么样，导出的文件就是什么样。每一页都是原生可编辑的文本框、形状与图片 —— 在 PowerPoint / WPS 中打开，可以继续自由编辑每一个元素。</p>
+        <ul class="f-list">
+          <li>原生 PPTX 格式，兼容 PowerPoint 与 WPS</li>
+          <li>文本、形状全部是可编辑元素</li>
+          <li>预览渲染与导出文件 1:1 一致</li>
+        </ul>
+      </div>
+      <div class="ppt-demo" id="edtPanel">
+        <div class="ppt-slide">
+          <img src="/cloud-site/assets/slides/page-06.png" alt="Slidea 生成的 PPT 页面" />
+          <img class="swap" id="tSwap" src="/cloud-site/assets/slides/page-06-edited.png" alt="删除「大脑」二字后的 PPT 页面" />
+          <div class="ppt-txtsel" id="tTxtSel" style="left:29.6%; top:28.2%; width:3.4%; height:3.0%;"></div>
+          <svg class="mb-cursor" id="tCursor" viewBox="0 0 24 24" style="left:64%; top:60%; opacity:0;" aria-hidden="true">
+            <path d="M4 2 L4 19.5 L8.6 15.3 L11.2 21.5 L13.8 20.5 L11.2 14.4 L17.5 14.4 Z" fill="#ffffff" stroke="#111318" stroke-width="1.4" stroke-linejoin="round"/>
+          </svg>
+          <span class="mb-edtag" id="tTag" style="left:26%; top:19.5%;">原生可编辑</span>
+        </div>
+        <span class="ppt-badge">PowerPoint / WPS 可继续编辑</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section style="padding-top: 24px;">
+  <div class="wrap">
+    <div class="cta-banner reveal">
+      <h2>把下一份演示文稿交给 Slidea。</h2>
+      <p>打开浏览器就能开始 —— 无需安装，无需配置。</p>
+      <a class="btn btn-primary js-app-link" href="#" target="_blank" rel="noopener" style="font-size:15px; padding:12px 30px;">进入在线体验 →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Footer ============ -->
+<footer>
+  <div class="wrap foot">
+    <a class="logo" href="#top"><img class="logo-img-foot" src="/site/assets/logo-icon.png" alt="" /><img class="logo-word-foot" src="/site/assets/logo-wordmark-dark.png" alt="Slidea" /></a>
+    <span>Slidea Cloud · 由开源项目 Slidea 驱动</span>
+    <a href="https://gitcode.com/openeuler/capsule/tree/master/application/slidea" target="_blank" rel="noopener">GitCode</a>
+    <span class="right">AI 驱动的 PPT 生成 · 在线版</span>
+  </div>
+</footer>
+
+<script>
+  // ===== 主题切换（手动选择持久化并与开源站共享，默认浅色） =====
+  (function () {
+    const root = document.documentElement;
+    function theme() { return root.getAttribute("data-theme") === "dark" ? "dark" : "light"; }
+    function wordmarkSrc() {
+      return theme() === "light" ? "/site/assets/logo-wordmark-light.png" : "/site/assets/logo-wordmark-dark.png";
+    }
+    function swapWordmarks() {
+      const src = wordmarkSrc();
+      document.querySelectorAll("img.logo-word, img.logo-word-foot").forEach((im) => { im.src = src; });
+    }
+    function setTheme(t, persist) {
+      root.setAttribute("data-theme", t);
+      if (persist) { try { localStorage.setItem("slidea-theme", t); } catch (e) {} }
+      swapWordmarks();
+    }
+    const btn = document.querySelector(".js-theme-toggle");
+    if (btn) btn.addEventListener("click", () => setTheme(theme() === "light" ? "dark" : "light", true));
+    swapWordmarks();
+  })();
+
+  // ===== 在线体验地址（部署后替换为真实地址即可，全站按钮自动生效）=====
+  const APP_URL = "https://app.slidea.example.com/"; // TODO: 替换为真实在线体验地址
+  document.querySelectorAll(".js-app-link").forEach((a) => (a.href = APP_URL));
+
+  // ===== 滚动渐入动画 =====
+  const io = new IntersectionObserver(
+    (entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add("visible")),
+    { threshold: 0.12 }
+  );
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+  // ===== 通用循环驱动：滚动到可视区域才播放，离开则暂停并复位 =====
+  function makeLoop(root, run, reset) {
+    if (!root) return;
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach((e) => (e.isIntersecting ? run() : reset())),
+      { threshold: 0.3 }
+    );
+    observer.observe(root);
+  }
+
+  // ===== 主产品演示：一句话 → 逐页生成 → 导出 =====
+  (function () {
+    const root = document.getElementById("demoApp");
+    if (!root) return;
+    const $ = (id) => document.getElementById(id);
+    const slides = [$("dS1"), $("dS2"), $("dS3"), $("dS4")];
+    let timers = [];
+    function clearAll() { timers.forEach(clearTimeout); timers = []; }
+    function reset() {
+      clearAll();
+      ["dUser", "dStatus1", "dAgent", "dOutline", "dStatus2", "dStatus3", "dDone", "dCard", "dTopbar"].forEach((id) => $(id).classList.remove("show"));
+      slides.forEach((s) => s.classList.remove("show", "on"));
+      $("dEmpty").style.display = "";
+      $("dScroll").scrollTop = 0;
+      $("dStageStatus").textContent = "正在渲染预览";
+      $("dExport").classList.remove("hot");
+    }
+    function scrollBottom() {
+      const el = $("dScroll");
+      el.scrollTop = el.scrollHeight; // CSS scroll-behavior: smooth 负责平滑
+    }
+    function showSlide(i) {
+      $("dEmpty").style.display = "none";
+      slides[i].classList.add("show");
+      slides.forEach((s, j) => s.classList.toggle("on", j === i));
+      // 帧展开约 0.6s，期间连续跟滚，避免"出现后过一会才滚动"的卡顿感
+      scrollBottom();
+      timers.push(setTimeout(scrollBottom, 200));
+      timers.push(setTimeout(scrollBottom, 450));
+      timers.push(setTimeout(scrollBottom, 750));
+    }
+    function run() {
+      reset();
+      const T = (ms, fn) => timers.push(setTimeout(fn, ms));
+      T(400, () => $("dUser").classList.add("show"));
+      T(1300, () => $("dStatus1").classList.add("show"));
+      T(2100, () => { $("dAgent").classList.add("show"); $("dTopbar").classList.add("show"); });
+      T(2800, () => $("dOutline").classList.add("show"));
+      T(3600, () => $("dStatus2").classList.add("show"));
+      T(4400, () => showSlide(0));
+      T(5200, () => showSlide(1));
+      T(6000, () => showSlide(2));
+      T(6800, () => showSlide(3));
+      T(7600, () => $("dStatus3").classList.add("show"));
+      T(8400, () => {
+        $("dStageStatus").textContent = "就绪";
+        $("dExport").classList.add("hot");
+        $("dDone").classList.add("show");
+      });
+      T(9200, () => $("dCard").classList.add("show"));
+      T(16500, run);
+    }
+    makeLoop(root, run, reset);
+  })();
+
+  // ===== 功能 1 演示：上传模板 → 风格学习 → 品牌页生成 =====
+  (function () {
+    const root = document.getElementById("upPanel");
+    if (!root) return;
+    const $ = (id) => document.getElementById(id);
+    let timers = [];
+    function clearAll() { timers.forEach(clearTimeout); timers = []; }
+    function reset() {
+      clearAll();
+      ["uChip", "uUser", "uAgent", "uTopbar", "uS1", "uS2"].forEach((id) => $(id).classList.remove("show"));
+      $("uChip").classList.remove("done");
+      $("uFill").style.width = "0";
+      $("uS1").classList.remove("on");
+      $("uS2").classList.remove("on");
+      $("uScroll").scrollTop = 0;
+    }
+    function run() {
+      reset();
+      const T = (ms, fn) => timers.push(setTimeout(fn, ms));
+      T(400, () => $("uChip").classList.add("show"));
+      T(700, () => { $("uFill").style.width = "100%"; });
+      T(2500, () => $("uChip").classList.add("done"));
+      T(3100, () => $("uUser").classList.add("show"));
+      T(3900, () => { $("uAgent").classList.add("show"); $("uTopbar").classList.add("show"); });
+      T(4700, () => { $("uS1").classList.add("show"); $("uS1").classList.add("on"); });
+      T(5500, () => { $("uS2").classList.add("show"); $("uS1").classList.remove("on"); $("uS2").classList.add("on"); $("uScroll").scrollTop = $("uScroll").scrollHeight; });
+      T(5900, () => { $("uScroll").scrollTop = $("uScroll").scrollHeight; });
+      T(6300, () => { $("uScroll").scrollTop = $("uScroll").scrollHeight; });
+      T(11000, run);
+    }
+    makeLoop(root, run, reset);
+  })();
+
+  // ===== 功能 2 演示：右键圈选 → 修改意见上屏 → Agent 应用修改并重新导出 =====
+  (function () {
+    const root = document.getElementById("selPanel");
+    if (!root) return;
+    const $ = (id) => document.getElementById(id);
+    const cur = $("eCursor");
+    cur.style.transition = "left .08s linear, top .08s linear, opacity .3s";
+    let timers = [];
+    function clearAll() { timers.forEach(clearTimeout); timers = []; }
+    function reset() {
+      clearAll();
+      $("eMark").classList.remove("draw", "fade");
+      $("eSwap").classList.remove("on");
+      ["eUser", "eAgent"].forEach((id) => $(id).classList.remove("show"));
+      $("eStatus").textContent = "就绪";
+      $("eExport").classList.remove("hot");
+      $("eHint").classList.remove("on");
+      cur.style.opacity = "0";
+      cur.style.left = "14%";
+      cur.style.top = "74%";
+    }
+    function run() {
+      reset();
+      const T = (ms, fn) => timers.push(setTimeout(fn, ms));
+      // 1. 光标出现，提示"按住右键圈选"
+      T(500, () => { cur.style.opacity = "1"; $("eHint").classList.add("on"); });
+      // 2. 光标沿椭圆轨迹移动，同步画出红圈（约 1.5s）
+      T(1200, () => {
+        $("eHint").classList.remove("on");
+        $("eMark").classList.add("draw");
+        const steps = 30;
+        for (let i = 0; i <= steps; i++) {
+          T(1200 + (i / steps) * 1500, () => {
+            const th = Math.PI + (i / steps) * 2 * Math.PI;
+            cur.style.left = (50 + 45.1 * Math.cos(th)) + "%";
+            cur.style.top = (83.2 + 4.9 * Math.sin(th)) + "%";
+          });
+        }
+      });
+      // 3. 圈选完成 → 光标消失，修改意见直接出现在对话记录
+      T(2900, () => { cur.style.opacity = "0"; $("eUser").classList.add("show"); });
+      // 4. Agent 应用修改 → 页面更新、红圈淡出
+      T(3800, () => { $("eStatus").textContent = "正在应用修改..."; });
+      T(4600, () => {
+        $("eSwap").classList.add("on");
+        $("eMark").classList.add("fade");
+        $("eStatus").textContent = "有未导出修改";
+      });
+      // 5. 重新导出 → 完成回复
+      T(5800, () => { $("eStatus").textContent = "正在导出..."; $("eExport").classList.add("hot"); });
+      T(6600, () => { $("eStatus").textContent = "已导出"; $("eAgent").classList.add("show"); });
+      T(12500, run);
+    }
+    makeLoop(root, run, reset);
+  })();
+
+  // ===== 功能 3 演示：原生可编辑 —— 选中"大脑"二字并删除 =====
+  (function () {
+    const root = document.getElementById("edtPanel");
+    if (!root) return;
+    const $ = (id) => document.getElementById(id);
+    const cursor = $("tCursor");
+    cursor.style.transition = "left .9s cubic-bezier(.3,.7,.3,1), top .9s cubic-bezier(.3,.7,.3,1), opacity .3s, transform .9s cubic-bezier(.3,.7,.3,1)";
+    let timers = [];
+    function clearAll() { timers.forEach(clearTimeout); timers = []; }
+    function reset() {
+      clearAll();
+      $("tTxtSel").classList.remove("on");
+      $("tSwap").classList.remove("on");
+      $("tTag").classList.remove("on");
+      cursor.style.opacity = "0";
+      cursor.style.left = "64%";
+      cursor.style.top = "60%";
+      cursor.style.transform = "";
+    }
+    function run() {
+      reset();
+      const T = (ms, fn) => timers.push(setTimeout(fn, ms));
+      // 1. 光标出现，移动到"大脑"二字右侧
+      T(600, () => { cursor.style.opacity = "1"; });
+      T(1400, () => { cursor.style.left = "43.5%"; cursor.style.top = "29%"; });
+      // 2. 向左拖选，"大脑"二字出现选中高亮
+      T(2300, () => { cursor.style.left = "30%"; $("tTxtSel").classList.add("on"); });
+      // 3. 浮现"原生可编辑"标签
+      T(3100, () => $("tTag").classList.add("on"));
+      // 4. 标签与高亮消失
+      T(4100, () => { $("tTag").classList.remove("on"); $("tTxtSel").classList.remove("on"); });
+      // 5. 页面切换为仅"LLM"的版本
+      T(4700, () => { $("tSwap").classList.add("on"); cursor.style.opacity = "0"; });
+      T(9500, run);
+    }
+    makeLoop(root, run, reset);
+  })();
+</script>
+</body>
+</html>

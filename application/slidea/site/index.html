@@ -6,6 +6,17 @@
 <title>Slidea — AI 驱动的 PPT 生成 Skill</title>
 <meta name="description" content="Slidea 是一个 AI 驱动的 PPT 生成 Skill：PPTX 模板学习、内置 Deep Research、可交互的分阶段工作流、多模型组合降本增效，一句话生成原生可编辑的专业 PPT。" />
 <link rel="icon" type="image/png" href="/site/assets/favicon.png" />
+<script>
+  // 前置主题判定：手动选择（localStorage）优先，否则跟随系统；首屏渲染前设置，避免闪烁
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem("slidea-theme"); } catch (e) {}
+    if (t !== "light" && t !== "dark") {
+      t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
 <style>
   :root {
     --bg: #0a0b0e;
@@ -81,6 +92,21 @@
   .btn-ghost { background: rgba(255,255,255,.04); color: var(--text); border: 1px solid var(--border); }
   .btn-ghost:hover { background: rgba(255,255,255,.08); }
   .btn-nav { padding: 7px 16px; font-size: 13.5px; }
+
+  /* ===== 导航工具按钮（主题 / 语言切换） ===== */
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 8px; flex: 0 0 auto;
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--muted); background: var(--card); }
+  .icon-btn svg { width: 16px; height: 16px; }
+  .icon-btn-text { width: auto; padding: 0 10px; font-size: 12.5px; font-weight: 600; letter-spacing: .02em; }
+  .nav-tools { display: flex; align-items: center; gap: 8px; }
+  .ic-sun { display: none; }
+  html[data-theme="light"] .ic-sun { display: block; }
+  html[data-theme="light"] .ic-moon { display: none; }
 
   /* ===== Hero ===== */
   header.hero { padding: 160px 0 96px; position: relative; border-bottom: 1px solid var(--border); }
@@ -499,12 +525,61 @@
     .pipeline { grid-template-columns: repeat(2, 1fr); }
     .hero-visual { height: 340px; margin-top: 10px; }
     .nav-links { display: none; }
+    .nav-tools { margin-left: auto; }
   }
   @media (max-width: 560px) {
     .pipeline { grid-template-columns: 1fr; }
     header.hero { padding-top: 130px; }
     .hero-stats { gap: 22px; }
   }
+
+  /* ===== 浅色模式（手动切换或跟随系统，由 html[data-theme] 驱动）===== */
+  html[data-theme="light"] {
+    --bg: #f6f7f9;
+    --bg-soft: #ffffff;
+    --card: rgba(15, 25, 45, 0.03);
+    --border: rgba(15, 25, 45, 0.12);
+    --text: #161c26;
+    --muted: #5b6470;
+    --accent: #2f66e8;
+    --accent-soft: rgba(47, 102, 232, 0.10);
+  }
+  html[data-theme="light"] ::selection { background: rgba(47, 102, 232, 0.18); }
+  html[data-theme="light"] .glow-1 { background: rgba(79, 131, 255, .14); }
+  html[data-theme="light"] .glow-2 { background: rgba(139, 92, 246, .10); }
+  html[data-theme="light"] .glow-3 { background: rgba(34, 150, 220, .08); }
+  html[data-theme="light"] nav { background: rgba(246, 247, 249, 0.78); }
+  html[data-theme="light"] .badge { background: rgba(15, 25, 45, .04); }
+  html[data-theme="light"] .btn-ghost { background: rgba(15, 25, 45, .05); }
+  html[data-theme="light"] .btn-ghost:hover { background: rgba(15, 25, 45, .09); }
+  html[data-theme="light"] .hero-visual img { box-shadow: 0 20px 50px rgba(20, 40, 80, .16); }
+  html[data-theme="light"] .f-list li,
+  html[data-theme="light"] .tnode,
+  html[data-theme="light"] .route-table td,
+  html[data-theme="light"] .fl-node,
+  html[data-theme="light"] .pill.default { color: #3d4654; }
+  html[data-theme="light"] .tnode,
+  html[data-theme="light"] .fl-node { background: rgba(15, 25, 45, .03); }
+  html[data-theme="light"] .pill.default { background: rgba(15, 25, 45, .05); }
+  html[data-theme="light"] .gmodel { background: rgba(15, 25, 45, .05); }
+  html[data-theme="light"] .tconn::before,
+  html[data-theme="light"] .flow-conn { background: rgba(15, 25, 45, .16); }
+  html[data-theme="light"] .fl-arrow { color: rgba(15, 25, 45, .3); }
+  html[data-theme="light"] .flow-par-wrap { border-color: rgba(15, 25, 45, .18); background: rgba(15, 25, 45, .02); }
+  html[data-theme="light"] .pill.premium,
+  html[data-theme="light"] .fl-page,
+  html[data-theme="light"] .fly-token,
+  html[data-theme="light"] .fl-edit { color: #2f66e8; }
+  html[data-theme="light"] .codeblock { background: #eff1f5; color: #3d4654; }
+  html[data-theme="light"] .codeblock .prompt { color: #2f66e8; }
+  html[data-theme="light"] .mini-slide { border-color: rgba(15, 25, 45, .14); }
+  html[data-theme="light"] .tpl-arrow { color: rgba(15, 25, 45, .22); }
+  html[data-theme="light"] .ph-stream .tpl-arrow { color: rgba(47, 102, 232, .55); }
+  html[data-theme="light"] .fl-pptx,
+  html[data-theme="light"] .ph-ready .pg,
+  html[data-theme="light"] .ph-ready .tpl-status-text { color: #0d9668; }
+  html[data-theme="light"] #pipeline,
+  html[data-theme="light"] #quickstart { border-top-color: rgba(15, 25, 45, .08) !important; border-bottom-color: rgba(15, 25, 45, .08) !important; }
 </style>
 </head>
 <body>
@@ -523,7 +598,14 @@
       <a href="#quickstart">快速开始</a>
       <a href="https://gitcode.com/openeuler/capsule/tree/master/application/slidea" target="_blank" rel="noopener">开源仓库</a>
     </div>
-    <a class="btn btn-primary btn-nav js-demo-link" href="#" target="_blank" rel="noopener" style="margin-left:auto;">在线体验 →</a>
+    <div class="nav-tools">
+      <button class="icon-btn js-theme-toggle" type="button" aria-label="切换深色 / 浅色外观" title="切换外观">
+        <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+        <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn icon-btn-text js-lang-toggle" type="button" aria-label="切换语言 / Switch language" title="切换语言 / Switch language">EN</button>
+    </div>
+    <a class="btn btn-primary btn-nav js-demo-link" href="#" target="_blank" rel="noopener">在线体验 →</a>
   </div>
 </nav>
 
@@ -938,7 +1020,7 @@ DEFAULT_LLM_API_BASE_URL=https://...</div>
 
 <script>
   // ===== 在线体验地址（部署后替换为真实地址即可，全站按钮自动生效）=====
-  const DEMO_URL = "https://slidea-demo.example.com/";
+  const DEMO_URL = "/cloud-site/";
   document.querySelectorAll(".js-demo-link").forEach((el) => (el.href = DEMO_URL));
 
   // ===== 滚动渐入动画 =====
@@ -978,6 +1060,225 @@ DEFAULT_LLM_API_BASE_URL=https://...</div>
       { threshold: 0.25 }
     );
     observer.observe(stage);
+  })();
+</script>
+
+<script>
+  // ===== 主题切换（手动优先，未手动时跟随系统） =====
+  (function () {
+    const root = document.documentElement;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    function theme() { return root.getAttribute("data-theme") === "light" ? "light" : "dark"; }
+    function wordmarkSrc() {
+      return theme() === "light" ? "/site/assets/logo-wordmark-light.png" : "/site/assets/logo-wordmark-dark.png";
+    }
+    function swapWordmarks() {
+      const src = wordmarkSrc();
+      document.querySelectorAll("img.logo-word, img.logo-word-foot, img.h2-word").forEach((im) => { im.src = src; });
+    }
+    function setTheme(t, persist) {
+      root.setAttribute("data-theme", t);
+      if (persist) { try { localStorage.setItem("slidea-theme", t); } catch (e) {} }
+      swapWordmarks();
+    }
+    const btn = document.querySelector(".js-theme-toggle");
+    if (btn) btn.addEventListener("click", () => setTheme(theme() === "light" ? "dark" : "light", true));
+    if (mq.addEventListener) mq.addEventListener("change", (e) => {
+      let saved = null;
+      try { saved = localStorage.getItem("slidea-theme"); } catch (err) {}
+      if (saved !== "light" && saved !== "dark") setTheme(e.matches ? "light" : "dark", false);
+    });
+    swapWordmarks();
+    window.__slideaWordmarkSrc = wordmarkSrc;
+  })();
+
+  // ===== 中英文切换（手动选择优先，默认按浏览器语言，非中文自动切英文） =====
+  (function () {
+    let savedLang = null;
+    try { savedLang = localStorage.getItem("slidea-lang"); } catch (e) {}
+    const isZh = savedLang === "zh" || savedLang === "en"
+      ? savedLang === "zh"
+      : (navigator.language || "zh").toLowerCase().startsWith("zh");
+    const langBtn = document.querySelector(".js-lang-toggle");
+    if (langBtn) {
+      langBtn.textContent = isZh ? "EN" : "中文";
+      langBtn.addEventListener("click", () => {
+        try { localStorage.setItem("slidea-lang", isZh ? "en" : "zh"); } catch (e) {}
+        location.reload();
+      });
+    }
+    if (isZh) return;
+    const ZH2EN = {
+      "核心优势": "Features",
+      "工作流": "Pipeline",
+      "生成样例": "Examples",
+      "快速开始": "Quickstart",
+      "开源仓库": "Open Source",
+      "开源仓库（GitCode）": "Open Source (GitCode)",
+      "在线体验 →": "Try Online →",
+      "文档": "Docs",
+      "AI 驱动的 PPT 生成 Skill · 面向 Agent 场景": "AI-Powered PPT Generation Skill · Built for Agent Workflows",
+      "一句话，生成一份": "One sentence in,",
+      "原生可编辑的专业 PPT": "a native, editable, professional PPT out",
+      "Slidea 将高层次的演示需求转化为结构化研究材料、写作思路与幻灯片大纲，逐页渲染为 SVG，最终导出可在 PowerPoint / WPS 中继续编辑的原生 PPTX。分阶段、可中断、可续跑，为 Agent 驱动的工作流而生。": "Slidea turns a high-level presentation request into structured research, a writing plan, and a slide outline, renders every page as SVG, and exports a native PPTX you can keep editing in PowerPoint / WPS. Staged, interruptible, resumable — built for agent-driven workflows.",
+      "立即在线体验 →": "Try It Online →",
+      "查看生成样例": "View Examples",
+      "内置模板，支持上传 PPTX 学习": "built-in templates; learns from any uploaded PPTX",
+      "研究模式": "research modes",
+      "模型路由降本增效": "model-routing tiers for cost efficiency",
+      "原生可编辑 PPTX": "native editable PPTX",
+      "Wuthering Heights 样例": "Wuthering Heights example deck",
+      "AI Agent 介绍样例": "AI Agent intro example deck",
+      "SIGOPS 60 周年样例": "SIGOPS 60th anniversary example deck",
+      "为什么是": "Why",
+      "从“会写内容”到“会做演示”——Slidea 在模板、研究、流程与成本四个维度上，把 PPT 生成做成一条可靠、可控、可负担的工程化流水线。": "From “writing content” to “crafting presentations” — across templates, research, workflow, and cost, Slidea turns PPT generation into a reliable, controllable, affordable engineering pipeline.",
+      "PPTX 模板学习能力": "PPTX Template Learning",
+      "给 Slidea 一份你现有的品牌 PPT，它能把参考稿转换为一组 SVG 素材，并由 Agent 直接阅读 SVG 源码，提炼出跨页的设计语法——配色与字体规则、圆角与描边语言、文本容器用法、图片与留白的节奏，形成一份 Style Pack。": "Give Slidea one of your existing brand decks: it converts the reference into a set of SVG assets that the Agent reads directly, distilling the cross-page design grammar — color and typography rules, corner-radius and stroke language, text-container usage, and the rhythm of imagery and whitespace — into a Style Pack.",
+      "按页面类型 / 密度 / 结构自动匹配参考页（style_reference_id），封面、目录、过渡页、致谢页各归其位": "Automatically matches reference pages by page type / density / structure (style_reference_id) — cover, TOC, separator, and closing pages each find their place",
+      "生成后自动还原参考稿的背景、母版、Logo、页眉页脚与页码格式": "After generation, it restores the reference's background, master, logo, header/footer, and page-number format",
+      "样式与内容严格隔离：参考 PPTX 只提供视觉风格，绝不混入原文内容": "Style and content are strictly isolated: the reference PPTX contributes visuals only — never its original text",
+      "内置浅色通用、深色通用、红色政治、蓝色学术、幼小科普、中文艺术、英文艺术 7 套模板，随主题自动选择": "7 built-in templates (light, dark, red-formal, blue-academic, kids-science, Chinese-art, English-art), auto-selected by topic",
+      "模板学习 · 真实示例（cute.pptx → style-pack.json）": "Template Learning · Real Example (cute.pptx → style-pack.json)",
+      "cute.pptx · 25 页": "cute.pptx · 25 slides",
+      "直角色块 · 波点纹理": "flat blocks · dot texture",
+      "标题 Archivo Black 60px · 致谢 128px": "Title Archivo Black 60px · Thanks 128px",
+      "正文 Didact Gothic 33px · 藏青 #021324": "Body Didact Gothic 33px · Navy #021324",
+      "奶油底 #F5F0EA + 20% 纹理 + 白色波点": "Cream #F5F0EA + 20% texture + white dots",
+      "读取 cute.pptx…": "Reading cute.pptx…",
+      "读取 cute.pptx · 25 页转换为 SVG 素材…": "Reading cute.pptx · converting 25 slides to SVG assets…",
+      "Agent 阅读 SVG 源码，提炼跨页设计语法…": "Agent reads SVG source, distilling cross-page design grammar…",
+      "设计元素分解传输中…": "Decomposing and transferring design elements…",
+      "写入配色 / 纹理 / 字体 / 排版规则…": "Writing color / texture / typography / layout rules…",
+      "✓ Style Pack 完成 · 新 PPT 将按此模板渲染": "✓ Style Pack ready · new decks will render with this template",
+      "内置 Deep Research 深度研究": "Built-in Deep Research",
+      "宽泛的主题不需要你先去查资料。Slidea 内置递归式研究引擎：把“写一份深度报告”拆解为任务树，逐节点检索证据、局部写作、评审缺口并收敛，最终产出结构化研究报告，直接供大纲阶段消费。": "Broad topics require no prep work from you. Slidea's built-in recursive research engine breaks “write a deep report” into a task tree — retrieving evidence, drafting locally, reviewing gaps, and converging node by node — and delivers a structured research report that feeds the outlining stage directly.",
+      "任务树分解：先生成章节主干，再对重点章节渐进细化，算力花在刀刃上": "Task-tree decomposition: build the chapter skeleton first, then progressively refine key sections — compute goes where it matters",
+      "章节级局部上下文（Local RAG）：每章只读与自己相关的证据，避免上下文污染与内容重复": "Chapter-level local context (Local RAG): each chapter reads only its own evidence, avoiding context pollution and repetition",
+      "规划—评审—执行收敛循环：不信任第一版提纲，主动发现缺口并修正": "Plan–review–execute convergence loop: never trusts the first outline — gaps are found and fixed proactively",
+      "三档研究模式：skip（已有材料）/ simple（联网快搜）/ deep（20–30 分钟深度洞察）": "Three research modes: skip (have material) / simple (quick web search) / deep (20–30 min deep insight)",
+      "Deep Research · 任务树收敛": "Deep Research · Task-Tree Convergence",
+      "研究主题：AI Agent 技术发展趋势": "Topic: AI Agent technology trends",
+      "基本原理": "Fundamentals",
+      "主流框架": "Frameworks",
+      "挑战与进展": "Challenges & Progress",
+      "证据检索": "Evidence Retrieval",
+      "章节写作": "Section Drafting",
+      "缺口评审": "Gap Review",
+      "再分解": "Re-decompose",
+      "plan → select → process → review，循环收敛为结构化研究报告": "plan → select → process → review, converging into a structured research report",
+      "Workflow + 交互修改：效率与灵活性兼得": "Workflow + Interactive Editing: Efficiency Meets Flexibility",
+      "研究、规划、大纲与渲染被拆成独立阶段，中间产物全部落盘缓存——质量更稳定，也让你随时介入：生成前它会主动向你确认受众与目标，生成后你可以不重跑流水线，直接逐页修改。": "Research, planning, outlining, and rendering run as independent stages with every intermediate artifact cached to disk — more stable quality, and you can step in anytime: it confirms audience and goals before generating, and afterwards you can edit page by page without re-running the pipeline.",
+      "分阶段执行 + 并发渲染：章节与内容页 worker 扇出并行生成（fan-out / fan-in）再聚合导出，等待时间大幅缩短；支持断点续跑（--continue）与单阶段重放": "Staged execution + concurrent rendering: chapter and content-page workers fan out in parallel and fan in for export, cutting wait time dramatically; supports resume (--continue) and single-stage replay",
+      "关键信息缺失时主动中断提问（input_required），回答后同会话无缝继续（--resume）": "Proactively pauses to ask when key info is missing (input_required), then continues seamlessly in the same session (--resume)",
+      "页面级修补：patch 渲染只重做缺失或指定页面，不再整份重跑": "Page-level patching: patch rendering redoes only missing or specified pages — never the whole deck again",
+      "Phase 3 交互修改：直接在 SVG 源文件上改文案、换图片、调布局，甚至把某页重绘为架构图 / 流程图 / 时序图，改完统一导出": "Phase 3 interactive editing: edit copy, swap images, and adjust layout directly on SVG sources — even redraw a page as an architecture / flow / sequence diagram — then export everything at once",
+      "Workflow · 流程分解": "Workflow · Stage Breakdown",
+      "需求解析": "Request Parsing",
+      "结构化需求": "structured requirements",
+      "资料研究": "Research",
+      "写作思路": "Writing Plan",
+      "大纲生成": "Outline",
+      "PPT 生成 · 并行渲染（fan-out / fan-in）": "Deck Rendering · Parallel Pages (fan-out / fan-in)",
+      "页面分发": "Page Dispatch",
+      "按大纲派发": "dispatched by outline",
+      "第 1 页 · SVG 渲染": "Page 1 · SVG render",
+      "第 2 页 · SVG 渲染": "Page 2 · SVG render",
+      "第 3 页 · SVG 渲染": "Page 3 · SVG render",
+      "… 第 N 页 · SVG 渲染": "… Page N · SVG render",
+      "聚合": "Aggregate",
+      "质量检查": "Quality Check",
+      "XML 合法性": "XML validity",
+      "导出 PPTX": "Export PPTX",
+      "原生可编辑": "native editable",
+      "交互修改": "Interactive Edit",
+      "就地编辑 SVG": "edit SVG in place",
+      "多模型组合，降本增效": "Multi-Model Routing: Higher Quality, Lower Cost",
+      "一份 PPT 的背后是几十次模型调用，但它们对质量的要求并不相同。Slidea 采用两层模型路由：绝大多数调用走性价比高的 DEFAULT_LLM，只有两个质量关键点在大纲主结构与 SVG 页面生成时才启用旗舰模型。": "Behind one deck are dozens of model calls — and they don't all need the same quality. Slidea uses two-tier routing: most calls go to the cost-effective DEFAULT_LLM, and only two quality-critical points — outline main structure and SVG page generation — engage the flagship model.",
+      "ECONOMIC 模式：全部走 DEFAULT_LLM，用低价模型也能完整跑通流水线": "ECONOMIC mode: everything runs on DEFAULT_LLM — the full pipeline works even on low-cost models",
+      "PREMIUM 模式：质量关键点优先 PREMIUM_LLM，调用失败自动回退 DEFAULT_LLM，不中断任务": "PREMIUM mode: quality-critical points prefer PREMIUM_LLM, with automatic fallback to DEFAULT_LLM on failure — the task never breaks",
+      "可选服务缺失时优雅降级：没有搜索跳过搜索、没有 VLM 跳过视觉复核，永不整体失败": "Graceful degradation when optional services are missing: no search skips search, no VLM skips visual review — the pipeline never fails outright",
+      "两层模型路由 · 调用点分配": "Two-Tier Model Routing · Callsite Allocation",
+      "调用环节": "Callsite",
+      "路由": "Route",
+      "需求解析 / 深度研究": "Parsing / Deep Research",
+      "大纲默认分支 / 页面生成": "Outline default branch / Page generation",
+      "HTML 视觉复核": "HTML visual review",
+      "大纲主结构 ★ 质量关键": "Outline main structure ★ quality-critical",
+      "SVG 页面生成 ★ 质量关键": "SVG page generation ★ quality-critical",
+      "DEFAULT · 低价模型": "DEFAULT · low-cost model",
+      "PREMIUM · 旗舰模型": "PREMIUM · flagship model",
+      "★ 仅 SLIDEA_MODE=PREMIUM 时启用，失败自动回退 DEFAULT_LLM": "★ Enabled only with SLIDEA_MODE=PREMIUM; falls back to DEFAULT_LLM on failure",
+      "从一句话到 PPTX：六个阶段": "From One Sentence to PPTX: Six Stages",
+      "每个阶段的产物都缓存在 output/<run_id>/ 下，可检查、可编辑、可恢复、可复用。": "Every stage's artifacts are cached under output/<run_id>/ — inspectable, editable, resumable, reusable.",
+      "把自然语言请求解析为结构化需求，缺失关键信息时主动向你提问": "Parses natural-language requests into structured requirements, and asks you proactively when key info is missing",
+      "读取你的文档 / URL，或按 skip / simple / deep 三档路由联网研究": "Reads your documents / URLs, or routes web research by skip / simple / deep tiers",
+      "生成整份演示文稿的叙事主线与写作思路（thought.md）": "Produces the narrative arc and writing plan for the whole deck (thought.md)",
+      "转化为标准化幻灯片大纲，按页型分类并匹配模板 / Style Pack": "Converts it into a standardized slide outline, classifying page types and matching templates / Style Packs",
+      "逐页渲染": "Page Rendering",
+      "每页生成 SVG 并通过 XML 合法性等质量检查，few-shot 保持风格一致": "Renders each page as SVG with XML-validity checks, using few-shot examples for consistent style",
+      "SVG 映射为 DrawingML，导出原生可编辑的 .pptx 成稿": "Maps SVG to DrawingML and exports a native, editable .pptx",
+      "真实生成样例": "Real Generated Decks",
+      "以下封面均来自 Slidea 实际生成的 PPT（可下载完整 PPTX 查看），覆盖中英文学术、技术、科普等场景。": "All covers below come from decks actually generated by Slidea (download the full PPTX to inspect), spanning academic, technical, and popular-science topics in Chinese and English.",
+      "SIGOPS 战略研讨会开幕演示": "SIGOPS Strategic Workshop Opening",
+      "融合三个参考链接的史实资料，回顾 SIGOPS 六十年社区传承与议程亮点。": "Built from three referenced sources, reviewing SIGOPS' sixty-year community legacy and agenda highlights.",
+      "AI Agent 从认知到落地": "AI Agents: From Concepts to Practice",
+      "约 30 页中文技术专题：基本原理、主要框架、挑战、学术进展与未来机会。": "A ~30-page Chinese technical deep-dive: fundamentals, major frameworks, challenges, academic progress, and future opportunities.",
+      "《呼啸山庄》文学介绍": "Wuthering Heights Literature Intro",
+      "一句话需求生成英文文学课件：荒野之上的灵魂对话，激情与复仇的旅程。": "An English literature deck from a one-line request: a dialogue of souls on the moors — a journey of passion and revenge.",
+      "996 养狗生存指南": "996 Dog Ownership Survival Guide",
+      "8 种热门小型犬 × 10 项关键指标，快速匹配公寓与碎片化生活。": "8 popular small breeds × 10 key metrics, matched to apartment living and fragmented schedules.",
+      "下载 PPTX ↓": "Download PPTX ↓",
+      "SIGOPS Workshop 开幕演示": "SIGOPS Workshop opening deck",
+      "AI Agent 介绍": "AI Agent intro deck",
+      "《呼啸山庄》介绍": "Wuthering Heights intro deck",
+      "三步开始你的第一份 PPT": "Your First Deck in Three Steps",
+      "支持 OpenClaw、Codex、Claude Code 等主流 Agent 环境，适配 openEuler、macOS（Apple Silicon）、Windows WSL 与主流 Linux。": "Works with mainstream agent environments like OpenClaw, Codex, and Claude Code, on openEuler, macOS (Apple Silicon), Windows WSL, and major Linux distros.",
+      "把安装指令发给你的 Agent": "Send the install command to your Agent",
+      "Agent 会自动获取说明并完成 Slidea Skill 的安装。": "Your Agent fetches the instructions and installs the Slidea Skill automatically.",
+      "配置模型（.env）": "Configure models (.env)",
+      "最小可用配置只需一个 DEFAULT_LLM，OpenAI 兼容 API 即可。": "Minimal setup needs only one DEFAULT_LLM — any OpenAI-compatible API works.",
+      "一句话生成": "Generate with one sentence",
+      "约 15–30 分钟后，拿到原生可编辑的 PPTX 成稿。": "In about 15–30 minutes, you get a native, editable PPTX.",
+      "使用 slidea skill 创建一份关于 AI Agent 的 PPT，10 页左右，面向产品、技术与业务负责人": "Use the slidea skill to create a ~10-slide PPT about AI Agents for product, engineering, and business leaders",
+      "把下一份演示文稿交给Slidea，把时间留给演讲本身。": "Hand your next deck to Slidea and keep your time for the talk itself.",
+      "进入在线体验 →": "Try It Online →",
+      "AI 驱动的 PPT 生成 Skill · 基于 LangGraph 构建": "AI-Powered PPT Generation Skill · Built on LangGraph"
+    };
+    const PROMPT_KEY = "请直接获取并遵循这里的说明安装 slidea skill：\nhttps://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/INSTALL.md";
+    ZH2EN[PROMPT_KEY] = "Fetch and follow the instructions here to install the slidea skill:\nhttps://raw.gitcode.com/openeuler/capsule/raw/master/application/slidea/skill/slidea/INSTALL.md";
+
+    document.documentElement.lang = "en";
+    document.title = "Slidea — AI-Powered PPT Generation Skill";
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.content = "Slidea is an AI-powered PPT generation Skill: PPTX template learning, built-in Deep Research, an interactive staged workflow, and multi-model routing for cost efficiency — one sentence produces a native, editable, professional PPT.";
+
+    const ctaH2 = document.querySelector(".cta-banner h2");
+    if (ctaH2) {
+      const wsrc = window.__slideaWordmarkSrc ? window.__slideaWordmarkSrc() : "/site/assets/logo-wordmark-dark.png";
+      ctaH2.innerHTML = 'Try <img class="h2-word" src="' + wsrc + '" alt="Slidea" /> now';
+    }
+
+    function translateTextNode(n) {
+      const key = n.nodeValue.trim();
+      if (key && Object.prototype.hasOwnProperty.call(ZH2EN, key)) {
+        n.nodeValue = n.nodeValue.replace(key, ZH2EN[key]);
+      }
+    }
+    function walk(root) {
+      const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while (w.nextNode()) nodes.push(w.currentNode);
+      nodes.forEach(translateTextNode);
+      root.querySelectorAll("[alt]").forEach((el) => {
+        const a = (el.getAttribute("alt") || "").trim();
+        if (a && Object.prototype.hasOwnProperty.call(ZH2EN, a)) el.setAttribute("alt", ZH2EN[a]);
+      });
+    }
+    walk(document.body);
+    new MutationObserver((ms) => ms.forEach((m) => {
+      if (m.type === "characterData") translateTextNode(m.target);
+      m.addedNodes.forEach((n) => { if (n.nodeType === 3) translateTextNode(n); });
+    })).observe(document.body, { characterData: true, childList: true, subtree: true });
   })();
 </script>
 </body>
