@@ -1,6 +1,6 @@
 // Slidea Cloud 产品官网本地开发服务器（零依赖，基于 Node 内置模块）
-// 从 application/slidea/cloud-site/ 目录启动，向上服务整个 application/slidea，
-// 这样页面可以直接引用 /site/assets 中的真实 logo 素材。
+// 从 application/slidea/web/cloud-site/ 目录启动，向上服务整个 application/slidea，
+// 这样页面可以引用 /web/shared/assets 中的共享品牌素材。
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -17,9 +17,9 @@ function argValue(name, fallback) {
 const PORT = Number(argValue("port", process.env.PORT || 7100));
 const HOST = argValue("host", process.env.HOST || "0.0.0.0");
 
-// application/slidea 根目录 = cloud-site/scripts/ 的上两级
+// application/slidea 根目录 = web/cloud-site/scripts/ 的上三级
 const SITE_DIR = path.resolve(__dirname, "..");
-const ROOT = path.resolve(SITE_DIR, "..");
+const ROOT = path.resolve(SITE_DIR, "..", "..");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -42,8 +42,8 @@ const server = http.createServer((req, res) => {
   let urlPath = decodeURIComponent(req.url.split("?")[0]);
 
   // 站点入口
-  if (urlPath === "/" || urlPath === "/index.html" || urlPath === "/cloud-site" || urlPath === "/cloud-site/") {
-    urlPath = "/cloud-site/index.html";
+  if (urlPath === "/" || urlPath === "/index.html" || urlPath === "/web/cloud-site" || urlPath === "/web/cloud-site/" || urlPath === "/web/cloud-site/index.html") {
+    urlPath = "/web/cloud-site/index.html";
   }
 
   const filePath = path.normalize(path.join(ROOT, urlPath));

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Slidea Cloud — 打开浏览器，一句话生成专业 PPT</title>
 <meta name="description" content="Slidea Cloud 是开源项目 Slidea 的在线版：无需安装任何环境，上传 PPTX 模板、一句话描述需求，自动完成研究、排版与渲染，导出原生可编辑的 PPTX。" />
-<link rel="icon" type="image/png" href="/site/assets/favicon.png" />
+<link rel="icon" type="image/png" href="/web/shared/assets/favicon.png" />
 <script>
   // 前置主题判定：手动选择（localStorage，与开源站共享）优先，否则默认浅色；首屏渲染前设置，避免闪烁
   (function () {
@@ -560,11 +560,11 @@
 <!-- ============ 导航 ============ -->
 <nav>
   <div class="nav-inner">
-    <a class="logo" href="#top"><img class="logo-img" src="/site/assets/logo-icon.png" alt="" /><img class="logo-word" src="/site/assets/logo-wordmark-dark.png" alt="Slidea" /><span class="cloud-badge">Cloud</span></a>
+    <a class="logo" href="#top"><img class="logo-img" src="/web/shared/assets/logo-icon.png" alt="" /><img class="logo-word" src="/web/shared/assets/logo-wordmark-dark.png" alt="Slidea" /><span class="cloud-badge">Cloud</span></a>
     <div class="nav-links">
       <a href="#demo">产品演示</a>
       <a href="#features">功能</a>
-      <a href="/site/">开源项目</a>
+      <a href="/web/site/">开源项目</a>
     </div>
     <div class="nav-tools">
       <button class="icon-btn js-theme-toggle" type="button" aria-label="切换深色 / 浅色外观" title="切换外观">
@@ -696,10 +696,10 @@
             </span>
             生成的 PPT 会实时渲染在这里
           </div>
-          <div class="mb-frame anim" id="dS1"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-01.png" alt="第 1 页" /></div></div>
-          <div class="mb-frame anim" id="dS2"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-02.png" alt="第 2 页" /></div></div>
-          <div class="mb-frame anim" id="dS3"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-04.png" alt="第 3 页" /></div></div>
-          <div class="mb-frame anim" id="dS4"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-06.png" alt="第 4 页" /></div></div>
+          <div class="mb-frame anim" id="dS1"><div class="mb-slide-img"><img src="assets/slides/page-01.png" alt="第 1 页" /></div></div>
+          <div class="mb-frame anim" id="dS2"><div class="mb-slide-img"><img src="assets/slides/page-02.png" alt="第 2 页" /></div></div>
+          <div class="mb-frame anim" id="dS3"><div class="mb-slide-img"><img src="assets/slides/page-04.png" alt="第 3 页" /></div></div>
+          <div class="mb-frame anim" id="dS4"><div class="mb-slide-img"><img src="assets/slides/page-06.png" alt="第 4 页" /></div></div>
         </div>
       </div>
     </div>
@@ -785,8 +785,8 @@
             </div>
           </div>
           <div class="mb-scroll" id="uScroll">
-            <div class="mb-frame anim" id="uS1"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-01.png" alt="按模板风格生成的封面" /></div></div>
-            <div class="mb-frame anim" id="uS2"><div class="mb-slide-img"><img src="/cloud-site/assets/slides/page-02.png" alt="按模板风格生成的目录页" /></div></div>
+            <div class="mb-frame anim" id="uS1"><div class="mb-slide-img"><img src="assets/slides/page-01.png" alt="按模板风格生成的封面" /></div></div>
+            <div class="mb-frame anim" id="uS2"><div class="mb-slide-img"><img src="assets/slides/page-02.png" alt="按模板风格生成的目录页" /></div></div>
           </div>
         </div>
       </div>
@@ -847,8 +847,8 @@
           <div class="mb-scroll">
             <div class="mb-frame editing" id="eFrame">
               <div class="mb-slide-img">
-                <img src="/cloud-site/assets/slides/page-04.png" alt="第 4 页" />
-                <img class="swap" id="eSwap" src="/cloud-site/assets/slides/page-04-edited.png" alt="修改后的第 4 页" />
+                <img src="assets/slides/page-04.png" alt="第 4 页" />
+                <img class="swap" id="eSwap" src="assets/slides/page-04-edited.png" alt="修改后的第 4 页" />
                 <svg class="mb-redmark" id="eMark" viewBox="0 0 1281 720" preserveAspectRatio="none" aria-hidden="true">
                   <path pathLength="100" vector-effect="non-scaling-stroke" d="M 62 599 C 60 576 320 564 640 564 C 960 564 1218 576 1220 599 C 1222 622 960 634 640 634 C 320 634 64 622 62 599 Z" />
                 </svg>
@@ -877,8 +877,8 @@
       </div>
       <div class="ppt-demo" id="edtPanel">
         <div class="ppt-slide">
-          <img src="/cloud-site/assets/slides/page-06.png" alt="Slidea 生成的 PPT 页面" />
-          <img class="swap" id="tSwap" src="/cloud-site/assets/slides/page-06-edited.png" alt="删除「大脑」二字后的 PPT 页面" />
+          <img src="assets/slides/page-06.png" alt="Slidea 生成的 PPT 页面" />
+          <img class="swap" id="tSwap" src="assets/slides/page-06-edited.png" alt="删除「大脑」二字后的 PPT 页面" />
           <div class="ppt-txtsel" id="tTxtSel" style="left:29.6%; top:28.2%; width:3.4%; height:3.0%;"></div>
           <svg class="mb-cursor" id="tCursor" viewBox="0 0 24 24" style="left:64%; top:60%; opacity:0;" aria-hidden="true">
             <path d="M4 2 L4 19.5 L8.6 15.3 L11.2 21.5 L13.8 20.5 L11.2 14.4 L17.5 14.4 Z" fill="#ffffff" stroke="#111318" stroke-width="1.4" stroke-linejoin="round"/>
@@ -905,7 +905,7 @@
 <!-- ============ Footer ============ -->
 <footer>
   <div class="wrap foot">
-    <a class="logo" href="#top"><img class="logo-img-foot" src="/site/assets/logo-icon.png" alt="" /><img class="logo-word-foot" src="/site/assets/logo-wordmark-dark.png" alt="Slidea" /></a>
+    <a class="logo" href="#top"><img class="logo-img-foot" src="/web/shared/assets/logo-icon.png" alt="" /><img class="logo-word-foot" src="/web/shared/assets/logo-wordmark-dark.png" alt="Slidea" /></a>
     <span>Slidea Cloud · 由开源项目 Slidea 驱动</span>
     <a href="https://gitcode.com/openeuler/capsule/tree/master/application/slidea" target="_blank" rel="noopener">GitCode</a>
     <span class="right">AI 驱动的 PPT 生成 · 在线版</span>
@@ -918,7 +918,7 @@
     const root = document.documentElement;
     function theme() { return root.getAttribute("data-theme") === "dark" ? "dark" : "light"; }
     function wordmarkSrc() {
-      return theme() === "light" ? "/site/assets/logo-wordmark-light.png" : "/site/assets/logo-wordmark-dark.png";
+      return theme() === "light" ? "/web/shared/assets/logo-wordmark-light.png" : "/web/shared/assets/logo-wordmark-dark.png";
     }
     function swapWordmarks() {
       const src = wordmarkSrc();

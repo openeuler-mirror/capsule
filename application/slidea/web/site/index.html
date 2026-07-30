@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Slidea — AI 驱动的 PPT 生成 Skill</title>
 <meta name="description" content="Slidea 是一个 AI 驱动的 PPT 生成 Skill：PPTX 模板学习、内置 Deep Research、可交互的分阶段工作流、多模型组合降本增效，一句话生成原生可编辑的专业 PPT。" />
-<link rel="icon" type="image/png" href="/site/assets/favicon.png" />
+<link rel="icon" type="image/png" href="/web/shared/assets/favicon.png" />
 <script>
   // 前置主题判定：手动选择（localStorage）优先，否则跟随系统；首屏渲染前设置，避免闪烁
   (function () {
@@ -590,7 +590,7 @@
 <!-- ============ 导航 ============ -->
 <nav>
   <div class="nav-inner">
-    <a class="logo" href="#top"><img class="logo-img" src="/site/assets/logo-icon.png" alt="" /><img class="logo-word" src="/site/assets/logo-wordmark-dark.png" alt="Slidea" /></a>
+    <a class="logo" href="#top"><img class="logo-img" src="/web/shared/assets/logo-icon.png" alt="" /><img class="logo-word" src="/web/shared/assets/logo-wordmark-dark.png" alt="Slidea" /></a>
     <div class="nav-links">
       <a href="#features">核心优势</a>
       <a href="#pipeline">工作流</a>
@@ -642,7 +642,7 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">Core Advantages</span>
-      <h2>为什么是 <img class="h2-word" src="/site/assets/logo-wordmark-dark.png" alt="Slidea" /></h2>
+      <h2>为什么是 <img class="h2-word" src="/web/shared/assets/logo-wordmark-dark.png" alt="Slidea" /></h2>
       <p class="sec-desc">从"会写内容"到"会做演示"——Slidea 在模板、研究、流程与成本四个维度上，把 PPT 生成做成一条可靠、可控、可负担的工程化流水线。</p>
     </div>
 
@@ -970,7 +970,7 @@ DEFAULT_LLM_API_BASE_URL=https://...</div>
 <section>
   <div class="wrap">
     <div class="cta-banner reveal">
-      <h2>现在就试试 <img class="h2-word" src="/site/assets/logo-wordmark-dark.png" alt="Slidea" /></h2>
+      <h2>现在就试试 <img class="h2-word" src="/web/shared/assets/logo-wordmark-dark.png" alt="Slidea" /></h2>
       <p>把下一份演示文稿交给Slidea，把时间留给演讲本身。</p>
       <a class="btn btn-primary js-demo-link" href="#" target="_blank" rel="noopener" style="font-size:15px; padding:12px 30px;">进入在线体验 →</a>
     </div>
@@ -980,7 +980,7 @@ DEFAULT_LLM_API_BASE_URL=https://...</div>
 <!-- ============ Footer ============ -->
 <footer>
   <div class="wrap foot">
-    <a class="logo" href="#top"><img class="logo-img-foot" src="/site/assets/logo-icon.png" alt="" /><img class="logo-word-foot" src="/site/assets/logo-wordmark-dark.png" alt="Slidea" /></a>
+    <a class="logo" href="#top"><img class="logo-img-foot" src="/web/shared/assets/logo-icon.png" alt="" /><img class="logo-word-foot" src="/web/shared/assets/logo-wordmark-dark.png" alt="Slidea" /></a>
     <a href="https://gitcode.com/openeuler/capsule/tree/master/application/slidea" target="_blank" rel="noopener">开源仓库（GitCode）</a>
     <a href="https://gitcode.com/openeuler/capsule/blob/master/application/slidea/docs/README.md" target="_blank" rel="noopener">文档</a>
     <a href="#gallery">生成样例</a>
@@ -990,7 +990,7 @@ DEFAULT_LLM_API_BASE_URL=https://...</div>
 
 <script>
   // ===== 在线体验地址（部署后替换为真实地址即可，全站按钮自动生效）=====
-  const DEMO_URL = "/cloud-site/";
+  const DEMO_URL = "/web/cloud-site/";
   document.querySelectorAll(".js-demo-link").forEach((el) => (el.href = DEMO_URL));
 
   // ===== 滚动渐入动画 =====
@@ -1040,7 +1040,7 @@ DEFAULT_LLM_API_BASE_URL=https://...</div>
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     function theme() { return root.getAttribute("data-theme") === "light" ? "light" : "dark"; }
     function wordmarkSrc() {
-      return theme() === "light" ? "/site/assets/logo-wordmark-light.png" : "/site/assets/logo-wordmark-dark.png";
+      return theme() === "light" ? "/web/shared/assets/logo-wordmark-light.png" : "/web/shared/assets/logo-wordmark-dark.png";
     }
     function swapWordmarks() {
       const src = wordmarkSrc();
@@ -1208,7 +1208,7 @@ DEFAULT_LLM_API_BASE_URL=https://...</div>
 
     const ctaH2 = document.querySelector(".cta-banner h2");
     if (ctaH2) {
-      const wsrc = window.__slideaWordmarkSrc ? window.__slideaWordmarkSrc() : "/site/assets/logo-wordmark-dark.png";
+      const wsrc = window.__slideaWordmarkSrc ? window.__slideaWordmarkSrc() : "/web/shared/assets/logo-wordmark-dark.png";
       ctaH2.innerHTML = 'Try <img class="h2-word" src="' + wsrc + '" alt="Slidea" /> now';
     }
 
