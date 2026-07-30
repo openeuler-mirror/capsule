@@ -3,10 +3,13 @@ import os
 import sys
 from pathlib import Path
 
-from core.utils.config import app_base_dir
+from core.utils.config import output_files_dir
 
 
-LOG_DIR = Path(app_base_dir) / "logs"
+# Logs follow the same OUTPUT_DIR redirection as every other runtime artifact
+# so that read-only skill install directories (e.g. codex sandboxed runtimes)
+# don't break module import. Default → <output_files_dir>/logs.
+LOG_DIR = Path(output_files_dir) / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -48,7 +51,7 @@ try:
 except ImportError:
     logger = _build_stdlib_logger()
 else:
-    LOG_FILE_PATH = os.path.join(app_base_dir, "logs", "app_{time:YYYY-MM-DD}.log")
+    LOG_FILE_PATH = os.path.join(output_files_dir, "logs", "app_{time:YYYY-MM-DD}.log")
     my_format = (
         "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
         "<level>{level: <8}</level> | "
