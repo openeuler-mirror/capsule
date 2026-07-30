@@ -11,6 +11,7 @@ from core.ppt_generator.thought_to_ppt.svg_page_generators.sep_pages_generator.s
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.graph import generate_ppt_page_app
 from core.ppt_generator.utils.style_pack import (
     reference_svg_for_page,
+    style_reference_is_shell_only,
     style_guidance_for_page,
 )
 
@@ -30,11 +31,20 @@ def _build_sep_template_prompt(*, ppt_prompt, template, language, outline, page)
             "# Agent 编写的样式与版式契约\n"
             + style_guidance_for_page(page)
         )
-        design_requirements = """- 这是用户示例 PPT 中预分配的章节页参考。代码会精确注入背景、母版、版式、章节标题位置、Logo、页眉页脚和固定装饰。
+        if style_reference_is_shell_only(page):
+            design_requirements = """- 用户示例 PPT 没有可用章节分割页；下方 SVG 是从一个内容页提取的纯外壳，只用于继承背景、母版、版式、Logo、页眉页脚和已授权装饰。
+- 代码不会注入该内容页的标题、正文、图片、卡片或内容区结构；禁止复刻或补回这些已删除内容。
+- 必须自行生成章节标题（必要时可加一句很短的引导语），全部使用独立的纯文字 <text> 元素。
+- 章节标题应水平居中、字号显著大于正文（建议 60-90px），并放在外壳的主要空白区域内，保持充足留白和安全边距；沿用外壳的字体、颜色和对齐气质。
+- 不要为标题增加底板、卡片、边框或图标；不要生成图片、概念图、流程图、时间线和任何内容页版式。
+- 不要输出全页背景、Logo、页眉页脚或固定装饰；禁止引用 `style-reference-only/` 或 `images/style-pack/` 图片路径。"""
+            template_heading = "# 用户示例 PPT 内容页外壳 SVG（章节分割页回退）"
+        else:
+            design_requirements = """- 这是用户示例 PPT 中预分配的章节页参考。代码会精确注入背景、母版、版式、章节标题位置、Logo、页眉页脚和固定装饰。
 - 不要输出或重画章节标题、背景、Logo、页眉页脚、页码和固定装饰；只在参考页确有对应文字槽时生成最少必要的章节说明。
 - 禁止复制原示例正文和图片路径，禁止引用 `style-reference-only/` 或 `images/style-pack/`。
 - 不得新增卡片、流程、图标阵列或另一套装饰；章节页构图应与参考页基本一致。"""
-        template_heading = "# 用户示例 PPT 章节页参考 SVG"
+            template_heading = "# 用户示例 PPT 章节页参考 SVG"
     else:
         guidance_section = ""
         design_requirements = """- 这是内置模板示意。
@@ -67,20 +77,32 @@ def _build_sep_template_prompt(*, ppt_prompt, template, language, outline, page)
 
 def _build_sep_page_prompt(*, ppt_prompt, sep_template, language, outline, page) -> str:
     reference, has_reference = reference_svg_for_page(page, "")
+    shell_only = has_reference and style_reference_is_shell_only(page)
     page_reference_section = (
         f"\n# 本页预分配的用户示例参考 SVG\n"
         "代码会精确注入其固定背景、母版、版式、标题、页眉页脚和 Logo。"
         "只生成可替换的最少正文，不得重画固定元素；禁止复制原文字和图片路径。\n"
         f"# Agent 编写的样式与版式契约\n{style_guidance_for_page(page)}\n"
-        f"{reference}\n"
+        + ("# 提示：本页参考为内容页外壳（章节分割页回退），不要复刻内容页正文结构。\n" if shell_only else "")
+        + f"{reference}\n"
         if has_reference else ""
     )
-    style_rule = (
-        "- 本页存在独立 style pack 参考，必须以该参考的固定构图为准；"
-        "不要为了跟随上一张分割页而覆盖其背景、标题位置、页眉页脚或装饰。"
-        if has_reference else
-        "- 后续分割页应跟随第一张分割页的版式体系，并保留同套 PPT 的主要视觉装饰与识别特征，包括主要装饰、主色、背景和字体气质。"
-    )
+    if has_reference:
+        if shell_only:
+            style_rule = (
+                "- 本页参考为内容页外壳（章节分割页回退）；必须以外壳的背景、Logo、页眉页脚和已授权装饰为准。"
+                "不要为了跟随上一张分割页而覆盖这些固定元素；章节标题自行生成、水平居中。"
+            )
+        else:
+            style_rule = (
+                "- 本页存在独立 style pack 参考，必须以该参考的固定构图为准；"
+                "不要为了跟随上一张分割页而覆盖其背景、标题位置、页眉页脚或装饰。"
+            )
+    else:
+        style_rule = (
+            "- 后续分割页应跟随第一张分割页的版式体系，并保留同套 PPT 的主要视觉装饰与识别特征，"
+            "包括主要装饰、主色、背景和字体气质。"
+        )
     return f"""
 {_svg_prompt_header()}
 
