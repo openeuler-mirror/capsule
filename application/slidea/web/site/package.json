@@ -1,0 +1,9 @@
+{
+  "name": "slidea-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Slidea 官方网站 — AI 驱动的 PPT 生成 Skill 产品页",
+  "scripts": {
+    "dev": "node scripts/dev.js"
+  }
+}

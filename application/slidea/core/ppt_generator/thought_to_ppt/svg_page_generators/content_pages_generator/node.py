@@ -13,6 +13,13 @@ from core.ppt_generator.utils.common import get_web_images_content, build_image_
 from core.utils.llm import InvokeOptions, can_vlm_invoke, llm_invoke, vlm_invoke
 from core.utils.search import async_search
 from core.ppt_generator.utils.image import generate_ai_image, get_ai_images_content
+from core.ppt_generator.utils.formula import (
+    FORMULA_RENDER_COLOR,
+    FORMULA_RENDER_DPI,
+    FORMULA_RENDER_ENABLED,
+    append_formula_record_sync,
+    render_formula,
+)
 from core.ppt_generator.thought_to_ppt.state import PageType
 from core.ppt_generator.utils.doc_image_pool import (
     init_doc_image_pool,
@@ -32,6 +39,20 @@ from core.ppt_generator.utils.style_pack import (
     reference_svg_for_page,
     style_guidance_for_page,
 )
+
+
+# Serialize formulas.json appends across parallel page workers. The underlying
+# sync writer is in core.ppt_generator.utils.formula; this lock prevents
+# concurrent file rewrites from racing inside the LangGraph fan-out.
+_formulas_log_lock = asyncio.Lock()
+
+
+async def _append_formula_record(run_dir: str, record: dict) -> None:
+    """Async wrapper around append_formula_record_sync with a process-wide lock."""
+    if not run_dir:
+        return
+    async with _formulas_log_lock:
+        await asyncio.to_thread(append_formula_record_sync, run_dir, record)
 
 
 def _svg_prompt_header() -> str:
@@ -213,32 +234,57 @@ def _coerce_str_list(value) -> list[str]:
 
 
 async def generate_image_queries_node(state: ContentWorkerState):
-    """generate image queries for the page"""
+    """generate image queries (search/AI/formula) for the page"""
     page = state["content_page"]
     relevant_material = state["relevant_material"]
 
-    # 若网页搜图和 AI 生图都关闭，直接短路，不浪费一次 LLM 调用。
-    if not settings.USE_WEB_IMG_SEARCH and not settings.is_image_generation_enabled():
-        logger.info("skip generate_image_queries: both web image search and AI image generation are disabled")
-        return {"need_search_image": [], "need_ai_image": []}
+    # 若三类素材源全部关闭，直接短路，不浪费一次 LLM 调用。
+    formula_enabled = FORMULA_RENDER_ENABLED
+    if (
+        not settings.USE_WEB_IMG_SEARCH
+        and not settings.is_image_generation_enabled()
+        and not formula_enabled
+    ):
+        logger.info(
+            "skip generate_image_queries: web search, AI gen, and formula render all disabled"
+        )
+        return {"need_search_image": [], "need_ai_image": [], "need_formula": []}
 
     # AI 生图未启用时，prompt 只问网络搜图关键词，避免 LLM 误返回 AI prompt 触发下游无效调用。
     if settings.is_image_generation_enabled():
         ai_image_section = """
 你认为大概率网上搜不到的图片，生成一个Prompt用于指导AI绘画模型("need_ai_image"最多只包含一个Prompt，即列表只有一个对象！)。
 """
-        output_format = """
-{
-    "need_search_image": ["需要的图片素材描述1", "需要的图片素材描述2"],
-    "need_ai_image": ["需要AI生成的图片描述Prompt"]
-}
-"""
     else:
         ai_image_section = ""
-        output_format = """
+
+    # 公式渲染未启用时，prompt 不问公式，避免 LLM 误返回 LaTeX 触发下游无效渲染。
+    if formula_enabled:
+        formula_section = """
+当本页内容明显涉及数学/物理/化学/工程公式时，以 LaTeX 源码形式输出 display 公式（独占一行的展示型公式），列表 "need_formula" 中每个元素是一个公式的 LaTeX 源码。
+仅输出 matplotlib mathtext 支持的语法，例如：
+- 分数：\\\\frac{a}{b}
+- 求和：\\\\sum_{i=1}^{n} x_i
+- 积分：\\\\int_a^b f(x) dx
+- 希腊字母：\\\\alpha、\\\\beta、\\\\Gamma
+- 根号：\\\\sqrt{x}、\\\\sqrt[3]{y}
+- 上下标：x^2、a_n
+注意：
+- 不要写 align、cases、equation 等多行环境。
+- 不要把中文或英文描述性文字塞进公式源码（mathtext 不渲染 CJK）。
+- 公式应当是完整可独立展示的，不要写内联片段（如单纯的 "x>0"）。
+- 如果本页不需要公式，"need_formula" 返回空数组 []。
+"""
+    else:
+        formula_section = ""
+
+    # 输出 schema：始终包含 need_formula 字段，避免 LLM 因字段缺失而困惑；
+    # 字段为空数组时下游不会触发任何渲染调用。
+    output_format = """
 {
     "need_search_image": ["需要的图片素材描述1", "需要的图片素材描述2"],
-    "need_ai_image": []
+    "need_ai_image": ["需要AI生成的图片描述Prompt"],
+    "need_formula": ["LaTeX 公式源码1", "LaTeX 公式源码2"]
 }
 """
 
@@ -248,18 +294,20 @@ async def generate_image_queries_node(state: ContentWorkerState):
 {page.title}:{page.abstract}
 
 # 输出格式要求
-如果需要额外的图片素材，返回如下格式的json，不要返回额外内容：
+如果需要额外的图片素材或公式，返回如下格式的json，不要返回额外内容：
 {output_format}
 如果不需要，返回如下格式的json，不要返回额外内容：
 {{
     "need_search_image": [],
-    "need_ai_image": []
+    "need_ai_image": [],
+    "need_formula": []
 }}
-决定需要为此内容补充什么样的图片素材。你需要根据内容将图片需求分为两类："网络搜索图片"和"AI生成图片"。
+决定需要为此内容补充什么样的图片素材。你需要根据内容将需求分为三类："网络搜索图片"、"AI生成图片"和"数学公式"。
 
 # 核心规则
 你认为大概率能在网络上搜到的图片（例如人物照片、产品照片等），优先使用网络搜索；
 {ai_image_section}
+{formula_section}
 # PPT的文字资料
 {relevant_material}
 """
@@ -268,22 +316,30 @@ async def generate_image_queries_node(state: ContentWorkerState):
         InvokeOptions(pydantic_schema=ImageQueries),
     )
     if not response:
-        return {"need_search_image": [], "need_ai_image": []}
+        return {"need_search_image": [], "need_ai_image": [], "need_formula": []}
 
     # 防御性容错：即便 schema 是 List[str]，部分模型仍可能返回裸 string。
     need_search_image = _coerce_str_list(getattr(response, "need_search_image", []))
     need_ai_image = _coerce_str_list(getattr(response, "need_ai_image", []))
-    # 配置兜底：若 AI 生图已被关闭，即便 LLM 返回了 prompt 也丢弃。
+    need_formula = _coerce_str_list(getattr(response, "need_formula", []))
+    # 配置兜底：若 AI 生图/公式渲染已被关闭，即便 LLM 返回了内容也丢弃。
     if not settings.is_image_generation_enabled():
         need_ai_image = []
+    if not formula_enabled:
+        need_formula = []
 
-    return {"need_search_image": need_search_image, "need_ai_image": need_ai_image}
+    return {
+        "need_search_image": need_search_image,
+        "need_ai_image": need_ai_image,
+        "need_formula": need_formula,
+    }
 
 
 async def get_web_ai_images_node(state: ContentWorkerState):
-    """get web, ai and mem image"""
-    web_images = state["need_search_image"]
-    ai_images = state["need_ai_image"]
+    """get web, ai, and formula images"""
+    web_images = state.get("need_search_image") or []
+    ai_images = state.get("need_ai_image") or []
+    formulas = state.get("need_formula") or []
     reference_image_descriptions = {}
     web_images_tasks = []
     if settings.USE_WEB_IMG_SEARCH:
@@ -311,6 +367,46 @@ async def get_web_ai_images_node(state: ContentWorkerState):
     else:
         web_content = ""
 
+    # 公式渲染分支：与搜图/AI 生图并行执行。失败被静默丢弃（render_formula 内部已记日志）。
+    formula_image_paths: list[str] = []
+    formula_image_sizes: dict[str, tuple[int, int]] = {}
+    formula_image_latex: dict[str, str] = {}
+    formula_content_parts: list[str] = []
+    if FORMULA_RENDER_ENABLED and formulas:
+        async def _do_one(latex_str: str):
+            path, dims = await render_formula(latex_str, state["save_dir"])
+            return latex_str, path, dims
+
+        results = await asyncio.gather(*[_do_one(x) for x in formulas])
+        run_dir = os.path.dirname(state["save_dir"]) if state.get("save_dir") else ""
+        page_idx = state["content_page"].index
+        for latex_str, path, dims in results:
+            if path is None or dims is None:
+                logger.info(f"formula skipped in pipeline: {latex_str[:60]}")
+                continue
+            formula_image_paths.append(path)
+            formula_image_sizes[path] = dims
+            formula_image_latex[path] = latex_str
+            reference_image_descriptions[path] = (
+                f"数学公式（display，黑色透明背景）：${latex_str}$"
+            )
+            formula_content_parts.append(
+                f"公式图片已渲染：{path}，源码 ${latex_str}$，尺寸 {dims[0]}x{dims[1]}"
+            )
+            await _append_formula_record(run_dir, {
+                "latex": latex_str,
+                "path": path,
+                "color": FORMULA_RENDER_COLOR,
+                "dpi": FORMULA_RENDER_DPI,
+                "display": True,
+                "width": dims[0],
+                "height": dims[1],
+                "first_used_page": page_idx,
+            })
+
+    formula_content = "\n".join(formula_content_parts)
+
+    # 拼装 img_content：保留原有顺序（搜图 → AI → 公式），公式段独立追加。
     if settings.is_image_generation_enabled() and settings.USE_WEB_IMG_SEARCH:
         img_content = f"\n\n额外的图片搜索结果如下：{web_content}\n\n以下图片的分辨率为1280*720：\n{ai_content}\n\n"
     elif settings.is_image_generation_enabled():
@@ -319,15 +415,20 @@ async def get_web_ai_images_node(state: ContentWorkerState):
         img_content = f"\n\n额外的图片搜索结果如下：{web_content}\n\n"
     else:
         img_content = ""
+    if formula_content:
+        img_content = (img_content or "") + f"\n{formula_content}\n\n"
 
     return {
         "img_content": img_content,
         "reference_image_descriptions": reference_image_descriptions,
+        "formula_image_paths": formula_image_paths,
+        "formula_image_sizes": formula_image_sizes,
+        "formula_image_latex": formula_image_latex,
     }
 
 
 async def get_final_images_node(state: ContentWorkerState):
-    """select images from web/AI results + document image pool."""
+    """select images from web/AI results + document image pool + formulas."""
     # Take a snapshot of the doc image pool (synchronous, atomic under asyncio).
     doc_snapshot = doc_image_pool_snapshot()
     page_idx = state["content_page"].index
@@ -362,6 +463,10 @@ async def get_final_images_node(state: ContentWorkerState):
     if not img_list:
         img_list = []
     img_list.extend(state["content_page"].reference_images)
+
+    # 公式图自动入选：不让 LLM 决定，也不走 claim_doc_image（公式可跨页复用）。
+    formula_paths = state.get("formula_image_paths") or []
+    img_list.extend(formula_paths)
 
     # Claim doc images that were selected by the LLM.
     # In single-threaded asyncio this check+remove is atomic (no await between).
@@ -400,9 +505,28 @@ async def get_final_images_node(state: ContentWorkerState):
     logger.info("doc_image_pool: page {} final selection: {} total images (pool remaining={})",
                 page_idx, len(final_img_list), doc_image_pool_size())
 
+    # 公式分数预填：跳过 VLM 评分，固定 10.0 让 extend_relevant_material_node
+    # 的 top-N 排序自动纳入。img_scores 是 Annotated[..., operator.add]，
+    # 这里返回的列表会被 LangGraph 累加到 worker 状态。
+    formula_sizes = state.get("formula_image_sizes") or {}
+    formula_latex = state.get("formula_image_latex") or {}
+    formula_scores: list[dict] = []
+    for fp in formula_paths:
+        if fp not in final_img_list:
+            continue
+        w, h = formula_sizes.get(fp, (0, 0))
+        latex_src = formula_latex.get(fp, "")
+        formula_scores.append({
+            "img_description": f"数学公式：${latex_src}$",
+            "score": 10.0,
+            "size": f"图片高度为{h}，宽度为{w}",
+            "image_path": fp,
+        })
+
     return {
         "reference_images": final_img_list,
         "reference_image_descriptions": final_description_map,
+        "img_scores": formula_scores,
     }
 
 

@@ -14,11 +14,11 @@
 
 | 样例一（英文） | 样例二（英文） |
 |----------------|----------------|
-| <b>SIGOPS Workshop（Kimi-k2.5）</b><br><a href="./docs/example/sigops.pptx"><img src="./docs/example/assets/sigops.png" width="520"></a><br><br><details><summary>查看 Prompt</summary><br>Please make me an opening slides for the SIGOPS strategic workshop (https://ipads.se.sjtu.edu.cn/sigops-strategic/), emphasizing the long history of SIGOPS and the community and this is the 60th anniversary of SIGOPS (https://www.sigops.org/about/history/), review the 2015 SOSP History Day (https://sigops.org/s/conferences/sosp/2015/history/), the high-quality of the program, the two great keynote speeches, and the program for visionary talks, as well as the two great panels and workshop Session schedule. Please make around 8-10 slides.</details> | <b>《呼啸山庄》介绍（Kimi-k2.5）</b><br><a href="./docs/example/book.pptx"><img src="./docs/example/assets/book.png" width="520"></a><br><br><details><summary>查看 Prompt</summary><br>Help me create an English PowerPoint presentation to introduce the book Wuthering Heights</details> |
+| <b>SIGOPS Workshop（Kimi-k3）</b><br><a href="./docs/example/sigops.pptx"><img src="./docs/example/assets/sigops.png" width="520"></a><br><br><details><summary>查看 Prompt</summary><br>Please make me an opening slides for the SIGOPS strategic workshop (https://ipads.se.sjtu.edu.cn/sigops-strategic/), emphasizing the long history of SIGOPS and the community and this is the 60th anniversary of SIGOPS (https://www.sigops.org/about/history/), review the 2015 SOSP History Day (https://sigops.org/s/conferences/sosp/2015/history/), the high-quality of the program, the two great keynote speeches, and the program for visionary talks, as well as the two great panels and workshop Session schedule. Please make around 8-10 slides.</details> | <b>《呼啸山庄》介绍（Kimi-k2.5）</b><br><a href="./docs/example/book.pptx"><img src="./docs/example/assets/book.png" width="520"></a><br><br><details><summary>查看 Prompt</summary><br>Help me create an English PowerPoint presentation to introduce the book Wuthering Heights</details> |
 
 | 样例三（中文） | 样例四（中文） |
 |----------------|----------------|
-| <b>AI Agent 介绍（Gemini-3-pro）</b><br><a href="./docs/example/agent.pptx"><img src="./docs/example/assets/agent.png" width="520"></a><br><br><details><summary>查看 Prompt</summary><br>帮我生成一个30页左右的PPT，内容是关于AI Agent，包括AI Agent基本原理，主要框架、面临的挑战、学术界进展，以及未来的机会点。</details> | <b>幼儿园脱口秀（DeepSeek-V3.2）</b><br><a href="./docs/example/child.pptx"><img src="./docs/example/assets/child.png" width="520"></a><br><br><details><summary>查看 Prompt</summary><br>请帮我生成一份5岁小朋友脱口秀的ppt，演讲题目是“假如我会魔法”</details> |
+| <b>AI Agent 介绍（Gemini-3-pro）</b><br><a href="./docs/example/agent.pptx"><img src="./docs/example/assets/agent.png" width="520"></a><br><br><details><summary>查看 Prompt</summary><br>帮我生成一个30页左右的PPT，内容是关于AI Agent，包括AI Agent基本原理，主要框架、面临的挑战、学术界进展，以及未来的机会点。</details> | <b>996 养狗生存指南（Kimi-k3）</b><br><a href="./docs/example/dog.pptx"><img src="./docs/example/assets/dog.png" width="520"></a><br><br><details><summary>查看 Prompt</summary><br>参考xxx.pptx的样式帮我生成一个10页左右的PPT，帮我介绍下适合上班族养的小狗，要有足够的信息密度帮助我去选择.</details> |
 
 ---
 
@@ -79,6 +79,24 @@ Slidea 是 AI 驱动的 PPT 生成 skill。使用前需要配置 `DEFAULT_LLM`�
 ```
 
 具体语法取决于宿主 agent，但预期体验是一致的：agent 加载 Slidea skill，在必要时补充缺失信息，并将幻灯片生成流水线执行到最终产物。
+
+##### 高级用法：参考已有 PPTX 的样式生成
+
+将参考 PPTX 放在 Agent 可以访问的本地路径中，并在请求中说明该文件只用于参考视觉样式。例如：
+
+```text
+使用 slidea skill，参考 /path/to/brand-template.pptx，
+创建一份介绍 AI Agent 工作原理的 PPT，12 页左右，面向软件架构师。
+只参考样式，不使用参考 PPTX 中的原文内容。
+```
+
+在支持 slash 风格 skill 命令的环境中，也可以这样调用：
+
+```text
+/slidea 参考 /path/to/brand-template.pptx，创建一份 12 页左右的 AI Agent 工作原理介绍，只参考样式，不使用原文内容
+```
+
+Agent 会根据该路径读取参考 PPTX，完成样式提取和后续生成。
 
 ### Deep Research Skill
 
@@ -157,8 +175,8 @@ Deep Research 是一个可独立安装和使用的深度研究 skill。它可以
 
    推荐模型：
 
-   - `DEFAULT_LLM_MODEL`：`google/gemini-3.1-pro-preview`、`GLM-5.2` 或 `deepseek-v4-pro`
-   - `DEFAULT_VLM_MODEL`：`kimi-2.5` 或 `kimi-2.6`
+   - `DEFAULT_LLM_MODEL`：`kimi-k3`（首选）、`google/gemini-3.1-pro-preview`、`GLM-5.2` 或 `deepseek-v4-pro`
+   - `DEFAULT_VLM_MODEL`：`kimi-k3`（首选）、`kimi-2.5` 或 `kimi-2.6`
 
 4. 快速示例：
 

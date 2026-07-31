@@ -7,6 +7,7 @@ from core.ppt_generator.thought_to_ppt.state import PageType, PPTState
 from core.ppt_generator.thought_to_ppt.svg_page_generators.base_page_generator.graph import generate_ppt_page_app
 from core.ppt_generator.utils.style_pack import (
     reference_svg_for_page,
+    style_reference_is_shell_only,
     style_guidance_for_page,
 )
 
@@ -26,13 +27,22 @@ def _build_toc_prompt(*, ppt_prompt, template, language, page) -> str:
             "# Agent 编写的样式与版式契约\n"
             + style_guidance_for_page(page)
         )
-        design_requirements = """- 该 SVG 是用户示例 PPT 中预分配的目录参考页。代码会精确注入其背景、母版、可识别的目录标题/标识、Logo、页眉页脚和固定装饰。
+        if style_reference_is_shell_only(page):
+            design_requirements = """- 用户示例 PPT 没有可用目录页；下方 SVG 是从一个内容页提取的纯外壳，只用于继承背景、母版、版式、Logo、页眉页脚和已授权装饰。
+- 代码不会注入该内容页的标题、正文、图片、卡片或内容区结构；禁止复刻或补回这些已删除内容。
+- 必须自行生成目录标题与全部目录条目（编号 + 章节标题），使用独立的纯文字 <text> 元素和必要的辅助图形（编号圆/方块、分隔短线）。
+- 目录条目应排成清晰的纵向列表，整体水平居中或左对齐于外壳的主要空白区，条目之间间距均匀；沿用外壳的字体、颜色和对齐气质。
+- 不要为条目增加底板卡片、概念图、流程图、时间线或另一套视觉装饰；不要生成图片。
+- 不要输出全页背景、Logo、页眉页脚或固定装饰；禁止引用 `style-reference-only/` 或 `images/style-pack/` 图片路径。"""
+            template_heading = "# 用户示例 PPT 内容页外壳 SVG（目录页回退）"
+        else:
+            design_requirements = """- 该 SVG 是用户示例 PPT 中预分配的目录参考页。代码会精确注入其背景、母版、可识别的目录标题/标识、Logo、页眉页脚和固定装饰。
 - 只生成动态目录条目，不要输出或重画目录标题/标识、背景、Logo、页眉页脚、页码和固定装饰。
 - 每个目录条目必须完整包含参考页所需的文字与承载它的动态行框、色块、分隔线等结构；这些目录行不是代码注入的固定外壳。
 - 目录条目必须放入参考页现有正文占位区域，沿用其列数、起始位置、间距、编号形式、行框几何和字体层级；不得改变整体构图。
 - 禁止复制原目录文字、业务内容和图片路径；禁止引用 `style-reference-only/` 或 `images/style-pack/`。
 - 不得新增参考页目录行之外的卡片系统、顶部标签、统计数字、说明段落或另一套装饰；有参考目录页时应保持其框架基本不变。"""
-        template_heading = "# 用户示例 PPT 目录参考 SVG"
+            template_heading = "# 用户示例 PPT 目录参考 SVG"
     else:
         guidance_section = ""
         design_requirements = """- 该 SVG 是内置模板示意。

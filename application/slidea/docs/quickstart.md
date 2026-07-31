@@ -62,8 +62,8 @@ DEFAULT_LLM_API_BASE_URL=...
 
 Recommended models:
 
-- `DEFAULT_LLM_MODEL`: `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
-- `DEFAULT_VLM_MODEL`: `kimi-2.5` or `kimi-2.6`
+- `DEFAULT_LLM_MODEL`: `kimi-k3` (preferred), `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
+- `DEFAULT_VLM_MODEL`: `kimi-k3` (preferred), `kimi-2.5`, or `kimi-2.6`
 
 Recommended minimum for a friction-free local setup:
 

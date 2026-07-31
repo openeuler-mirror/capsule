@@ -109,8 +109,8 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
    These settings currently support OpenAI-compatible APIs only.
    Recommended models:
 
-   - `DEFAULT_LLM_MODEL` (required): `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
-   - `DEFAULT_VLM_MODEL` (optional): `kimi-2.5` or `kimi-2.6`
+   - `DEFAULT_LLM_MODEL` (required): `kimi-k3` (preferred), `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
+   - `DEFAULT_VLM_MODEL` (optional): `kimi-k3` (preferred), `kimi-2.5`, or `kimi-2.6`
 
    Good places to look include common local agent/runtime config files such as:
    - `~/.config/opencode/opencode.json`
@@ -158,7 +158,7 @@ In the commands below, replace `<SKILLS_DIR>` with that directory path.
 
    You can also tell the user that they may send you the configuration and you can help fill it in, or they can edit `<SKILLS_DIR>/slidea/.env` manually. After the configuration is updated, they should restart the agent so the skill can take effect.
 
-   Before finishing, tell the user that configuring only `DEFAULT_LLM` is sufficient for normal use, then briefly mention the recommended model list: `DEFAULT_LLM` → `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`; `DEFAULT_VLM` → `kimi-2.5` or `kimi-2.6`.
+   Before finishing, tell the user that configuring only `DEFAULT_LLM` is sufficient for normal use, then briefly mention the recommended model list: `DEFAULT_LLM` → `kimi-k3` (preferred), `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`; `DEFAULT_VLM` → `kimi-k3` (preferred), `kimi-2.5`, or `kimi-2.6`.
 
 ## Verify
 
@@ -193,7 +193,7 @@ Inside that final summary block, keep the wording concise and easy to scan. Cove
 
 4. **Required reminders**
    - If you did not help auto-configure the default LLM settings, explicitly tell the user that they still need to fill in the three `DEFAULT_LLM_*` values.
-   - Tell the user that configuring only `DEFAULT_LLM` is sufficient for normal use, and briefly mention the recommended model list: `DEFAULT_LLM` → `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`; `DEFAULT_VLM` → `kimi-2.5` or `kimi-2.6`.
+   - Tell the user that configuring only `DEFAULT_LLM` is sufficient for normal use, and briefly mention the recommended model list: `DEFAULT_LLM` → `kimi-k3` (preferred), `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`; `DEFAULT_VLM` → `kimi-k3` (preferred), `kimi-2.5`, or `kimi-2.6`.
 
 5. **What the user should do next**
    - Ask the user to send their LLM API key / base URL / model information if they want help filling the remaining `.env` settings.

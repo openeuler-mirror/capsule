@@ -16,11 +16,11 @@
 
 | Example 1 (English) | Example 2 (English) |
 |---------------------|---------------------|
-| <b>SIGOPS Workshop (Kimi-k2.5)</b><br><a href="./docs/example/sigops.pptx"><img src="./docs/example/assets/sigops.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>Please make me an opening slides for the SIGOPS strategic workshop (https://ipads.se.sjtu.edu.cn/sigops-strategic/), emphasizing the long history of SIGOPS and the community and this is the 60th anniversary of SIGOPS (https://www.sigops.org/about/history/), review the 2015 SOSP History Day (https://sigops.org/s/conferences/sosp/2015/history/), the high-quality of the program, the two great keynote speeches, and the program for visionary talks, as well as the two great panels and workshop Session schedule. Please make around 8-10 slides.</details> | <b>Wuthering Heights Introduction (Kimi-k2.5)</b><br><a href="./docs/example/book.pptx"><img src="./docs/example/assets/book.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>Help me create an English PowerPoint presentation to introduce the book Wuthering Heights</details> |
+| <b>SIGOPS Workshop (Kimi-k3)</b><br><a href="./docs/example/sigops.pptx"><img src="./docs/example/assets/sigops.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>Please make me an opening slides for the SIGOPS strategic workshop (https://ipads.se.sjtu.edu.cn/sigops-strategic/), emphasizing the long history of SIGOPS and the community and this is the 60th anniversary of SIGOPS (https://www.sigops.org/about/history/), review the 2015 SOSP History Day (https://sigops.org/s/conferences/sosp/2015/history/), the high-quality of the program, the two great keynote speeches, and the program for visionary talks, as well as the two great panels and workshop Session schedule. Please make around 8-10 slides.</details> | <b>Wuthering Heights Introduction (Kimi-k2.5)</b><br><a href="./docs/example/book.pptx"><img src="./docs/example/assets/book.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>Help me create an English PowerPoint presentation to introduce the book Wuthering Heights</details> |
 
 | Example 3 (Chinese) | Example 4 (Chinese) |
 |---------------------|---------------------|
-| <b>AI Agent Overview (Gemini-3-pro)</b><br><a href="./docs/example/agent.pptx"><img src="./docs/example/assets/agent.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>帮我生成一个30页左右的PPT，内容是关于AI Agent，包括AI Agent基本原理，主要框架、面临的挑战、学术界进展，以及未来的机会点。</details> | <b>Kindergarten Stand-up Show (DeepSeek-V3.2)</b><br><a href="./docs/example/child.pptx"><img src="./docs/example/assets/child.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>请帮我生成一份5岁小朋友脱口秀的ppt，演讲题目是“假如我会魔法”</details> |
+| <b>AI Agent Overview (Gemini-3-pro)</b><br><a href="./docs/example/agent.pptx"><img src="./docs/example/assets/agent.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>帮我生成一个30页左右的PPT，内容是关于AI Agent，包括AI Agent基本原理，主要框架、面临的挑战、学术界进展，以及未来的机会点。</details> | <b>996 Dog Ownership Survival Guide (Kimi-k3)</b><br><a href="./docs/example/dog.pptx"><img src="./docs/example/assets/dog.png" width="520"></a><br><br><details><summary>View Prompt</summary><br>参考xxx.pptx的样式帮我生成一个10页左右的PPT，帮我介绍下适合上班族养的小狗，要有足够的信息密度帮助我去选择.</details> |
 
 ---
 
@@ -83,6 +83,24 @@ In an environment like Claude Code that supports slash-style skill commands, you
 ```
 
 The exact syntax depends on the host agent, but the expected experience is the same: the agent loads the Slidea skill, gathers missing information when needed, and runs the slide generation pipeline to final artifacts.
+
+##### Advanced usage: Generate from the style of an existing PPTX
+
+Place the reference PPTX at a local path accessible to the agent, and state in your request that the file should only be used as a style reference. For example:
+
+```text
+Use the slidea skill and refer to /path/to/brand-template.pptx.
+Create a presentation explaining how AI Agents work, around 12 slides, for software architects.
+Use only the reference PPTX's style, not its original content.
+```
+
+In an environment that supports slash-style skill commands, you can also use:
+
+```text
+/slidea Refer to /path/to/brand-template.pptx and create a 12-slide presentation explaining how AI Agents work. Use only its style, not its original content.
+```
+
+The agent will read the reference PPTX from the given path, extract its style, and complete the generation process.
 
 ### Deep Research Skill
 
@@ -161,8 +179,8 @@ If you want to contribute to Slidea itself, or you need to debug the repository 
 
    Recommended models:
 
-   - `DEFAULT_LLM_MODEL`: `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
-   - `DEFAULT_VLM_MODEL`: `kimi-2.5` or `kimi-2.6`
+   - `DEFAULT_LLM_MODEL`: `kimi-k3` (preferred), `google/gemini-3.1-pro-preview`, `GLM-5.2`, or `deepseek-v4-pro`
+   - `DEFAULT_VLM_MODEL`: `kimi-k3` (preferred), `kimi-2.5`, or `kimi-2.6`
 
 4. Quick example:
    ```bash

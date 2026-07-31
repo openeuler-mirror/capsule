@@ -238,4 +238,5 @@ These are NOT needed for the common "generate a PPT" flow. Read them only when t
 - [references/agent-edit.md](references/agent-edit.md) — Phase 3: editing an existing run's pages (text, image, layout, or drawing changes) without re-running the pipeline.
 - [references/diagram-basics.md](references/diagram-basics.md) — Shared foundation for any Phase 3 edit that involves drawing a diagram (layering order, component patterns, spacing formulas, slidea SVG constraints).
 - [references/diagram-layouts/](references/diagram-layouts/) — Per-type drawing algorithms for diagrams: [architecture](references/diagram-layouts/architecture.md), [flowchart](references/diagram-layouts/flowchart.md), [sequence](references/diagram-layouts/sequence.md), [structural](references/diagram-layouts/structural.md).
+- [references/formula-render.md](references/formula-render.md) — Math formula rendering (display formulas via matplotlib mathtext → transparent PNG; auto in generation mode, manual via `scripts/render_formula.py` in modify mode).
 - [UPDATE.md](UPDATE.md) — How to update the skill when source code or dependencies change.

@@ -352,3 +352,80 @@ If the new image has a different aspect ratio than the old one, also update the 
 ### Step 7.5 QC + report (per §5 Step 8 / Step 9)
 
 Run the QC self-check on the edited SVG — it will surface "Image file not found" or bad-reference errors. Per the export deferral rule (§0), do NOT re-export the PPTX. Report the SVG path + the new image filename + a one-line summary of the change, then wait for the next instruction.
+
+## 8. Formula Workflow
+
+Use this workflow whenever the user asks to add, modify, or remove a **math formula** on a page. Formulas are rendered PNG images (not editable PowerPoint equation objects), embedded via `<image>` and stored under `slides/images/<sha1>.png` alongside search/AI/doc images. Read [formula-render.md](formula-render.md) for the full feature background and limitations before proceeding.
+
+### Step 8.1 Identify the user intent
+
+Formula edit requests fall into four categories. Confirm which one before acting:
+
+- **Add a new formula**: user provides LaTeX (e.g. "在第三页加上 $E=mc^2$"). Skip to Step 8.2 with the user-given LaTeX.
+- **Modify an existing formula's content**: user says "把那个积分改成…" or references a formula already on the page. First locate the current `<image href="images/<hash>.png">` in the SVG, then look up `<hash>` in `<run_id>/formulas.json` to recover the original LaTeX. Ask the user what to change, then re-render.
+- **Modify an existing formula's style**: change color (e.g. "白色背景上要白字") or DPI. Same lookup as content modify, then re-render with `--color` / `--dpi`.
+- **Remove a formula**: user says "删掉那个公式". Skip to Step 8.4.
+
+If the user's request is ambiguous ("改一下那个公式" without saying which), ask one focused question — do not guess.
+
+### Step 8.2 Render the formula
+
+Render via the standalone CLI. `<slides_dir>` is `output/<run_id>/slides/` (the parent of `images/`, **not** `images/` itself).
+
+```bash
+.venv/bin/python scripts/render_formula.py "<latex>" --out <slides_dir> [--color #FFFFFF] [--dpi 300]
+```
+
+Notes:
+- Surrounding `$...$` is optional and stripped automatically.
+- For dark backgrounds use `--color #FFFFFF` (or another HEX matching the page text color from the template's `data-description`).
+- Default DPI is 300 (matches the generation pipeline). Higher values produce sharper output at the cost of larger files; lower values save bytes when the formula will only be displayed small.
+- The script appends a record to `<run_id>/formulas.json` automatically — do not write to that file by hand.
+- stdout is a single JSON object: `{"path", "width", "height", "latex", "color", "dpi", "relative_href"}`. Parse it; do not extract substrings from log lines.
+
+If the script exits non-zero (invalid LaTeX, CJK in source, write error), tell the user the render failed and what triggered it; do not silently fall back to inserting the LaTeX as `<text>` (per the SVG contract, LaTeX is banned inside `<text>`).
+
+### Step 8.3 Verify + update SVG
+
+Follow §7.3 (verify file exists) and §7.4 (update `<image>` element) with these specifics. The same layout-driven principle from `svg_generator_prompt.txt §9` applies — **formula sizing follows layout, not the other way around**.
+
+- The `<image href>` must use the relative form `images/<hash>.png` — **not** an absolute path. Use the `relative_href` field from the CLI's JSON output.
+- Always use `preserveAspectRatio="xMidYMid meet"` for formulas (never `slice` — it would crop the formula).
+- **Treat the formula like a regular image: rect-then-fill.** Before placing the `<image>`, draw a container `<rect>` (or `<g>`-wrapped slot) defining the formula's slot at `(rx, ry, rw, rh)`. The container rect's boundary is what neighboring elements must clear — not the `<image>` box (which has transparent `meet` margins around the visible formula).
+- **Compute display size with a single scale factor; cap upscaling at 1.3×.** Pick `s` such that `0 < s ≤ 1.3` and compute `dw = width × s`, `dh = height × s`. Using one `s` for both dimensions preserves the aspect ratio mathematically — never set `width`/`height` independently. PNGs render at 300 DPI, so a 1.3× upscale still gives ~231 DPI effective resolution (visually crisp); beyond 1.3× pixelates noticeably.
+  1. Decide the formula's layout role in its target position (main conclusion / inline note / sidebar annotation / etc.) and pick the container it lives in.
+  2. Compute the container's available space `W' × H'` after subtracting `padding ≥ 12` on all sides.
+  3. `s = min(W' / width, H' / height, 1.3)`. The `1.3` term is the upscale cap. For a smaller formula (sidebar note, inline equation), pick a smaller `s` (e.g. 0.6-0.8 × the fill value). Constraint: `dw ≤ W'` and `dh ≤ H'` must both hold, and `s ≤ 1.3`.
+  4. Place the `<image>` inside the container rect with an explicit alignment: left (`image_x = rx + padding`, `image_y = ry + (rh - dh) / 2`), centered (`image_x = rx + (rw - dw) / 2`), or right (`image_x = rx + rw - padding - dw`).
+- **Position hard rules**: the formula's container rect `(rx, ry, rw, rh)` must satisfy:
+  - Stay inside its parent layout area with ≥12 SVG units of margin on all sides.
+  - Not overlap any title bar, header/footer, `<text>` element, card, chart, illustration, other formula's container rect, or fixed decoration on the page. Neighbors clear the **container rect boundary**, not the `<image>` box.
+  - Not exceed the 1280×720 canvas.
+  - Multiple formulas on the page: their container rects must have ≥24 SVG units of net vertical/horizontal gap.
+- **Position hard rules**: the formula `<image>`'s bounding box (x, y, dw, dh) must satisfy:
+  - Stay inside its container with ≥12 SVG units of margin on all sides.
+  - Not overlap any title bar, header/footer, `<text>` element, card, chart, illustration, other formula, or fixed decoration on the page.
+  - Not exceed the 1280×720 canvas.
+  - Position within the container is up to you (left/right/center as the layout demands); the constraint is "fits and doesn't overlap", not "centered".
+- Place the `<image>` inside a semantic group (e.g. `<g id="formula-display">`). Don't drop it as a stray top-level element.
+
+### Step 8.4 Remove a formula
+
+Just delete the `<image>` element (and its containing group if the group becomes empty) from the SVG. The cached PNG under `images/` and the record in `formulas.json` are intentionally left in place — they enable reuse if the user changes their mind, and they are not bundled into the PPTX if no SVG references them.
+
+### Step 8.5 QC + report (per §5 Step 8 / Step 9)
+
+Run the QC self-check on the edited SVG. Per the export deferral rule (§0), do NOT re-export the PPTX. Report:
+- The absolute path of the edited SVG.
+- The LaTeX source and the rendered image filename.
+- Whether the formula is new, modified, or removed.
+Then wait for the next instruction.
+
+### Common pitfalls (formula-specific)
+
+- **Treating the formula PNG as editable text** in PowerPoint. It is a picture; to edit content, re-render from LaTeX.
+- **Forgetting `--color` on dark backgrounds**. Default is `#000000`; on a dark panel the formula becomes invisible. Always check the page's text-color hint in the template's `data-description`.
+- **Using `slice` instead of `meet`** for `preserveAspectRatio`. `slice` fills the box by cropping; for formulas you want the entire image visible, so use `meet`.
+- **Inline placement**. A formula image placed mid-sentence will not baseline-align with surrounding `<text>` and will look misaligned. Place formulas on their own line.
+- **Inserting LaTeX into `<text>`** as a fallback when rendering fails. This violates the SVG contract (§6). Tell the user the render failed and offer alternatives instead.
+

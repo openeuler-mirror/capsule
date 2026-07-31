@@ -40,7 +40,7 @@ STYLE_REUSABLE_ATTR = "data-slidea-style-reusable"
 STYLE_REUSABLE_LAYER_ATTR = "data-slidea-style-layer"
 STYLE_REFERENCE_ONLY_PREFIX = "style-reference-only/"
 REUSABLE_LAYERS = {"back", "front"}
-SPECIAL_SHELL_FALLBACK_TARGETS = {"cover", "thanks"}
+SPECIAL_SHELL_FALLBACK_TARGETS = {"cover", "thanks", "separator", "toc"}
 
 ET.register_namespace("", SVG_NS)
 ET.register_namespace("xlink", XLINK_NS)
