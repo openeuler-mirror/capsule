@@ -631,14 +631,29 @@ async def get_img_score_node(state: ImgScoreWorkerState):
 
 
 async def extend_relevant_material_node(state: ContentWorkerState):
-    """extend relevant material with images"""
-    img_scores = [item for item in state["img_scores"] if item is not None]
-    sorted_list = sorted(img_scores, key=lambda item: item["score"], reverse=True)
-    top_n_list = sorted_list[:min(len(sorted_list), settings.TOP_N_IMAGE)]
-    relevant_material = state["relevant_material"]
+    """extend relevant material with images.
 
+    Formula images bypass the top-N cut — they are deterministic needs the
+    LLM already committed to in need_formula, so truncating them by score
+    would silently drop required math. Search/AI/doc images are decorative
+    and remain subject to settings.TOP_N_IMAGE.
+    """
+    formula_paths = set(state.get("formula_image_paths") or [])
+    img_scores = [item for item in state["img_scores"] if item is not None]
+
+    formula_items = [item for item in img_scores if item["image_path"] in formula_paths]
+    non_formula_items = [item for item in img_scores if item["image_path"] not in formula_paths]
+
+    non_formula_sorted = sorted(non_formula_items, key=lambda item: item["score"], reverse=True)
+    top_n_non_formula = non_formula_sorted[: min(len(non_formula_sorted), settings.TOP_N_IMAGE)]
+
+    # 公式保留原 img_scores 中的相对顺序（即 get_final_images_node 预填时的 LLM emit 顺序），
+    # 搜图/AI/文档图按分数排序后取 top-N；公式全列在前，装饰图在后。
+    final_list = formula_items + top_n_non_formula
+
+    relevant_material = state["relevant_material"]
     final_images = []
-    for item in top_n_list:
+    for item in final_list:
         img_path = item["image_path"]
         description = item["img_description"]
         size_info = item["size"]

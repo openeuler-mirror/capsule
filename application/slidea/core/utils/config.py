@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     EMBEDDING_API_BASE_URL: str = ""
 
     # Image Settings
-    TOP_N_IMAGE: int = 4
+    TOP_N_IMAGE: int = 10
 
     # Using Web Image Search
     USE_WEB_IMG_SEARCH: bool = True
