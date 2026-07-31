@@ -1,6 +1,6 @@
 // Slidea 官网本地开发服务器（零依赖，基于 Node 内置模块）
-// 从 application/slidea/web/site/ 目录启动，向上服务整个 application/slidea，
-// 这样页面可以引用 /web/shared/assets 中的共享品牌资产，以及 /docs/example 的真实样例素材。
+// 仅服务 web/site/ 目录，默认端口 7100。
+// cloud-site 是独立的另一个站点，默认端口 7101，需单独启动。
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -17,9 +17,8 @@ function argValue(name, fallback) {
 const PORT = Number(argValue("port", process.env.PORT || 7100));
 const HOST = argValue("host", process.env.HOST || "0.0.0.0");
 
-// application/slidea 根目录 = web/site/scripts/ 的上三级
-const SITE_DIR = path.resolve(__dirname, "..");
-const ROOT = path.resolve(SITE_DIR, "..", "..");
+// web/site/ 根目录 = scripts/ 的上一级
+const ROOT = path.resolve(__dirname, "..");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -41,13 +40,9 @@ const MIME = {
 const server = http.createServer((req, res) => {
   let urlPath = decodeURIComponent(req.url.split("?")[0]);
 
-  // 站点入口
-  if (urlPath === "/" || urlPath === "/index.html" || urlPath === "/web/site" || urlPath === "/web/site/" || urlPath === "/web/site/index.html") {
-    urlPath = "/web/site/index.html";
-  }
-  // 云化产品官网入口（"在线体验"跳转目标）
-  if (urlPath === "/web/cloud-site" || urlPath === "/web/cloud-site/" || urlPath === "/web/cloud-site/index.html") {
-    urlPath = "/web/cloud-site/index.html";
+  // 根路径 → index.html
+  if (urlPath === "/" || urlPath === "") {
+    urlPath = "/index.html";
   }
 
   const filePath = path.normalize(path.join(ROOT, urlPath));

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Slidea Cloud — 打开浏览器，一句话生成专业 PPT</title>
 <meta name="description" content="Slidea Cloud 是开源项目 Slidea 的在线版：无需安装任何环境，上传 PPTX 模板、一句话描述需求，自动完成研究、排版与渲染，导出原生可编辑的 PPTX。" />
-<link rel="icon" type="image/png" href="/web/shared/assets/favicon.png" />
+<link rel="icon" type="image/png" href="assets/favicon.png" />
 <script>
   // 前置主题判定：手动选择（localStorage，与开源站共享）优先，否则默认浅色；首屏渲染前设置，避免闪烁
   (function () {
@@ -560,7 +560,7 @@
 <!-- ============ 导航 ============ -->
 <nav>
   <div class="nav-inner">
-    <a class="logo" href="#top"><img class="logo-img" src="/web/shared/assets/logo-icon.png" alt="" /><img class="logo-word" src="/web/shared/assets/logo-wordmark-dark.png" alt="Slidea" /><span class="cloud-badge">Cloud</span></a>
+    <a class="logo" href="#top"><img class="logo-img" src="assets/logo-icon.png" alt="" /><img class="logo-word" src="assets/logo-wordmark-dark.png" alt="Slidea" /><span class="cloud-badge">Cloud</span></a>
     <div class="nav-links">
       <a href="#demo">产品演示</a>
       <a href="#features">功能</a>
@@ -905,7 +905,7 @@
 <!-- ============ Footer ============ -->
 <footer>
   <div class="wrap foot">
-    <a class="logo" href="#top"><img class="logo-img-foot" src="/web/shared/assets/logo-icon.png" alt="" /><img class="logo-word-foot" src="/web/shared/assets/logo-wordmark-dark.png" alt="Slidea" /></a>
+    <a class="logo" href="#top"><img class="logo-img-foot" src="assets/logo-icon.png" alt="" /><img class="logo-word-foot" src="assets/logo-wordmark-dark.png" alt="Slidea" /></a>
     <span>Slidea Cloud · 由开源项目 Slidea 驱动</span>
     <a href="https://gitcode.com/openeuler/capsule/tree/master/application/slidea" target="_blank" rel="noopener">GitCode</a>
     <span class="right">AI 驱动的 PPT 生成 · 在线版</span>
@@ -918,7 +918,7 @@
     const root = document.documentElement;
     function theme() { return root.getAttribute("data-theme") === "dark" ? "dark" : "light"; }
     function wordmarkSrc() {
-      return theme() === "light" ? "/web/shared/assets/logo-wordmark-light.png" : "/web/shared/assets/logo-wordmark-dark.png";
+      return theme() === "light" ? "assets/logo-wordmark-light.png" : "assets/logo-wordmark-dark.png";
     }
     function swapWordmarks() {
       const src = wordmarkSrc();
