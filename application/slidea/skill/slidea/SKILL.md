@@ -106,19 +106,19 @@ Each logical task is identified by `--session-id` and writes everything (run met
 
 Before invoking the pipeline, you **must** send a short message to the user explaining that the run will take a while and asking them to be patient. Example:
 
-> Starting PPT generation. This typically takes 15-30 minutes (parsing, research routing, thought, outline, per-page SVG generation, quality checks, optional VLM review, PPTX export) and involves many model calls. Please be patient — I'll report back when generation completes.
+> Starting PPT generation. This typically takes 15-60 minutes (parsing, research routing, thought, outline, per-page SVG generation, quality checks, PPTX export) and involves many model calls. Please be patient — I'll report back when generation completes.
 
 Do not silently start the pipeline. The user must know up front that this is a long-running operation.
 
 ### Timeout requirement (mandatory)
 
-The PPT pipeline makes many sequential LLM calls (parsing, research routing, thought, outline, per-page SVG generation, quality checks, optional VLM review, PPTX export). End-to-end generation takes 15-30 minutes. Long runs are normal, not a sign of failure.
+The PPT pipeline makes many sequential LLM calls (parsing, research routing, thought, outline, per-page SVG generation, quality checks, PPTX export). End-to-end generation takes 15-60 minutes. Long runs are normal, not a sign of failure.
 
 When invoking the pipeline through a shell tool that accepts a timeout:
 
 - **Hard minimum: 15 minutes** (`timeout 15m` or equivalent). Never use anything below 15 minutes.
-- **Hard maximum: 30 minutes** (`timeout 30m`). Do not exceed 30 minutes; if the run has not finished by then, something is wrong and you should investigate rather than wait longer.
-- **Recommended default: 30 minutes** (`timeout 30m`).
+- **Hard maximum: 60 minutes** (`timeout 60m`). Do not exceed 60 minutes; if the run has not finished by then, something is wrong and you should investigate rather than wait longer.
+- **Recommended default: 60 minutes** (`timeout 60m`).
 - If the host tool does not accept a timeout flag, run the command in background mode and poll for completion instead of relying on a default short timeout.
 
 This rule applies to **every** command in this section.
@@ -177,6 +177,8 @@ If the pipeline returns `input_required` or `missing_required_info`, you must st
 ### Output
 
 After a successful run, the final PPTX is at the path returned in the structured CLI result. Run metadata is stored in `ppt.json` at `output/<run_id>/ppt.json` — see [references/caching-and-paths.md](references/caching-and-paths.md) for the full directory layout and field schema.
+
+**No visual QC after generation.** Do not render the SVG/HTML to PNG, view images, compute pixel stats, or call a vision model to "verify" any page.
 
 The CLI also prints a completion block to stdout that surfaces the deliverable and its editable source:
 
