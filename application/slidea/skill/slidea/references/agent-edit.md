@@ -32,6 +32,10 @@ Always operate on the SVG files at their original path under `output/<run_id>/sl
 
 Why: `ppt.json`'s `pptx_path` is the contract — that path is what the user opens. If you edit a copy or export to a different directory, your changes never reach the file the user opens, and the user sees an unchanged PPTX. The pipeline's `output/<run_id>/` is the single source of truth; honor it.
 
+### Rule 3 — No self-initiated rendering / visual QC
+
+Do **not** render the edited SVG/HTML to PNG, view images, compute pixel stats, or call a vision model to "verify" the page. The only QC is the structural `check_svg_file` JSON check in §5 Step 8. Visual verification is the user's job — they open the PPTX in PowerPoint / Keynote / LibreOffice.
+
 ## 1. When to Read diagram-basics.md
 
 Read [diagram-basics.md](diagram-basics.md) when the user's edit request involves **drawing a diagram** — keywords like "draw", "redraw as architecture/flowchart/sequence", "add a relationship diagram", "visualize the call flow", or any request that implies shapes and arrows rather than text.
@@ -70,9 +74,9 @@ output/<run_id>/
     └── svg/                        # SVG source files (single source of truth)
         ├── 01_<title>.svg          #   Filename format: {idx+1:02d}_<title>.svg
         ├── ...
-        ├── vlm_svg_candidates/     # VLM-review candidate versions
-        ├── vlm_screenshots/        # VLM-review screenshots
-        └── <page>_vlm_review.json  # VLM-review audit record
+        ├── vlm_svg_candidates/     # VLM-review candidate versions (only when ENABLE_VLM_VISUAL_REVIEW=true)
+        ├── vlm_screenshots/        # VLM-review screenshots (only when ENABLE_VLM_VISUAL_REVIEW=true)
+        └── <page>_vlm_review.json  # VLM-review audit record (only when ENABLE_VLM_VISUAL_REVIEW=true)
 ```
 
 ## 3. `type` Field Meanings
@@ -203,6 +207,8 @@ The result is a JSON object. Look at `errors` and `warnings`:
 - **Errors** must be fixed — they will block PPTX export or cause silent data loss.
 - **Warnings** are advisory — common ones (e.g. a font-family that looks suspicious) can be ignored if you know what you are doing.
 
+This is the **only** QC step. Do not render the SVG to PNG, view images, or run a vision model on the page (§0 Rule 3).
+
 ### Step 9. Report the SVG change — 🛑 STOP, do NOT export
 
 🛑 **Do not run `svg_to_pptx.py` in this step.** Not after a single edit, not after several edits, not "just this once to verify". The PPTX is rebuilt only in Step 10, only on explicit user signal. If you are about to call `svg_to_pptx.py` here, stop and re-read §0 Rule 1.
@@ -251,10 +257,10 @@ If the user requests further edits after the export, loop back to Step 1 — and
 
 - **Auto-exporting after every edit.** Despite §0 Rule 1, agents sometimes run `svg_to_pptx.py` right after editing "to verify" or "to give the user something to look at". Do not. The export deferral rule exists because re-exporting rewrites the whole PPTX and forces the user to reopen the file after each tiny change. Report the SVG change (Step 9), then wait for the explicit export signal.
 - **Copying the run directory before editing.** Some agents "play safe" by copying `output/<run_id>/` to a sibling directory and editing the copy, or by exporting to a different output directory. This breaks the contract: `ppt.json` still points at the original directory, so the user opens an unchanged PPTX. Always edit the original SVG files in place and export to the original `<run_id_dir>` (§0 Rule 2).
-- **Rewriting the whole SVG when only a `<g>` block changed.** This is the #1 cause of broken Phase 3 edits. The original generation went through VLM review and quality check; rewriting bypasses that. Use Edit with a tight `old_string`/`new_string` pair whenever possible.
+- **Rewriting the whole SVG when only a `<g>` block changed.** This is the #1 cause of broken Phase 3 edits. The original generation went through quality check; rewriting bypasses that. Use Edit with a tight `old_string`/`new_string` pair whenever possible.
 - **Renaming the SVG file.** The `{idx+1:02d}_` prefix is load-bearing — the exporter sorts by it, patch-render matches by it. Even renaming `05_xxx.svg` to `5_xxx.svg` breaks page order.
 - **Forgetting to copy image files into `slides/images/`.** An `<image href="images/foo.png">` that has no matching on-disk file fails quality check with "Image file not found". The export pipeline then drops the image silently or breaks.
-- **Editing a template-protected element.** The VLM-fix step in the original pipeline is told not to touch `header`, `page-title-text`, `main-content-frame`, etc. Phase 3 edits should respect the same boundary — moving the title bar looks fine on one page but breaks consistency with sibling pages.
+- **Editing a template-protected element.** not to touch `header`, `page-title-text`, `main-content-frame`, etc. Phase 3 edits should respect the boundary — moving the title bar looks fine on one page but breaks consistency with sibling pages.
 - **Skipping the QC self-check.** Small SVG mistakes (an unescaped `&`, a `<tspan>` for a line break, a stray `rgba()`) silently fail PPTX export. Running the QC takes seconds and surfaces every hard error.
 - **Using a non-template color.** Pulling a hex from memory or from another project's palette breaks visual consistency. Always copy color values from the current template SVG's `data-description`.
 

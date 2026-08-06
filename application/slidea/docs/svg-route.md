@@ -57,9 +57,9 @@ Repair happens in layers:
 
 1. deterministic SVG cleanup during extraction,
 2. LLM repair for quality-check failures,
-3. optional VLM screenshot review and repair when VLM settings are configured.
+3. optional VLM screenshot review and repair when `ENABLE_VLM_VISUAL_REVIEW=true` (defaults to `false`) and VLM settings are configured.
 
-If VLM is unavailable, the SVG route continues without visual review.
+If VLM review is disabled (the default) or the VLM is unavailable, the SVG route continues without visual review and skips generating `vlm_screenshots/`, `vlm_svg_candidates/`, and `<page>_vlm_review.json`.
 
 ## Manual QA Checklist
 
