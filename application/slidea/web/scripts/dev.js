@@ -24,7 +24,9 @@ function argValue(name, fallback) {
 }
 
 const PORT = Number(argValue("port", process.env.PORT || 30010));
-const HOST = argValue("host", process.env.HOST || "0.0.0.0");
+// 默认只监听本机:这是无鉴权静态 dev 服务器,不应直接暴露到网络。
+// 需对外暴露时显式传 --host 0.0.0.0(并自行加反向代理/鉴权)。
+const HOST = argValue("host", process.env.HOST || "127.0.0.1");
 
 // web/ 根目录 = scripts/ 的上一级
 const ROOT = path.resolve(__dirname, "..");
@@ -77,7 +79,18 @@ function resolveFile(urlPath) {
 }
 
 const server = http.createServer((req, res) => {
-  let urlPath = decodeURIComponent(req.url.split("?")[0]);
+  // 先取 path 部分(? 之前),再 decode。畸形百分号编码(% 后非两位 hex)
+  // 会让 decodeURIComponent 抛 URIError —— 必须兜底,否则单条恶意请求即可
+  // 冒泡到顶层让整个 dev 进程崩溃。
+  let rawPath;
+  try {
+    rawPath = decodeURIComponent(req.url.split("?")[0]);
+  } catch (e) {
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Bad Request: malformed URI");
+    return;
+  }
+  const urlPath = rawPath;
   const filePath = resolveFile(urlPath);
 
   // 防目录穿越
@@ -118,12 +131,18 @@ function serveFile(res, filePath) {
 }
 
 function notFound(res, urlPath) {
-  res.writeHead(404);
-  res.end("Not Found: " + urlPath);
+  // 回显解码后的 URL 存在反射型 XSS 风险:用 text/plain 让浏览器不按 HTML 渲染,
+  // 并把 <、& 等元字符转义,双重防护。
+  const safe = String(urlPath).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end("Not Found: " + safe);
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`web/ 统一静态服务器已启动: http://localhost:${PORT}/`);
+  console.log(`web/ 统一静态服务器已启动: http://localhost:${PORT}/  (监听 ${HOST})`);
   console.log(`  cloud-site: http://localhost:${PORT}/  或 /web/cloud-site/`);
   console.log(`  site:       http://localhost:${PORT}/web/site/`);
+  if (HOST === "127.0.0.1") {
+    console.log(`  对外暴露需显式 --host 0.0.0.0(无鉴权,自行加反代/鉴权)`);
+  }
 });
