@@ -31,6 +31,7 @@ UA = UserAgent()
 DEFAULT_HTML_TO_PDF_CONCURRENCY = 3
 DEFAULT_RENDER_READY_TIMEOUT_MS = 20000
 DEFAULT_RENDER_ASSET_FETCH_TIMEOUT_S = 15.0
+DEFAULT_IMAGE_DOWNLOAD_TIMEOUT_S = 20.0
 DEFAULT_RENDER_ASSET_CACHE_MAX_MB = 2048
 REMOTE_ASSET_URL_FALLBACKS = {
     "https://cdn.jsdmirror.com/npm/tailwindcss-cdn@3.4.10/tailwindcss.js": [
@@ -900,13 +901,15 @@ async def download_image(img_url, image_dir):
     parsed_uri = urlparse(img_url)
     headers["Referer"] = f"{parsed_uri.scheme}://{parsed_uri.netloc}/"
 
-    try:
-        # 1. 先执行下载请求
-        async with httpx.AsyncClient(verify=False) as client:
+    # 把整段下载包进 asyncio.wait_for，保证即使卡在 DNS/连接也必在超时内返回
+    async def _do_download():
+        client = httpx.AsyncClient(verify=False, follow_redirects=True)
+        try:
+            # 1. 先执行下载请求
             response = await client.get(
                 img_url,
                 headers=headers,
-                timeout=20.0,
+                timeout=DEFAULT_IMAGE_DOWNLOAD_TIMEOUT_S,
                 follow_redirects=True,
             )
             if response.status_code == 403:
@@ -915,7 +918,7 @@ async def download_image(img_url, image_dir):
                 response = await client.get(
                     img_url,
                     headers=headers,
-                    timeout=20.0,
+                    timeout=DEFAULT_IMAGE_DOWNLOAD_TIMEOUT_S,
                     follow_redirects=True,
                 )
             response.raise_for_status()
@@ -996,6 +999,13 @@ async def download_image(img_url, image_dir):
                 logger.debug(f"下载内容不是可解码图片，已跳过: {img_url}")
                 return None
             return local_path
+        finally:
+            await client.aclose()
+
+    try:
+        return await asyncio.wait_for(
+            _do_download(), timeout=DEFAULT_IMAGE_DOWNLOAD_TIMEOUT_S
+        )
     except Exception as e:
         logger.debug(f"下载时发生未知错误: {img_url} - {str(e)}")
         return None
